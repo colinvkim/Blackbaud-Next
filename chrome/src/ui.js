@@ -34,7 +34,7 @@ async function waitForElement(selector, timeout = 4000) {
   const oldAssignmentCenter = await chrome.storage.sync.get({
     oldAssignmentCenter: false,
   });
-  const wideUI = await chrome.storage.sync.get({ wideUI: true });
+  const wideUI = await chrome.storage.sync.get({ wideUI: false });
 
   if (window.location.href.includes("myschoolapp.com") && wideUI.wideUI) {
     const style = document.createElement("style");
@@ -44,7 +44,7 @@ async function waitForElement(selector, timeout = 4000) {
 }
 
 .nav, ul.topnav, ul.clearfix:has(li) {
-    width: 100% important;
+    width: 100% !important;
     display: flex !important;
     justify-content: center !important;
 }`;
@@ -116,10 +116,10 @@ async function waitForElement(selector, timeout = 4000) {
 
     function blackbaudSucks() {
       const blackbaudVibeCodedSlop = document.querySelector(
-        ".progress.progress-striped.active.skylo"
+        ".progress.progress-striped.active.skylo",
       );
       const theyAreSoInconsistentBro = document.querySelector(
-        '[role="progressbar"]'
+        '[role="progressbar"]',
       );
 
       if (blackbaudVibeCodedSlop || theyAreSoInconsistentBro) {
@@ -156,7 +156,7 @@ async function waitForElement(selector, timeout = 4000) {
     document.head.appendChild(link);
   }
 
-  if (oldAssignmentCenter) {
+  if (oldAssignmentCenter.oldAssignmentCenter) {
     if (window.location.href.includes("lms-assignment/assignment-center")) {
       const hostname = window.location.hostname;
       window.location.href = `https://${hostname}/app/student?svcid=edu#studentmyday/assignment-center`;
@@ -165,7 +165,7 @@ async function waitForElement(selector, timeout = 4000) {
     (async () => {
       if (window.location.href.includes("myschoolapp.com")) {
         const assignmentCenterBtn = await waitForElement(
-          "#assignment-center-btn"
+          "#assignment-center-btn",
         );
         if (assignmentCenterBtn) {
           const hostname = window.location.hostname;

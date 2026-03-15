@@ -34,7 +34,7 @@
   async function autoClickLogin() {
     if (window.location.href.includes("app.blackbaud.com/signin")) {
       const initiateAuth = await waitForElement(
-        "app-spa-auth-google-signin-button button"
+        "app-spa-auth-google-signin-button button",
       );
       initiateAuth.click();
     }
