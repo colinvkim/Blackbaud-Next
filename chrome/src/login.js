@@ -1,30 +1,34 @@
 (async function () {
-  const loginFix = await chrome.storage.sync.get({ loginFix: true });
-  const automaticLogin = await chrome.storage.sync.get({
-    automaticLogin: true,
-  });
+  const [{ loginFix }, { automaticLogin }] = await Promise.all([
+    chrome.storage.sync.get({ loginFix: true }),
+    chrome.storage.sync.get({ automaticLogin: true }),
+  ]);
 
   async function waitForElement(selector, timeout = 4000) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        observer.disconnect();
-        reject(new Error("Timed out when waiting for" + selector));
-      }, timeout);
-
-      if (document.querySelector(selector)) {
-        clearTimeout(timer);
-        return resolve(document.querySelector(selector));
+    return new Promise((resolve) => {
+      const existingElement = document.querySelector(selector);
+      if (existingElement) {
+        return resolve(existingElement);
       }
 
-      const observer = new MutationObserver((mutations) => {
-        if (document.querySelector(selector)) {
+      let observer;
+      const timer = setTimeout(() => {
+        if (observer) {
+          observer.disconnect();
+        }
+        resolve(null);
+      }, timeout);
+
+      observer = new MutationObserver(() => {
+        const element = document.querySelector(selector);
+        if (element) {
           clearTimeout(timer);
           observer.disconnect();
-          resolve(document.querySelector(selector));
+          resolve(element);
         }
       });
 
-      observer.observe(document.body, {
+      observer.observe(document.body || document.documentElement, {
         childList: true,
         subtree: true,
       });
@@ -36,41 +40,57 @@
       const initiateAuth = await waitForElement(
         "app-spa-auth-google-signin-button button",
       );
-      initiateAuth.click();
+      if (initiateAuth) {
+        initiateAuth.click();
+      }
     }
   }
 
   async function loginPage() {
+    if (document.documentElement.dataset.blackbaudNextLoginPatched === "1") {
+      return;
+    }
+
     const currentUrl = window.location.href;
     if (
-      currentUrl.includes("myschoolapp.com") &&
-      currentUrl.includes("login")
+      !currentUrl.includes("myschoolapp.com") ||
+      !currentUrl.toLowerCase().includes("login")
     ) {
-      const blackbaudGarbage = await waitForElement("iframe");
-      const loginInput = await waitForElement("div.textfield");
-      const rememberCheckbox = await waitForElement("div.remember");
-      const nextButton = await waitForElement("#nextBtn");
+      return;
+    }
 
-      const hostname = window.location.hostname;
-      const dashboard = encodeURI(`https://${hostname}/app/student?svcid=edu`);
+    const nextButton =
+      document.querySelector("#nextBtn") ||
+      (await waitForElement("#nextBtn", 1200));
 
-      document
-        .querySelectorAll('script[type="text/javascript"]')
-        .forEach((script) => script.remove());
-      blackbaudGarbage?.remove();
-      loginInput?.remove();
-      rememberCheckbox?.remove();
-      nextButton.value = "Sign in with Google";
-      nextButton.style.width = "100%";
+    if (!nextButton) {
+      return;
+    }
 
-      nextButton?.addEventListener("click", function () {
+    const hostname = window.location.hostname;
+    const dashboard = encodeURI(`https://${hostname}/app/student?svcid=edu`);
+
+    document.documentElement.dataset.blackbaudNextLoginPatched = "1";
+
+    document
+      .querySelectorAll('script[type="text/javascript"]')
+      .forEach((script) => script.remove());
+    document.querySelector("div.textfield")?.remove();
+    document.querySelector("div.remember")?.remove();
+    document.querySelector("iframe")?.remove();
+    nextButton.value = "Sign in with Google";
+    nextButton.style.width = "100%";
+
+    if (nextButton.dataset.blackbaudNextBound !== "1") {
+      nextButton.dataset.blackbaudNextBound = "1";
+      nextButton.addEventListener("click", function () {
         console.log(`Redirecting to ${dashboard}`);
         window.location.href = `https://app.blackbaud.com/signin/?redirectUrl=${dashboard}`;
       });
     }
   }
 
-  if (loginFix.loginFix) {
+  if (loginFix) {
     loginPage();
     // Handle hash changes (common)
     window.addEventListener("hashchange", loginPage);
@@ -82,31 +102,38 @@
       window.location.href.includes("accounts.google.com") &&
       window.location.href.includes("blackbaud")
     ) {
-      // Wait for account options to load
-      const accountOptions = await waitForElement("[data-email]");
-
       const selectors = [
         "[data-email*='polytechnic.org']",
         "[data-email*='chandlerschool.org']",
         "[data-email*='flintridgeprep.org']",
       ];
 
-      let polytechnicAccount = null;
+      for (const selector of selectors) {
+        const account = document.querySelector(selector);
+        if (account) {
+          account.click();
+          return;
+        }
+      }
+
+      const accountOptions = await waitForElement("[data-email]", 1200);
+      if (!accountOptions) {
+        return;
+      }
 
       for (const selector of selectors) {
-        polytechnicAccount = document.querySelector(selector);
-        if (polytechnicAccount) break;
+        const account = document.querySelector(selector);
+        if (account) {
+          account.click();
+          return;
+        }
       }
 
-      if (polytechnicAccount) {
-        polytechnicAccount.click();
-      } else {
-        console.log("The user isn't signed into an eligible account");
-      }
+      console.log("The user isn't signed into an eligible account");
     }
   }
 
-  if (automaticLogin.automaticLogin) {
+  if (automaticLogin) {
     autoClickLogin();
     handleGoogleOAuth();
   }

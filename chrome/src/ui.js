@@ -53,7 +53,11 @@ async function waitForElement(selector, timeout = 4000) {
 
   if (
     window.location.href.includes("myschoolapp.com") &&
-    loadBetweenPages.loadBetweenPages
+    loadBetweenPages.loadBetweenPages &&
+    window.location.href !=
+      encodeURI(`https://${window.location.hostname}/app?svcid=edu`) &&
+    window.location.href !=
+      encodeURI(`https://${window.location.hostname}/app?svcid=edu#login`)
   ) {
     const style = document.createElement("style");
 
