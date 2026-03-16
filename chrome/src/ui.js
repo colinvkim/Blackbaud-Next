@@ -1,24 +1,28 @@
 async function waitForElement(selector, timeout = 4000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      observer.disconnect();
-      reject(new Error("Timed out when waiting for" + selector));
-    }, timeout);
-
-    if (document.querySelector(selector)) {
-      clearTimeout(timer);
-      return resolve(document.querySelector(selector));
+  return new Promise((resolve) => {
+    const existingElement = document.querySelector(selector);
+    if (existingElement) {
+      return resolve(existingElement);
     }
 
-    const observer = new MutationObserver((mutations) => {
-      if (document.querySelector(selector)) {
+    let observer;
+    const timer = setTimeout(() => {
+      if (observer) {
+        observer.disconnect();
+      }
+      resolve(null);
+    }, timeout);
+
+    observer = new MutationObserver(() => {
+      const element = document.querySelector(selector);
+      if (element) {
         clearTimeout(timer);
         observer.disconnect();
-        resolve(document.querySelector(selector));
+        resolve(element);
       }
     });
 
-    observer.observe(document.body, {
+    observer.observe(document.body || document.documentElement, {
       childList: true,
       subtree: true,
     });
@@ -27,16 +31,15 @@ async function waitForElement(selector, timeout = 4000) {
 
 // Put the entire code into an IIFE so await is available LOL
 (async () => {
-  const loadBetweenPages = await chrome.storage.sync.get({
-    loadBetweenPages: true,
-  });
-  const fixFavicon = await chrome.storage.sync.get({ fixFavicon: true });
-  const oldAssignmentCenter = await chrome.storage.sync.get({
-    oldAssignmentCenter: false,
-  });
-  const wideUI = await chrome.storage.sync.get({ wideUI: false });
+  const { loadBetweenPages, fixFavicon, oldAssignmentCenter, wideUI } =
+    await chrome.storage.sync.get({
+      loadBetweenPages: true,
+      fixFavicon: true,
+      oldAssignmentCenter: false,
+      wideUI: false,
+    });
 
-  if (window.location.href.includes("myschoolapp.com") && wideUI.wideUI) {
+  if (window.location.href.includes("myschoolapp.com") && wideUI) {
     const style = document.createElement("style");
     style.textContent = `
     .container {
@@ -53,10 +56,10 @@ async function waitForElement(selector, timeout = 4000) {
 
   if (
     window.location.href.includes("myschoolapp.com") &&
-    loadBetweenPages.loadBetweenPages &&
-    window.location.href !=
+    loadBetweenPages &&
+    window.location.href !==
       encodeURI(`https://${window.location.hostname}/app?svcid=edu`) &&
-    window.location.href !=
+    window.location.href !==
       encodeURI(`https://${window.location.hostname}/app?svcid=edu#login`)
   ) {
     const style = document.createElement("style");
@@ -148,19 +151,15 @@ async function waitForElement(selector, timeout = 4000) {
     blackbaudSucks();
   }
 
-  if (
-    window.location.href.includes("myschoolapp.com") &&
-    fixFavicon.fixFavicon
-  ) {
+  if (window.location.href.includes("myschoolapp.com") && fixFavicon) {
     const link = document.createElement("link");
     link.rel = "icon";
     link.type = "image/png";
-    link.href =
-      "https://sky.blackbaudcdn.net/skyuxapps/host-assets/assets/favicon-32x32-v1.523659243878a29f2bb883cf72730997.png";
+    link.href = chrome.runtime.getURL("assets/blackbaud.png");
     document.head.appendChild(link);
   }
 
-  if (oldAssignmentCenter.oldAssignmentCenter) {
+  if (oldAssignmentCenter) {
     if (window.location.href.includes("lms-assignment/assignment-center")) {
       const hostname = window.location.hostname;
       window.location.href = `https://${hostname}/app/student?svcid=edu#studentmyday/assignment-center`;
