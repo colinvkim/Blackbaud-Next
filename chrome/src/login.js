@@ -1,8 +1,118 @@
 (async function () {
-  const [{ loginFix }, { automaticLogin }] = await Promise.all([
-    chrome.storage.sync.get({ loginFix: true }),
-    chrome.storage.sync.get({ automaticLogin: true }),
-  ]);
+  const overlayPersistKey = "blackbaud-next-auto-login-overlay-persist";
+
+  const [{ loginFix }, { automaticLogin }, { loadBetweenPages }] =
+    await Promise.all([
+      chrome.storage.sync.get({ loginFix: true }),
+      chrome.storage.sync.get({ automaticLogin: true }),
+      chrome.storage.sync.get({ loadBetweenPages: true }),
+    ]);
+
+  function setOverlayPersistence(shouldPersist) {
+    if (shouldPersist) {
+      sessionStorage.setItem(overlayPersistKey, "1");
+    } else {
+      sessionStorage.removeItem(overlayPersistKey);
+    }
+  }
+
+  function hideAutoLoginOverlay() {
+    document.getElementById("blackbaud-next-auto-login-overlay")?.remove();
+    document.getElementById("blackbaud-next-auto-login-style")?.remove();
+  }
+
+  function showAutoLoginOverlay() {
+    if (!automaticLogin || !loadBetweenPages) {
+      return;
+    }
+
+    if (document.getElementById("blackbaud-next-auto-login-overlay")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    const loadingOverlay = document.createElement("div");
+    const loadingSpinner = document.createElement("div");
+    const loadingText = document.createElement("h2");
+
+    style.id = "blackbaud-next-auto-login-style";
+    loadingOverlay.id = "blackbaud-next-auto-login-overlay";
+    loadingOverlay.className = "loading-overlay active-overlay";
+    loadingSpinner.className = "loading-spinner";
+    loadingText.className = "loading-text";
+    loadingText.textContent = "Signing you in...";
+
+    loadingOverlay.appendChild(loadingSpinner);
+    loadingOverlay.appendChild(loadingText);
+
+    style.textContent = `
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  z-index: 999999;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.loading-overlay.active-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.loading-spinner {
+  width: 64px;
+  height: 64px;
+  border: 4px solid rgba(255, 200, 0, 0.3);
+  border-top: 4px solid #facc15;
+  border-radius: 50%;
+  animation: blackbaud-next-spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loading-text {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  font-family: "Inter", Arial, sans-serif !important;
+  color: #112b55 !important;
+}
+
+@keyframes blackbaud-next-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+`;
+
+    if (document.head) {
+      document.head.appendChild(style);
+    }
+
+    (document.body || document.documentElement).appendChild(loadingOverlay);
+  }
+
+  function shouldPersistOverlayOnCurrentPage() {
+    return (
+      window.location.href.includes("app.blackbaud.com/signin") ||
+      (window.location.href.includes("accounts.google.com") &&
+        window.location.href.includes("blackbaud"))
+    );
+  }
+
+  if (automaticLogin && loadBetweenPages) {
+    const persistedOverlay =
+      sessionStorage.getItem(overlayPersistKey) === "1" &&
+      shouldPersistOverlayOnCurrentPage();
+    if (persistedOverlay) {
+      showAutoLoginOverlay();
+    }
+  }
 
   async function waitForElement(selector, timeout = 4000) {
     return new Promise((resolve) => {
@@ -37,6 +147,8 @@
 
   async function autoClickLogin() {
     if (window.location.href.includes("app.blackbaud.com/signin")) {
+      setOverlayPersistence(true);
+      showAutoLoginOverlay();
       const initiateAuth = await waitForElement(
         "app-spa-auth-google-signin-button button",
       );
@@ -108,12 +220,23 @@
         "[data-email*='flintridgeprep.org']",
       ];
 
-      for (const selector of selectors) {
-        const account = document.querySelector(selector);
-        if (account) {
-          account.click();
-          return;
+      const findSupportedAccount = () => {
+        for (const selector of selectors) {
+          const account = document.querySelector(selector);
+          if (account) {
+            return account;
+          }
         }
+
+        return null;
+      };
+
+      const supportedAccount = findSupportedAccount();
+      if (supportedAccount) {
+        setOverlayPersistence(true);
+        showAutoLoginOverlay();
+        supportedAccount.click();
+        return;
       }
 
       const accountOptions = await waitForElement("[data-email]", 1200);
@@ -121,13 +244,16 @@
         return;
       }
 
-      for (const selector of selectors) {
-        const account = document.querySelector(selector);
-        if (account) {
-          account.click();
-          return;
-        }
+      const supportedAccountAfterLoad = findSupportedAccount();
+      if (supportedAccountAfterLoad) {
+        setOverlayPersistence(true);
+        showAutoLoginOverlay();
+        supportedAccountAfterLoad.click();
+        return;
       }
+
+      setOverlayPersistence(false);
+      hideAutoLoginOverlay();
 
       console.log("The user isn't signed into an eligible account");
     }

@@ -31,9 +31,8 @@ async function waitForElement(selector, timeout = 4000) {
 
 // Put the entire code into an IIFE so await is available LOL
 (async () => {
-  const { loadBetweenPages, fixFavicon, oldAssignmentCenter, wideUI } =
+  const { fixFavicon, oldAssignmentCenter, wideUI } =
     await chrome.storage.sync.get({
-      loadBetweenPages: true,
       fixFavicon: true,
       oldAssignmentCenter: false,
       wideUI: false,
@@ -52,103 +51,6 @@ async function waitForElement(selector, timeout = 4000) {
     justify-content: center !important;
 }`;
     document.head.appendChild(style);
-  }
-
-  if (
-    window.location.href.includes("myschoolapp.com") &&
-    loadBetweenPages &&
-    window.location.href !==
-      encodeURI(`https://${window.location.hostname}/app?svcid=edu`) &&
-    window.location.href !==
-      encodeURI(`https://${window.location.hostname}/app?svcid=edu#login`)
-  ) {
-    const style = document.createElement("style");
-
-    const loadingOverlay = document.createElement("div");
-    const loadingSpinner = document.createElement("div");
-    const loadingText = document.createElement("h2");
-    loadingOverlay.className = "loading-overlay";
-    loadingSpinner.className = "loading-spinner";
-    loadingText.className = "loading-text";
-    loadingText.textContent = "Loading...";
-
-    loadingOverlay.appendChild(loadingSpinner);
-    loadingOverlay.appendChild(loadingText);
-
-    style.textContent = `
-.loading-overlay {
-  position: fixed;
-  inset: 0; /* full screen */
-  opacity: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(8px); /* blur background */
-  z-index: 999999; /* above everything */
-  pointer-events: none;
-  transition: opacity 0.5s ease;
-}
-
-.loading-overlay.active-overlay {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.loading-spinner {
-  width: 64px;
-  height: 64px;
-  border: 4px solid rgba(255, 200, 0, 0.3);
-  border-top: 4px solid #facc15; /* yellow */
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-.loading-text {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #111;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-`;
-
-    document.head.appendChild(style);
-    document.body.appendChild(loadingOverlay);
-
-    function blackbaudSucks() {
-      const blackbaudVibeCodedSlop = document.querySelector(
-        ".progress.progress-striped.active.skylo",
-      );
-      const theyAreSoInconsistentBro = document.querySelector(
-        '[role="progressbar"]',
-      );
-
-      if (blackbaudVibeCodedSlop || theyAreSoInconsistentBro) {
-        if (theyAreSoInconsistentBro) {
-          theyAreSoInconsistentBro.style.display = "none";
-        }
-        loadingOverlay.classList.add("active-overlay");
-      } else {
-        loadingOverlay.classList.remove("active-overlay");
-      }
-    }
-
-    const observer = new MutationObserver(() => {
-      blackbaudSucks();
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-
-    blackbaudSucks();
   }
 
   if (window.location.href.includes("myschoolapp.com") && fixFavicon) {
