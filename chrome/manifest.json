@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "js": ["src/login.js", "src/ui.js"],
+      "js": ["src/login.js", "src/ui.js", "src/qol.js"],
       "matches": [
         "https://accounts.google.com/*",
         "https://*.myschoolapp.com/*",
