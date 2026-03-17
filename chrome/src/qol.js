@@ -116,7 +116,7 @@
         : [];
 
       if (!values.length) {
-        throw new Error("No names");
+        throw new Error(type === "email" ? "No emails" : "No names");
       }
 
       await navigator.clipboard.writeText(values.join(", "));
