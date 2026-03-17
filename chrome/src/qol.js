@@ -81,7 +81,7 @@
   }
 
   async function copyRosterToClipboard(button) {
-    const originalText = "Copy Whole Roster";
+    const originalText = "Copy Full Roster";
     const rosterApiUrl = getRosterApiUrl();
     if (!rosterApiUrl) {
       button.textContent = "Roster Not Found";
@@ -145,7 +145,7 @@
     button.id = copyRosterButtonId;
     button.type = "button";
     button.className = "btn btn-default";
-    button.textContent = "Copy Whole Roster";
+    button.textContent = "Copy Full Roster";
     button.style.marginLeft = "8px";
 
     button.addEventListener("click", () => {
