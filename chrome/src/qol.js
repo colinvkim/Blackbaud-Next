@@ -4,6 +4,7 @@
   }
 
   const copyRosterButtonId = "blackbaud-next-copy-roster-btn";
+  const copyRosterEmailsButtonId = "blackbaud-next-copy-roster-emails-btn";
 
   function isRosterPage() {
     return !!document.getElementById("roster-term-picker");
@@ -80,8 +81,9 @@
       : null;
   }
 
-  async function copyRosterToClipboard(button) {
-    const originalText = "Copy Full Roster";
+  async function copyRosterDataToClipboard(button, type) {
+    const originalText =
+      type === "email" ? "Copy Roster Emails" : "Copy Full Roster";
     const rosterApiUrl = getRosterApiUrl();
     if (!rosterApiUrl) {
       button.textContent = "Roster Not Found";
@@ -101,22 +103,23 @@
       }
 
       const roster = await response.json();
-      const names = Array.isArray(roster)
+      const values = Array.isArray(roster)
         ? roster
-            .map(
-              (entry) =>
-                entry?.name ||
-                entry?.formatted_name ||
-                [entry?.firstName, entry?.lastName].filter(Boolean).join(" "),
+            .map((entry) =>
+              type === "email"
+                ? entry?.email
+                : entry?.name ||
+                  entry?.formatted_name ||
+                  [entry?.firstName, entry?.lastName].filter(Boolean).join(" "),
             )
             .filter(Boolean)
         : [];
 
-      if (!names.length) {
-        throw new Error("No names");
+      if (!values.length) {
+        throw new Error(type === "email" ? "No emails" : "No names");
       }
 
-      await navigator.clipboard.writeText(names.join(", "));
+      await navigator.clipboard.writeText(values.join(", "));
       button.textContent = "Copied to Clipboard";
     } catch {
       button.textContent = "Copy Failed";
@@ -132,7 +135,10 @@
       return;
     }
 
-    if (document.getElementById(copyRosterButtonId)) {
+    if (
+      document.getElementById(copyRosterButtonId) ||
+      document.getElementById(copyRosterEmailsButtonId)
+    ) {
       return;
     }
 
@@ -141,18 +147,30 @@
       return;
     }
 
-    const button = document.createElement("button");
-    button.id = copyRosterButtonId;
-    button.type = "button";
-    button.className = "btn btn-default";
-    button.textContent = "Copy Full Roster";
-    button.style.marginLeft = "8px";
+    const namesButton = document.createElement("button");
+    namesButton.id = copyRosterButtonId;
+    namesButton.type = "button";
+    namesButton.className = "btn btn-default";
+    namesButton.textContent = "Copy Full Roster";
+    namesButton.style.marginLeft = "8px";
 
-    button.addEventListener("click", () => {
-      copyRosterToClipboard(button);
+    namesButton.addEventListener("click", () => {
+      copyRosterDataToClipboard(namesButton, "name");
     });
 
-    termPicker.insertAdjacentElement("afterend", button);
+    const emailsButton = document.createElement("button");
+    emailsButton.id = copyRosterEmailsButtonId;
+    emailsButton.type = "button";
+    emailsButton.className = "btn btn-default";
+    emailsButton.textContent = "Copy Roster Emails";
+    emailsButton.style.marginLeft = "8px";
+
+    emailsButton.addEventListener("click", () => {
+      copyRosterDataToClipboard(emailsButton, "email");
+    });
+
+    termPicker.insertAdjacentElement("afterend", namesButton);
+    namesButton.insertAdjacentElement("afterend", emailsButton);
   }
 
   function isDirectoryPage() {
