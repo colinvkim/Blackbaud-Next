@@ -9,47 +9,81 @@
     return !!document.getElementById("roster-term-picker");
   }
 
-  function getSectionIdFromUrl() {
-    const apiPattern = /\/api\/datadirect\/sectionrosterget\/(\d+)\//i;
-
-    // Most reliable: reuse the section id from an already-loaded roster API call.
+  function getIdFromRecentRosterRequest(pattern) {
     const entries = performance.getEntriesByType("resource");
     for (let i = entries.length - 1; i >= 0; i--) {
       const name = entries[i]?.name || "";
-      const apiMatch = name.match(apiPattern);
+      const apiMatch = name.match(pattern);
       if (apiMatch) {
         return apiMatch[1];
-      }
-    }
-
-    // Route-agnostic fallback: first numeric hash segment (e.g. #advisorypage/28071815/advisees).
-    const hashParts = (window.location.hash || "")
-      .replace(/^#/, "")
-      .split("/")
-      .filter(Boolean);
-    const numericHashPart = hashParts.find((part) => /^\d+$/.test(part));
-    if (numericHashPart) {
-      return numericHashPart;
-    }
-
-    // Last fallback: inspect roster picker data attributes for a numeric id.
-    const termPicker = document.getElementById("roster-term-picker");
-    if (termPicker?.dataset) {
-      const datasetValue = Object.values(termPicker.dataset).find((value) =>
-        /^\d+$/.test(value),
-      );
-      if (datasetValue) {
-        return datasetValue;
       }
     }
 
     return null;
   }
 
+  function getNumericHashSegment() {
+    const hashParts = (window.location.hash || "")
+      .replace(/^#/, "")
+      .split("/")
+      .filter(Boolean);
+
+    return hashParts.find((part) => /^\d+$/.test(part)) || null;
+  }
+
+  function getSectionIdFromUrl() {
+    const fromSectionApi = getIdFromRecentRosterRequest(
+      /\/api\/datadirect\/sectionrosterget\/(\d+)\//i,
+    );
+    if (fromSectionApi) {
+      return fromSectionApi;
+    }
+
+    const numericHashPart = getNumericHashSegment();
+    if (numericHashPart) {
+      return numericHashPart;
+    }
+
+    return null;
+  }
+
+  function getAthleticTeamIdFromUrl() {
+    const fromAthleticApi = getIdFromRecentRosterRequest(
+      /\/api\/datadirect\/athleticrosterget\/\?[^#]*teamId=(\d+)/i,
+    );
+    if (fromAthleticApi) {
+      return fromAthleticApi;
+    }
+
+    const numericHashPart = getNumericHashSegment();
+    if (numericHashPart) {
+      return numericHashPart;
+    }
+
+    return null;
+  }
+
+  function getRosterApiUrl() {
+    const isAthleticTeamPage = /#athleticteam/i.test(
+      window.location.hash || "",
+    );
+    if (isAthleticTeamPage) {
+      const teamId = getAthleticTeamIdFromUrl();
+      return teamId
+        ? `/api/datadirect/athleticrosterget/?format=json&teamId=${teamId}`
+        : null;
+    }
+
+    const sectionId = getSectionIdFromUrl();
+    return sectionId
+      ? `/api/datadirect/sectionrosterget/${sectionId}/?format=json`
+      : null;
+  }
+
   async function copyRosterToClipboard(button) {
     const originalText = "Copy Whole Roster";
-    const sectionId = getSectionIdFromUrl();
-    if (!sectionId) {
+    const rosterApiUrl = getRosterApiUrl();
+    if (!rosterApiUrl) {
       button.textContent = "Roster Not Found";
       setTimeout(() => {
         button.textContent = originalText;
@@ -58,12 +92,9 @@
     }
 
     try {
-      const response = await fetch(
-        `/api/datadirect/sectionrosterget/${sectionId}/?format=json`,
-        {
-          credentials: "include",
-        },
-      );
+      const response = await fetch(rosterApiUrl, {
+        credentials: "include",
+      });
 
       if (!response.ok) {
         throw new Error("Failed roster request");
@@ -71,7 +102,14 @@
 
       const roster = await response.json();
       const names = Array.isArray(roster)
-        ? roster.map((entry) => entry?.name).filter(Boolean)
+        ? roster
+            .map(
+              (entry) =>
+                entry?.name ||
+                entry?.formatted_name ||
+                [entry?.firstName, entry?.lastName].filter(Boolean).join(" "),
+            )
+            .filter(Boolean)
         : [];
 
       if (!names.length) {
