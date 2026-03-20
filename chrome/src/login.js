@@ -148,15 +148,23 @@
 
   async function autoClickLogin() {
     if (window.location.href.includes("app.blackbaud.com/signin/error")) {
-      const key = await chrome.storage.sync.get(hostnameKey);
-      if (key[hostnameKey] === undefined) {
+      const stored = await chrome.storage.sync.get(hostnameKey);
+      const hostname = stored[hostnameKey];
+      const isValidHostname =
+        typeof hostname === "string" &&
+        hostname.length > 0 &&
+        hostname.endsWith(".myschoolapp.com");
+
+      if (!isValidHostname) {
         window.location.href = "https://app.blackbaud.com/signin/";
-      } else {
-        const dashboard = encodeURI(
-          `https://${key[hostnameKey]}/app/student?svcid=edu`,
-        );
-        window.location.href = `https://app.blackbaud.com/signin/?redirectUrl=${dashboard}`;
+        return;
       }
+
+      const dashboard = encodeURIComponent(
+        `https://${hostname}/app/student?svcid=edu`,
+      );
+      window.location.href = `https://app.blackbaud.com/signin/?redirectUrl=${dashboard}`;
+      return;
     }
 
     if (window.location.href.includes("app.blackbaud.com/signin")) {
