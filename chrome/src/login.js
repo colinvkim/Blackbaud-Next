@@ -1,5 +1,6 @@
 (async function () {
   const overlayPersistKey = "blackbaud-next-auto-login-overlay-persist";
+  const hostnameKey = "blackbaud-next-bb-lms-last-hostname";
 
   const [{ loginFix }, { automaticLogin }, { loadBetweenPages }] =
     await Promise.all([
@@ -146,6 +147,18 @@
   }
 
   async function autoClickLogin() {
+    if (window.location.href.includes("app.blackbaud.com/signin/error")) {
+      const key = await chrome.storage.sync.get(hostnameKey);
+      if (key[hostnameKey] === undefined) {
+        window.location.href = "https://app.blackbaud.com/signin/";
+      } else {
+        const dashboard = encodeURI(
+          `https://${key[hostnameKey]}/app/student?svcid=edu`,
+        );
+        window.location.href = `https://app.blackbaud.com/signin/?redirectUrl=${dashboard}`;
+      }
+    }
+
     if (window.location.href.includes("app.blackbaud.com/signin")) {
       setOverlayPersistence(true);
       showAutoLoginOverlay();
@@ -181,6 +194,7 @@
 
     const hostname = window.location.hostname;
     const dashboard = encodeURI(`https://${hostname}/app/student?svcid=edu`);
+    chrome.storage.sync.set({ [hostnameKey]: hostname });
 
     document.documentElement.dataset.blackbaudNextLoginPatched = "1";
 
