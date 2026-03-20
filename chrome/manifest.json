@@ -29,10 +29,5 @@
     "32": "assets/32x32.png",
     "48": "assets/48x48.png",
     "128": "assets/128x128.png"
-  },
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "@blackbaud-next"
-    }
   }
 }
