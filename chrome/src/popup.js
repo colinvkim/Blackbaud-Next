@@ -9,6 +9,12 @@ const settingsSchema = [
   },
   { key: "loginFix", id: "login-fix", defaultValue: true },
   { key: "wideUI", id: "wide-ui", defaultValue: false },
+  { key: "copyRosterTools", id: "copy-roster-tools", defaultValue: true },
+  {
+    key: "downloadFullAvatar",
+    id: "download-full-avatar",
+    defaultValue: true,
+  },
 ];
 
 const defaultOptions = Object.fromEntries(

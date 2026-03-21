@@ -1,4 +1,4 @@
-(async function () {
+(async () => {
   const overlayPersistKey = "blackbaud-next-auto-login-overlay-persist";
   const hostnameKey = "blackbaud-next-bb-lms-last-hostname";
 

@@ -1,5 +1,15 @@
-(() => {
+(async () => {
   if (!window.location.href.includes("myschoolapp.com")) {
+    return;
+  }
+
+  const { copyRosterTools, downloadFullAvatar } =
+    await chrome.storage.sync.get({
+      copyRosterTools: true,
+      downloadFullAvatar: true,
+    });
+
+  if (!copyRosterTools && !downloadFullAvatar) {
     return;
   }
 
@@ -247,13 +257,24 @@
   }
 
   const observer = new MutationObserver(() => {
-    injectButton();
-    injectRosterCopyButton();
+    if (downloadFullAvatar) {
+      injectButton();
+    }
+
+    if (copyRosterTools) {
+      injectRosterCopyButton();
+    }
   });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
   });
-  injectButton();
-  injectRosterCopyButton();
+
+  if (downloadFullAvatar) {
+    injectButton();
+  }
+
+  if (copyRosterTools) {
+    injectRosterCopyButton();
+  }
 })();
