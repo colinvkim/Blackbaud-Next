@@ -2,7 +2,7 @@
   "name": "Blackbaud Next: Supercharge your education",
   "short_name": "Blackbaud Next",
   "description": "Enhance your Blackbaud experience with useful tools.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "manifest_version": 3,
   "permissions": ["storage"],
   "action": {
