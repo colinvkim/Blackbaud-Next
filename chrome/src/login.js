@@ -2,6 +2,7 @@
   const overlayPersistKey = "blackbaud-next-auto-login-overlay-persist";
   const hostnameKey = "blackbaud-next-bb-lms-last-hostname";
 
+  // Store prefs
   const [{ loginFix }, { automaticLogin }, { loadBetweenPages }] =
     await Promise.all([
       chrome.storage.sync.get({ loginFix: true }),
@@ -30,7 +31,7 @@
     if (document.getElementById("blackbaud-next-auto-login-overlay")) {
       return;
     }
-
+    // Create loading overlay and styles
     const style = document.createElement("style");
     const loadingOverlay = document.createElement("div");
     const loadingSpinner = document.createElement("div");
@@ -98,6 +99,7 @@
     (document.body || document.documentElement).appendChild(loadingOverlay);
   }
 
+  // Loading overlay function for detecting whether it is a good site for the overlay
   function shouldPersistOverlayOnCurrentPage() {
     return (
       window.location.href.includes("app.blackbaud.com/signin") ||
@@ -115,6 +117,7 @@
     }
   }
 
+  // Same function as in qol.js, so please update accordingly
   async function waitForElement(selector, timeout = 4000) {
     return new Promise((resolve) => {
       const existingElement = document.querySelector(selector);
@@ -146,6 +149,7 @@
     });
   }
 
+  // Click Sign in with Google button automatically and redirect to correct page if at signin/error
   async function autoClickLogin() {
     if (window.location.href.includes("app.blackbaud.com/signin/error")) {
       const stored = await chrome.storage.sync.get(hostnameKey);
@@ -179,6 +183,7 @@
     }
   }
 
+  // Make the initial login page look better
   async function loginPage() {
     if (document.documentElement.dataset.blackbaudNextLoginPatched === "1") {
       return;

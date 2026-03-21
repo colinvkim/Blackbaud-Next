@@ -1,3 +1,4 @@
+// This is a duplicate of the same function in login.js, so please update this one if ur gonna change login.js too
 async function waitForElement(selector, timeout = 4000) {
   return new Promise((resolve) => {
     const existingElement = document.querySelector(selector);
@@ -38,6 +39,7 @@ async function waitForElement(selector, timeout = 4000) {
       wideUI: false,
     });
 
+  // Create wide user interface (alpha)
   if (window.location.href.includes("myschoolapp.com") && wideUI) {
     const style = document.createElement("style");
     style.textContent = `
@@ -53,6 +55,7 @@ async function waitForElement(selector, timeout = 4000) {
     document.head.appendChild(style);
   }
 
+  // Fix BB having a blank favicon for some routes
   if (window.location.href.includes("myschoolapp.com") && fixFavicon) {
     const link = document.createElement("link");
     link.rel = "icon";
@@ -61,6 +64,7 @@ async function waitForElement(selector, timeout = 4000) {
     document.head.appendChild(link);
   }
 
+  // Redirect new assignment center to old one and try to make old button go to new one
   if (oldAssignmentCenter) {
     if (window.location.href.includes("lms-assignment/assignment-center")) {
       const hostname = window.location.hostname;
