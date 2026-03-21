@@ -1,33 +1,43 @@
-const defaultOptions = {
-  automaticLogin: true,
-  loadBetweenPages: true,
-  fixFavicon: true,
-  oldAssignmentCenter: false,
-  loginFix: true,
-  wideUI: false,
-};
+const settingsSchema = [
+  { key: "automaticLogin", id: "automatic-login", defaultValue: true },
+  { key: "loadBetweenPages", id: "load-between-pages", defaultValue: true },
+  { key: "fixFavicon", id: "fix-favicon", defaultValue: true },
+  {
+    key: "oldAssignmentCenter",
+    id: "old-assignment-center",
+    defaultValue: false,
+  },
+  { key: "loginFix", id: "login-fix", defaultValue: true },
+  { key: "wideUI", id: "wide-ui", defaultValue: false },
+];
 
-const keyToId = {
-  automaticLogin: "automatic-login",
-  loadBetweenPages: "load-between-pages",
-  fixFavicon: "fix-favicon",
-  oldAssignmentCenter: "old-assignment-center",
-  loginFix: "login-fix",
-  wideUI: "wide-ui",
-};
+const defaultOptions = Object.fromEntries(
+  settingsSchema.map(({ key, defaultValue }) => [key, defaultValue]),
+);
+
+const keyToId = Object.fromEntries(
+  settingsSchema.map(({ key, id }) => [key, id]),
+);
+
+const idToKey = Object.fromEntries(
+  settingsSchema.map(({ key, id }) => [id, key]),
+);
 
 function restoreOptions() {
   chrome.storage.sync.get(defaultOptions, (items) => {
-    for (const key in defaultOptions) {
-      const checkbox = document.getElementById(keyToId[key]);
-      checkbox.checked = items[key];
-    }
+    settingsSchema.forEach(({ key, id }) => {
+      const checkbox = document.getElementById(id);
+      if (!checkbox) {
+        return;
+      }
+
+      checkbox.checked = Boolean(items[key]);
+    });
   });
 }
 
 function checkboxChange(e) {
-  // Find the key that matches the ID
-  const key = Object.keys(keyToId).find((k) => keyToId[k] === e.target.id);
+  const key = idToKey[e.target.id];
   if (key) {
     chrome.storage.sync.set({ [key]: e.target.checked });
   }
@@ -35,7 +45,7 @@ function checkboxChange(e) {
 
 document.addEventListener("DOMContentLoaded", () => {
   restoreOptions();
-  Object.values(keyToId).forEach((id) => {
+  settingsSchema.forEach(({ id }) => {
     const checkbox = document.getElementById(id);
     if (checkbox) {
       checkbox.addEventListener("change", checkboxChange);
