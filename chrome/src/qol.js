@@ -3,11 +3,12 @@
     return;
   }
 
-  const { copyRosterTools, downloadFullAvatar } =
-    await chrome.storage.sync.get({
+  const { copyRosterTools, downloadFullAvatar } = await chrome.storage.sync.get(
+    {
       copyRosterTools: true,
       downloadFullAvatar: true,
-    });
+    },
+  );
 
   if (!copyRosterTools && !downloadFullAvatar) {
     return;

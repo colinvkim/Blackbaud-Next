@@ -3,12 +3,12 @@
   const hostnameKey = "blackbaud-next-bb-lms-last-hostname";
 
   // Store prefs
-  const [{ loginFix }, { automaticLogin }, { loadBetweenPages }] =
-    await Promise.all([
-      chrome.storage.sync.get({ loginFix: true }),
-      chrome.storage.sync.get({ automaticLogin: true }),
-      chrome.storage.sync.get({ loadBetweenPages: true }),
-    ]);
+  const { loginFix, automaticLogin, loadBetweenPages } =
+    await chrome.storage.sync.get({
+      loginFix: true,
+      automaticLogin: true,
+      loadBetweenPages: true,
+    });
 
   function setOverlayPersistence(shouldPersist) {
     if (shouldPersist) {
