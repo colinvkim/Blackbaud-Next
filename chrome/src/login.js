@@ -171,7 +171,7 @@
       setOverlayPersistence(true);
       showAutoLoginOverlay();
       const initiateAuth = await waitForElement(
-        "app-spa-auth-google-signin-button button",
+        "app-spa-auth-google-signin-button button, #google-continue-button",
       );
       if (initiateAuth) {
         initiateAuth.click();
