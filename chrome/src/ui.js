@@ -30,19 +30,9 @@ async function waitForElement(selector, timeout = 4000) {
   });
 }
 
-// Put the entire code into an IIFE so await is available LOL
-(async () => {
-  const { fixFavicon, oldAssignmentCenter, wideUI } =
-    await chrome.storage.sync.get({
-      fixFavicon: true,
-      oldAssignmentCenter: false,
-      wideUI: false,
-    });
-
-  // Create wide user interface (alpha)
-  if (window.location.href.includes("myschoolapp.com") && wideUI) {
-    const style = document.createElement("style");
-    style.textContent = `
+function applyWideUI() {
+  const style = document.createElement("style");
+  style.textContent = `
     .container {
     width: 100%;
 }
@@ -52,38 +42,51 @@ async function waitForElement(selector, timeout = 4000) {
     display: flex !important;
     justify-content: center !important;
 }`;
-    document.head.appendChild(style);
+  document.head.appendChild(style);
+}
+
+function applyFaviconFix() {
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.type = "image/png";
+  link.href = chrome.runtime.getURL("assets/blackbaud.png");
+  document.head.appendChild(link);
+}
+
+async function enableOldAssignmentCenter() {
+  if (window.location.href.includes("lms-assignment/assignment-center")) {
+    const hostname = window.location.hostname;
+    window.location.href = `https://${hostname}/app/student?svcid=edu#studentmyday/assignment-center`;
   }
 
-  // Fix BB having a blank favicon for some routes
-  if (window.location.href.includes("myschoolapp.com") && fixFavicon) {
-    const link = document.createElement("link");
-    link.rel = "icon";
-    link.type = "image/png";
-    link.href = chrome.runtime.getURL("assets/blackbaud.png");
-    document.head.appendChild(link);
-  }
-
-  // Redirect new assignment center to old one and try to make old button go to new one
-  if (oldAssignmentCenter) {
-    if (window.location.href.includes("lms-assignment/assignment-center")) {
-      const hostname = window.location.hostname;
+  const assignmentCenterBtn = await waitForElement("#assignment-center-btn");
+  if (assignmentCenterBtn) {
+    const hostname = window.location.hostname;
+    assignmentCenterBtn.removeAttribute("href");
+    assignmentCenterBtn.addEventListener("click", function () {
       window.location.href = `https://${hostname}/app/student?svcid=edu#studentmyday/assignment-center`;
-    }
+    });
+  }
+}
 
-    (async () => {
-      if (window.location.href.includes("myschoolapp.com")) {
-        const assignmentCenterBtn = await waitForElement(
-          "#assignment-center-btn",
-        );
-        if (assignmentCenterBtn) {
-          const hostname = window.location.hostname;
-          assignmentCenterBtn.removeAttribute("href");
-          assignmentCenterBtn.addEventListener("click", function () {
-            window.location.href = `https://${hostname}/app/student?svcid=edu#studentmyday/assignment-center`;
-          });
-        }
-      }
-    })();
+// Put the entire code into an IIFE so await is available LOL
+(async () => {
+  const { fixFavicon, oldAssignmentCenter, wideUI } =
+    await chrome.storage.sync.get({
+      fixFavicon: true,
+      oldAssignmentCenter: false,
+      wideUI: false,
+    });
+
+  if (wideUI) {
+    applyWideUI();
+  }
+
+  if (fixFavicon) {
+    applyFaviconFix();
+  }
+
+  if (oldAssignmentCenter) {
+    enableOldAssignmentCenter();
   }
 })();
