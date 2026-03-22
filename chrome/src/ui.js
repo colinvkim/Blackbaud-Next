@@ -69,13 +69,35 @@ async function enableOldAssignmentCenter() {
   }
 }
 
+async function reloadBrokenAssignmentCenter() {
+  if (!window.location.href.includes("lms-assignment/assignment-center")) {
+    return;
+  }
+
+  const loadingScreenSymptom = await waitForElement(
+    ".sky-wait-mask.sky-wait-mask-loading-fixed.sky-wait-mask-loading-blocking",
+  );
+
+  if (loadingScreenSymptom) {
+    setTimeout(() => {
+      const stillThere = document.querySelector(
+        ".sky-wait-mask.sky-wait-mask-loading-fixed.sky-wait-mask-loading-blocking",
+      );
+      if (stillThere) {
+        window.location.reload();
+      }
+    }, 4000);
+  }
+}
+
 // Put the entire code into an IIFE so await is available LOL
 (async () => {
-  const { fixFavicon, oldAssignmentCenter, wideUI } =
+  const { fixFavicon, oldAssignmentCenter, wideUI, fixBrokenAssignmentCenter } =
     await chrome.storage.sync.get({
       fixFavicon: true,
       oldAssignmentCenter: false,
       wideUI: false,
+      fixBrokenAssignmentCenter: true,
     });
 
   if (wideUI) {
@@ -88,5 +110,9 @@ async function enableOldAssignmentCenter() {
 
   if (oldAssignmentCenter) {
     enableOldAssignmentCenter();
+  }
+
+  if (fixBrokenAssignmentCenter) {
+    reloadBrokenAssignmentCenter();
   }
 })();

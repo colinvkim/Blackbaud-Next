@@ -15,6 +15,11 @@ const settingsSchema = [
     id: "download-full-avatar",
     defaultValue: true,
   },
+  {
+    key: "fixBrokenAssignmentCenter",
+    id: "fix-broken-assignment-center",
+    defaultValue: true,
+  },
 ];
 
 const defaultOptions = Object.fromEntries(
