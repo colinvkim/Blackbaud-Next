@@ -188,30 +188,57 @@
     return /^#directory\/\d+/i.test(window.location.hash || "");
   }
 
-  function getBestAvatarUrl(scope) {
+  function getAvatarCandidates(scope = document) {
     const selector = "img[src*='/user/large_user_']";
-    const local = scope ? [...scope.querySelectorAll(selector)] : [];
-    const global = local.length
-      ? local
-      : [...document.querySelectorAll(selector)];
+    return [...scope.querySelectorAll(selector)].filter((image) => !!image.src);
+  }
 
+  function getFullAvatarUrl(image) {
+    if (!image?.src) {
+      return null;
+    }
+
+    try {
+      const full = new URL(image.src, window.location.href);
+      full.searchParams.delete("resize");
+      return full.toString();
+    } catch {
+      return image.src.replace(/\?resize=[^&]+/, "");
+    }
+  }
+
+  function getRectDistanceScore(source, target) {
+    const sourceX = source.left + source.width / 2;
+    const sourceY = source.top + source.height / 2;
+    const targetX = target.left + target.width / 2;
+    const targetY = target.top + target.height / 2;
+    return Math.hypot(targetX - sourceX, targetY - sourceY);
+  }
+
+  function getBestAvatarUrl(optionsButton) {
+    let current = optionsButton;
+    while (current && current !== document.body && current !== document.documentElement) {
+      const local = getAvatarCandidates(current);
+      if (local.length === 1) {
+        return getFullAvatarUrl(local[0]);
+      }
+
+      current = current.parentElement;
+    }
+
+    const global = getAvatarCandidates();
     if (!global.length) {
       return null;
     }
 
-    const best = global.sort((a, b) => {
-      const aa = a.getBoundingClientRect();
-      const bb = b.getBoundingClientRect();
-      return bb.width * bb.height - aa.width * aa.height;
+    const buttonRect = optionsButton.getBoundingClientRect();
+    const nearest = global.sort((a, b) => {
+      const distanceA = getRectDistanceScore(buttonRect, a.getBoundingClientRect());
+      const distanceB = getRectDistanceScore(buttonRect, b.getBoundingClientRect());
+      return distanceA - distanceB;
     })[0];
 
-    try {
-      const full = new URL(best.src, window.location.href);
-      full.searchParams.delete("resize");
-      return full.toString();
-    } catch {
-      return best.src.replace(/\?resize=[^&]+/, "");
-    }
+    return getFullAvatarUrl(nearest);
   }
 
   function injectButton() {
@@ -236,11 +263,7 @@
       button.style.display = "block";
 
       button.addEventListener("click", () => {
-        const scope =
-          optionsButton.closest("section, article, div") ||
-          document.body ||
-          document.documentElement;
-        const fullUrl = getBestAvatarUrl(scope);
+        const fullUrl = getBestAvatarUrl(optionsButton);
         if (!fullUrl) {
           return;
         }
