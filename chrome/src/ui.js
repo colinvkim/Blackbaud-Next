@@ -30,21 +30,6 @@ async function waitForElement(selector, timeout = 4000) {
   });
 }
 
-function applyWideUI() {
-  const style = document.createElement("style");
-  style.textContent = `
-    .container {
-    width: 100%;
-}
-
-.nav, ul.topnav, ul.clearfix:has(li) {
-    width: 100% !important;
-    display: flex !important;
-    justify-content: center !important;
-}`;
-  document.head.appendChild(style);
-}
-
 function applyFaviconFix() {
   const link = document.createElement("link");
   link.rel = "icon";
@@ -92,17 +77,12 @@ async function reloadBrokenAssignmentCenter() {
 
 // Put the entire code into an IIFE so await is available LOL
 (async () => {
-  const { fixFavicon, oldAssignmentCenter, wideUI, fixBrokenAssignmentCenter } =
+  const { fixFavicon, oldAssignmentCenter, fixBrokenAssignmentCenter } =
     await chrome.storage.sync.get({
       fixFavicon: true,
       oldAssignmentCenter: false,
-      wideUI: false,
       fixBrokenAssignmentCenter: true,
     });
-
-  if (wideUI) {
-    applyWideUI();
-  }
 
   if (fixFavicon) {
     applyFaviconFix();

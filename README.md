@@ -23,7 +23,6 @@ All features are toggleable from the extension popup:
 | **Automatic Login**       | Skip extra login steps                          |
 | **Optimize Login Page**   | Clean up the login flow                         |
 | **Loading Overlay**       | Show loading indicator between page transitions |
-| **Wide Layout**           | Expand narrow center column                     |
 | **Fix Empty Favicon**     | Add a proper tab icon                           |
 | **Old Assignment Center** | Revert to previous assignment center            |
 | **Roster Tools**          | Copy class rosters easily                       |

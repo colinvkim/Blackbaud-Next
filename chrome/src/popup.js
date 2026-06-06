@@ -8,7 +8,6 @@ const settingsSchema = [
     defaultValue: false,
   },
   { key: "loginFix", id: "login-fix", defaultValue: true },
-  { key: "wideUI", id: "wide-ui", defaultValue: false },
   { key: "copyRosterTools", id: "copy-roster-tools", defaultValue: true },
   {
     key: "downloadFullAvatar",
