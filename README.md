@@ -12,11 +12,19 @@ Get it on the [Chrome Web Store](https://chromewebstore.google.com/detail/ofadcf
 
 ## Why Blackbaud Next?
 
-Blackbaud's student portal works, but it has rough edges. Pages break, layouts are narrow, the login flow is slow, and simple things like copying a class roster take too many clicks. Blackbaud Next patches all of that on top of the existing site.
+Blackbaud's student portal works, but it has rough edges. Pages break, layouts are narrow, the login flow is slow, and simple things like copying a class roster take too many clicks. Blackbaud Next can run the original site unchanged, enhance the native Blackbaud UI, or mount the experimental Orbit UI layer.
+
+## UI Modes
+
+| Mode         | What It Does                                      |
+| ------------ | ------------------------------------------------- |
+| **Normal**   | Use the unmodified Blackbaud UI                   |
+| **Enhanced** | Use native Blackbaud with Blackbaud Next features |
+| **Orbit**    | Mount the experimental Orbit UI host              |
 
 ## Features
 
-All features are toggleable from the extension popup:
+Features are toggleable from the extension popup:
 
 | Toggle                    | What It Does                                    |
 | ------------------------- | ----------------------------------------------- |
@@ -29,6 +37,21 @@ All features are toggleable from the extension popup:
 | **Download Full Avatar**  | Download full-resolution profile pictures       |
 | **Fix Invalid Pages**     | Patch broken assignment pages                   |
 
+## Source Layout
+
+```text
+chrome/src/
+  boot/            # startup and mode selection
+  auth/            # Blackbaud/Google login helpers
+  native/          # native shell visibility and fallback controls
+  sources/         # API, network, and DOM source adapters
+  data/            # stable model and normalizer helpers
+  legacy-patches/  # native Blackbaud enhancement modules
+  orbit/           # Orbit host placeholder
+  popup/           # extension popup
+  shared/          # settings, routes, DOM, clipboard utilities
+```
+
 ## Developing Locally
 
 1. Open Chrome and navigate to `chrome://extensions/`
@@ -40,7 +63,7 @@ The extension loads immediately. Toggle features in the popup and refresh Blackb
 
 ## Requirements
 
-- **Chrome 88+** or any Chromium-based browser (Edge, Brave, Arc)
+- **Chrome 148+**
 - Works on any school using `*.myschoolapp.com`
 
 ## License

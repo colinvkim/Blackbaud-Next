@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Blackbaud Next</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="../../assets/48x48.png" alt="" />
+        <div>
+          <h1>Blackbaud Next</h1>
+          <p id="mode-summary">Loading settings</p>
+        </div>
+      </header>
+
+      <section aria-labelledby="mode-heading">
+        <h2 id="mode-heading">UI Mode</h2>
+        <div id="mode-options" class="mode-options"></div>
+      </section>
+
+      <section aria-labelledby="features-heading">
+        <h2 id="features-heading">Enhancements</h2>
+        <div id="feature-options" class="feature-options"></div>
+      </section>
+
+      <p class="refresh-note">Changes may require a refresh.</p>
+    </main>
+
+    <script src="../shared/namespace.js"></script>
+    <script src="../shared/settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

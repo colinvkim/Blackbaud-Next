@@ -4,17 +4,53 @@
   "description": "Enhance your Blackbaud experience with useful tools.",
   "version": "1.3.1",
   "manifest_version": 3,
+  "minimum_chrome_version": "148",
   "permissions": ["storage"],
   "action": {
-    "default_popup": "src/popup.html"
+    "default_popup": "src/popup/popup.html"
   },
   "content_scripts": [
     {
-      "js": ["src/login.js", "src/ui.js", "src/qol.js"],
+      "js": [
+        "src/shared/namespace.js",
+        "src/shared/settings.js",
+        "src/shared/dom.js",
+        "src/shared/routes.js",
+        "src/shared/clipboard.js",
+        "src/sources/network/performance.js",
+        "src/sources/api/client.js",
+        "src/sources/dom/native-shell.js",
+        "src/data/normalize/roster.js",
+        "src/data/normalize/avatar.js",
+        "src/data/models/index.js",
+        "src/auth/loading-overlay.js",
+        "src/auth/login-flow.js",
+        "src/auth/index.js",
+        "src/native/controller.js",
+        "src/native/index.js",
+        "src/legacy-patches/favicon.js",
+        "src/legacy-patches/wide-layout.js",
+        "src/legacy-patches/assignment-center.js",
+        "src/legacy-patches/roster-tools.js",
+        "src/legacy-patches/avatar-download.js",
+        "src/legacy-patches/index.js",
+        "src/orbit/placeholder.js",
+        "src/boot/runtime.js",
+        "src/boot/main.js"
+      ],
       "matches": ["https://*.myschoolapp.com/*"]
     },
     {
-      "js": ["src/login.js"],
+      "js": [
+        "src/shared/namespace.js",
+        "src/shared/settings.js",
+        "src/shared/dom.js",
+        "src/shared/routes.js",
+        "src/auth/loading-overlay.js",
+        "src/auth/login-flow.js",
+        "src/auth/index.js",
+        "src/boot/auth-main.js"
+      ],
       "matches": ["https://accounts.google.com/*", "https://*.blackbaud.com/*"]
     }
   ],
