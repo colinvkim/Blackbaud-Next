@@ -16,11 +16,20 @@ html.${nativeHiddenClass} app-root {
   display: none !important;
 }
 
-#blackbaud-next-orbit-root {
+#blackbaud-next-orbit-root[data-blackbaud-next-orbit-expanded="1"] {
   min-height: 100vh;
 }
 `,
     );
+  }
+
+  function syncOrbitRootState() {
+    const orbitRoot = document.getElementById("blackbaud-next-orbit-root");
+    if (!orbitRoot) {
+      return;
+    }
+
+    orbitRoot.dataset.blackbaudNextOrbitExpanded = isNativeHidden() ? "1" : "0";
   }
 
   function getNativeShells() {
@@ -32,10 +41,12 @@ html.${nativeHiddenClass} app-root {
   function hideNativeBlackbaud() {
     installVisibilityStyles();
     document.documentElement.classList.add(nativeHiddenClass);
+    syncOrbitRootState();
   }
 
   function showNativeBlackbaud() {
     document.documentElement.classList.remove(nativeHiddenClass);
+    syncOrbitRootState();
   }
 
   function isNativeHidden() {

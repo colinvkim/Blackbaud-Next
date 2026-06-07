@@ -20,7 +20,7 @@
     }
 
     if (settings.uiMode === modes.ORBIT) {
-      await BN.orbit.placeholder.mount(settings);
+      await BN.orbit.host.mount(settings);
     }
   }
 

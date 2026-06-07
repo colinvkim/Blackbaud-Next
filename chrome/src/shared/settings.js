@@ -67,14 +67,6 @@
       appliesTo: ["enhanced", "orbit"],
     },
     {
-      key: "wideLayout",
-      legacyKey: "wideUI",
-      label: "Wide Layout",
-      description: "Expand narrow legacy Blackbaud containers.",
-      defaultValue: false,
-      appliesTo: ["enhanced"],
-    },
-    {
       key: "rosterTools",
       legacyKey: "copyRosterTools",
       label: "Roster Tools",

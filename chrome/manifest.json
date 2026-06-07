@@ -29,12 +29,11 @@
         "src/native/controller.js",
         "src/native/index.js",
         "src/legacy-patches/favicon.js",
-        "src/legacy-patches/wide-layout.js",
         "src/legacy-patches/assignment-center.js",
         "src/legacy-patches/roster-tools.js",
         "src/legacy-patches/avatar-download.js",
         "src/legacy-patches/index.js",
-        "src/orbit/placeholder.js",
+        "src/orbit/host.js",
         "src/boot/runtime.js",
         "src/boot/main.js"
       ],
@@ -56,7 +55,11 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/blackbaud.png"],
+      "resources": [
+        "assets/blackbaud.png",
+        "dist/orbit/orbit.css",
+        "dist/orbit/orbit.js"
+      ],
       "matches": ["https://*.myschoolapp.com/*"]
     }
   ],

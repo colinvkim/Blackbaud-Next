@@ -4,10 +4,6 @@
   function runImmediatePatches(settings) {
     const { featureEnabled } = BN.shared.settings;
 
-    if (featureEnabled(settings, "wideLayout")) {
-      BN.legacyPatches.wideLayout.apply();
-    }
-
     if (featureEnabled(settings, "fixFavicon")) {
       BN.legacyPatches.favicon.apply();
     }

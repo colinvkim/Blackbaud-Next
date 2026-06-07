@@ -47,9 +47,13 @@ chrome/src/
   sources/         # API, network, and DOM source adapters
   data/            # stable model and normalizer helpers
   legacy-patches/  # native Blackbaud enhancement modules
-  orbit/           # Orbit host placeholder
+  orbit/           # small Orbit content-script host
   popup/           # extension popup
   shared/          # settings, routes, DOM, clipboard utilities
+
+apps/orbit-extension/
+  src/             # extension-native Orbit React app
+  vite.config.ts   # builds static assets into chrome/dist/orbit/
 ```
 
 ## Developing Locally
