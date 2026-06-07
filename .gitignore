@@ -1,7 +1,27 @@
+# macOS
 .DS_Store
-.gitignore
-/Orbit/
+
+# Dependencies
 node_modules/
-chrome.pem
-chrome.crx
-bn-latest.zip
+.pnpm-store/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Extension signing and package artifacts
+*.pem
+*.crx
+
+# Local Orbit checkout
+/Orbit/
