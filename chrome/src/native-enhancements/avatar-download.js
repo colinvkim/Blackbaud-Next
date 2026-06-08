@@ -75,7 +75,7 @@
     });
   }
 
-  BN.define("legacyPatches.avatarDownload", {
+  BN.define("nativeEnhancements.avatarDownload", {
     injectDownloadButtons,
   });
 })();

@@ -15,7 +15,7 @@
     }
 
     if (settings.uiMode === modes.ENHANCED) {
-      await BN.legacyPatches.index.run(settings);
+      await BN.nativeEnhancements.index.run(settings);
       return;
     }
 

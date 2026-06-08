@@ -46,7 +46,7 @@ chrome/src/
   native/          # native shell visibility and fallback controls
   sources/         # API, network, and DOM source adapters
   data/            # stable model and normalizer helpers
-  legacy-patches/  # native Blackbaud enhancement modules
+  native-enhancements/ # native Blackbaud enhancement modules
   orbit/           # small Orbit content-script host
   popup/           # extension popup
   shared/          # settings, routes, DOM, clipboard utilities

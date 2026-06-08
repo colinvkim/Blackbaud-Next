@@ -109,7 +109,7 @@
     namesButton.insertAdjacentElement("afterend", emailsButton);
   }
 
-  BN.define("legacyPatches.rosterTools", {
+  BN.define("nativeEnhancements.rosterTools", {
     injectRosterCopyButtons,
   });
 })();

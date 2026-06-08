@@ -5,15 +5,15 @@
     const { featureEnabled } = BN.shared.settings;
 
     if (featureEnabled(settings, "fixFavicon")) {
-      BN.legacyPatches.favicon.apply();
+      BN.nativeEnhancements.favicon.apply();
     }
 
     if (featureEnabled(settings, "oldAssignmentCenter")) {
-      BN.legacyPatches.assignmentCenter.enableOldAssignmentCenter();
+      BN.nativeEnhancements.assignmentCenter.enableOldAssignmentCenter();
     }
 
     if (featureEnabled(settings, "fixInvalidPages")) {
-      BN.legacyPatches.assignmentCenter.reloadBrokenAssignmentCenter();
+      BN.nativeEnhancements.assignmentCenter.reloadBrokenAssignmentCenter();
     }
   }
 
@@ -21,11 +21,11 @@
     const { featureEnabled } = BN.shared.settings;
 
     if (featureEnabled(settings, "downloadFullAvatar")) {
-      BN.legacyPatches.avatarDownload.injectDownloadButtons();
+      BN.nativeEnhancements.avatarDownload.injectDownloadButtons();
     }
 
     if (featureEnabled(settings, "rosterTools")) {
-      BN.legacyPatches.rosterTools.injectRosterCopyButtons();
+      BN.nativeEnhancements.rosterTools.injectRosterCopyButtons();
     }
   }
 
@@ -50,7 +50,7 @@
     installObservers(settings);
   }
 
-  BN.define("legacyPatches.index", {
+  BN.define("nativeEnhancements.index", {
     run,
   });
 })();

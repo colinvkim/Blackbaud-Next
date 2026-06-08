@@ -19,7 +19,7 @@
     document.head.appendChild(link);
   }
 
-  BN.define("legacyPatches.favicon", {
+  BN.define("nativeEnhancements.favicon", {
     apply,
   });
 })();

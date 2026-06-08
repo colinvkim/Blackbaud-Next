@@ -59,7 +59,7 @@
     }, 4000);
   }
 
-  BN.define("legacyPatches.assignmentCenter", {
+  BN.define("nativeEnhancements.assignmentCenter", {
     enableOldAssignmentCenter,
     reloadBrokenAssignmentCenter,
   });
