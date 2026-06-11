@@ -20,8 +20,8 @@
     },
     {
       key: UI_MODES.ORBIT,
-      label: "Orbit",
-      description: "Mount the experimental Orbit UI layer.",
+      label: "Next Beta",
+      description: "Mount the experimental Blackbaud Next UI layer.",
     },
   ];
 

@@ -43,7 +43,7 @@ export function App() {
         ...current,
         connection: "fallback",
         errorMessage:
-          error instanceof Error ? error.message : "Orbit host request failed.",
+          error instanceof Error ? error.message : "Next host request failed.",
         updatedAt: new Date().toISOString(),
       }));
     } finally {
@@ -81,18 +81,18 @@ export function App() {
         payload.nativeHidden ? "orbit-shell-full" : "orbit-shell-compact"
       }`}
     >
-      <aside className="orbit-sidebar" aria-label="Orbit">
+      <aside className="orbit-sidebar" aria-label="Next">
         <div className="orbit-brand">
           <span className="orbit-brand-mark" aria-hidden="true">
-            O
+            N
           </span>
           <div>
-            <h1>Orbit</h1>
+            <h1>Next</h1>
             <p>{payload.route.schoolHostname || "Blackbaud"}</p>
           </div>
         </div>
 
-        <nav aria-label="Orbit navigation" className="orbit-nav">
+        <nav aria-label="Next navigation" className="orbit-nav">
           <a href="#orbit-session" aria-current="page">
             <Activity size={18} aria-hidden="true" />
             Session
@@ -109,7 +109,7 @@ export function App() {
         <header className="orbit-header">
           <div>
             <p className="orbit-eyebrow">Blackbaud Next</p>
-            <h2>Orbit session</h2>
+            <h2>Next session</h2>
           </div>
 
           <div className="orbit-actions">
@@ -166,7 +166,7 @@ export function App() {
             <dl className="orbit-facts">
               <Fact label="Native UI" value={payload.nativeHidden ? "Hidden" : "Visible"} />
               <Fact label="Shell" value={payload.route.shellKind} />
-              <Fact label="Mode" value={payload.settings.uiMode} />
+              <Fact label="Mode" value={formatUiMode(payload.settings.uiMode)} />
               <Fact label="Version" value={session?.CurrentVersion || "Unknown"} />
             </dl>
           </Panel>
@@ -245,4 +245,8 @@ function formatMinutes(value: number | undefined) {
   }
 
   return `${value} min`;
+}
+
+function formatUiMode(uiMode: string) {
+  return uiMode === "orbit" ? "Next Beta" : uiMode || "Unknown";
 }

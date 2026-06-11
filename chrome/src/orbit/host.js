@@ -77,7 +77,7 @@
       script.async = true;
       script.addEventListener("load", () => resolve());
       script.addEventListener("error", () => {
-        reject(new Error("Orbit bundle failed to load."));
+        reject(new Error("Next bundle failed to load."));
       });
       (document.head || document.documentElement).appendChild(script);
     });
@@ -86,7 +86,7 @@
   }
 
   function serializeError(error) {
-    return error instanceof Error ? error.message : "Unknown Orbit host error.";
+    return error instanceof Error ? error.message : "Unknown Next host error.";
   }
 
   function buildPayload() {
@@ -167,7 +167,7 @@
         return;
       }
 
-      respond(requestId, buildPayload(), `Unsupported Orbit action: ${action}`);
+      respond(requestId, buildPayload(), `Unsupported Next action: ${action}`);
     } catch (error) {
       BN.native.controller.revealForFallback("orbit-host-error");
       respond(requestId, buildPayload(), serializeError(error));

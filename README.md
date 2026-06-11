@@ -12,7 +12,7 @@ Get it on the [Chrome Web Store](https://chromewebstore.google.com/detail/ofadcf
 
 ## Why Blackbaud Next?
 
-Blackbaud's student portal works, but it has rough edges. Pages break, layouts are narrow, the login flow is slow, and simple things like copying a class roster take too many clicks. Blackbaud Next can run the original site unchanged, enhance the native Blackbaud UI, or mount the experimental Orbit UI layer.
+Blackbaud's student portal works, but it has rough edges. Pages break, layouts are narrow, the login flow is slow, and simple things like copying a class roster take too many clicks. Blackbaud Next can run the original site unchanged, enhance the native Blackbaud UI, or mount the experimental Next Beta UI layer.
 
 ## UI Modes
 
@@ -20,7 +20,7 @@ Blackbaud's student portal works, but it has rough edges. Pages break, layouts a
 | ------------ | ------------------------------------------------- |
 | **Normal**   | Use the unmodified Blackbaud UI                   |
 | **Enhanced** | Use native Blackbaud with Blackbaud Next features |
-| **Orbit**    | Mount the experimental Orbit UI host              |
+| **Next Beta** | Mount the experimental Blackbaud Next UI host    |
 
 ## Features
 
@@ -47,12 +47,12 @@ chrome/src/
   sources/         # API, network, and DOM source adapters
   data/            # stable model and normalizer helpers
   native-enhancements/ # native Blackbaud enhancement modules
-  orbit/           # small Orbit content-script host
+  orbit/           # small Next content-script host, internally still named Orbit
   popup/           # extension popup
   shared/          # settings, routes, DOM, clipboard utilities
 
 apps/orbit-extension/
-  src/             # extension-native Orbit React app
+  src/             # extension-native Next React app
   vite.config.ts   # builds static assets into chrome/dist/orbit/
 ```
 

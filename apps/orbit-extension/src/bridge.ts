@@ -49,7 +49,7 @@ export function requestHost<TPayload>(
 
     const timeout = window.setTimeout(() => {
       window.removeEventListener("message", handleResponse);
-      reject(new Error("Orbit host did not respond."));
+      reject(new Error("Next host did not respond."));
     }, 8000);
 
     function handleResponse(event: MessageEvent<OrbitBridgeResponse<TPayload>>) {
@@ -74,7 +74,7 @@ export function requestHost<TPayload>(
         return;
       }
 
-      reject(new Error(detail.error || "Orbit host request failed."));
+      reject(new Error(detail.error || "Next host request failed."));
     }
 
     window.addEventListener("message", handleResponse);

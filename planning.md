@@ -6,9 +6,9 @@ Blackbaud Next has been rewritten into a mode-based Chrome extension:
 
 - `original`: no changes to native Blackbaud.
 - `enhanced`: current Blackbaud Next native UI enhancements.
-- `orbit`: extension-mounted Orbit React app.
+- `orbit`: extension-mounted Next Beta React app.
 
-The first Orbit foundation exists:
+The first Next foundation exists:
 
 - Vite + React + TypeScript app in `apps/orbit-extension`.
 - Static build output in `chrome/dist/orbit`.
@@ -24,34 +24,34 @@ The first Orbit foundation exists:
 4. Add a short manual smoke checklist to `README.md`.
 5. Add automated checks for manifest references and content-script syntax.
 
-## Orbit Phase 1: Host Reliability
+## Next Phase 1: Host Reliability
 
-Goal: make Orbit safe to mount on real student sessions before adding product surface area.
+Goal: make Next safe to mount on real student sessions before adding product surface area.
 
 Work:
 
-- Confirm Orbit mount on legacy and SKY routes.
-- Confirm native fallback when the Orbit bundle fails or API reads fail.
+- Confirm Next mount on legacy and SKY routes.
+- Confirm native fallback when the Next bundle fails or API reads fail.
 - Add route-change awareness for Blackbaud hash navigation.
-- Add a visible fallback state inside Orbit when user status is unavailable.
+- Add a visible fallback state inside Next when user status is unavailable.
 - Add a minimal extension smoke test or repeatable manual test script.
 
 Exit criteria:
 
-- Normal, Enhanced, and Orbit modes remain independently usable.
-- Orbit never strands the user without access to native Blackbaud.
+- Normal, Enhanced, and Next Beta modes remain independently usable.
+- Next never strands the user without access to native Blackbaud.
 - Host bridge failures are visible and recoverable.
 
-## Orbit Phase 2: Dashboard Lite
+## Next Phase 2: Dashboard Lite
 
-Goal: build the first useful Orbit screen without owning the full app.
+Goal: build the first useful Next screen without owning the full app.
 
 Candidate data:
 
 - `/api/webapp/userstatus`
 - `/api/webapp/context`
 - `/api/webapp/schoolcontext`
-- My Day classes/activity groups from existing Orbit research
+- My Day classes/activity groups from existing Next research
 
 UI:
 
@@ -62,11 +62,11 @@ UI:
 
 Exit criteria:
 
-- Orbit provides useful at-a-glance information.
+- Next provides useful at-a-glance information.
 - Native Blackbaud remains available.
 - All data access is same-origin with credentials.
 
-## Orbit Phase 3: Data Source Layer
+## Next Phase 3: Data Source Layer
 
 Goal: turn Blackbaud endpoint research into reusable extension data clients.
 
@@ -75,7 +75,7 @@ Structure:
 - `chrome/src/sources/api/`: known same-origin endpoint clients.
 - `chrome/src/sources/network/`: page-loaded request discovery and future payload bridge.
 - `chrome/src/sources/dom/`: last-resort native DOM extraction.
-- `chrome/src/data/normalize/`: stable Orbit models from raw Blackbaud data.
+- `chrome/src/data/normalize/`: stable Next models from raw Blackbaud data.
 
 Rules:
 
@@ -84,9 +84,9 @@ Rules:
 - Use DOM extraction only as a fallback.
 - Do not persist raw LMS payloads in sync storage.
 
-## Orbit Phase 4: Route Ownership
+## Next Phase 4: Route Ownership
 
-Goal: let Orbit own routes one at a time.
+Goal: let Next own routes one at a time.
 
 Likely order:
 
@@ -100,9 +100,9 @@ Likely order:
 
 For each route:
 
-- Define "Orbit can own this route" conditions.
+- Define "Next can own this route" conditions.
 - Fetch and normalize required data.
-- Render Orbit route.
+- Render Next route.
 - Keep native fallback.
 - Add a route-specific smoke check.
 
@@ -110,13 +110,13 @@ For each route:
 
 - Whether to commit generated `chrome/dist/orbit` assets long term.
 - Whether the extension host should eventually be bundled too.
-- Whether to use React Router or a small custom router for Orbit.
+- Whether to use React Router or a small custom router for Next.
 - Whether to support Chrome versions below 148 with a `browser` namespace fallback.
 - Whether Google account domain selection should be configurable per school.
 
 ## Non-Goals For Now
 
 - Do not port the whole experimental Next.js `Orbit/` app into the extension.
-- Do not hide native Blackbaud by default until Orbit owns a route safely.
+- Do not hide native Blackbaud by default until Next owns a route safely.
 - Do not add broad extension permissions unless a concrete feature requires them.
 - Do not store sensitive student data in `browser.storage.sync`.
