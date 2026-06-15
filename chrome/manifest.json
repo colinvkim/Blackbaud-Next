@@ -57,6 +57,7 @@
     {
       "resources": [
         "assets/blackbaud.png",
+        "dist/orbit/inter-latin-wght-normal.woff2",
         "dist/orbit/orbit.css",
         "dist/orbit/orbit.js"
       ],

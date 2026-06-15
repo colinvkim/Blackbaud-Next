@@ -10,6 +10,7 @@
     "check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
     "lucide-react": "1.16.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"

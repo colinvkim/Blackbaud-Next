@@ -5,6 +5,7 @@
   const appMountId = "blackbaud-next-orbit-app";
   const scriptId = "blackbaud-next-orbit-script";
   const stylesheetId = "blackbaud-next-orbit-stylesheet";
+  const fontStyleId = "blackbaud-next-orbit-fonts";
   const requestChannel = "blackbaud-next-orbit:request";
   const responseChannel = "blackbaud-next-orbit:response";
 
@@ -17,6 +18,45 @@
 
   function extensionUrl(path) {
     return browser.runtime.getURL(path);
+  }
+
+  function ensureFonts() {
+    if (document.getElementById(fontStyleId)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = fontStyleId;
+    style.textContent = `
+@font-face {
+  font-display: swap;
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("${extensionUrl("dist/orbit/inter-latin-wght-normal.woff2")}") format("woff2-variations");
+  unicode-range:
+    U+0000-00ff,
+    U+0131,
+    U+0152-0153,
+    U+02bb-02bc,
+    U+02c6,
+    U+02da,
+    U+02dc,
+    U+0304,
+    U+0308,
+    U+0329,
+    U+2000-206f,
+    U+20ac,
+    U+2122,
+    U+2191,
+    U+2193,
+    U+2212,
+    U+2215,
+    U+feff,
+    U+fffd;
+}
+`;
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function ensureRoot() {
@@ -195,6 +235,8 @@
     currentSettings = settings;
     BN.native.controller.installEscapeHatch();
     BN.native.controller.installVisibilityStyles();
+    BN.native.controller.hideNativeBlackbaud();
+    ensureFonts();
     ensureRoot();
     installBridge();
     syncRootState();
