@@ -13,7 +13,7 @@ export default defineConfig({
   },
   plugins: [
     {
-      name: "blackbaud-next-orbit-fonts",
+      name: "blackbaud-next-fonts",
       generateBundle() {
         this.emitFile({
           type: "asset",
@@ -26,19 +26,19 @@ export default defineConfig({
   build: {
     cssCodeSplit: false,
     emptyOutDir: true,
-    outDir: "../../chrome/dist/orbit",
+    outDir: "../../chrome/dist/next",
     sourcemap: false,
     lib: {
       entry: "src/main.tsx",
       formats: ["iife"],
-      name: "BlackbaudNextOrbitApp",
-      fileName: () => "orbit.js",
+      name: "BlackbaudNextApp",
+      fileName: () => "next.js",
     },
     rollupOptions: {
       output: {
         assetFileNames: (assetInfo) => {
           if (assetInfo.name?.endsWith(".css")) {
-            return "orbit.css";
+            return "next.css";
           }
 
           return "[name][extname]";

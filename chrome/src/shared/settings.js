@@ -4,7 +4,7 @@
   const UI_MODES = {
     ORIGINAL: "original",
     ENHANCED: "enhanced",
-    ORBIT: "orbit",
+    NEXT: "next",
   };
 
   const MODE_DEFINITIONS = [
@@ -19,7 +19,7 @@
       description: "Use Blackbaud with Blackbaud Next fixes.",
     },
     {
-      key: UI_MODES.ORBIT,
+      key: UI_MODES.NEXT,
       label: "Next Beta",
       description: "Mount the experimental Blackbaud Next UI layer.",
     },
@@ -32,7 +32,7 @@
       label: "Automatic Login",
       description: "Skip extra Blackbaud and Google sign-in clicks.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "optimizeLoginPage",
@@ -40,7 +40,7 @@
       label: "Optimize Login Page",
       description: "Clean up the first Blackbaud login screen.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "loadingOverlay",
@@ -48,7 +48,7 @@
       label: "Loading Overlay",
       description: "Show a transition overlay during automatic sign-in.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "fixFavicon",
@@ -56,7 +56,7 @@
       label: "Fix Empty Favicon",
       description: "Add a proper Blackbaud tab icon.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "oldAssignmentCenter",
@@ -64,7 +64,7 @@
       label: "Old Assignment Center",
       description: "Route assignment center links to the legacy view.",
       defaultValue: false,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "rosterTools",
@@ -72,7 +72,7 @@
       label: "Roster Tools",
       description: "Copy roster names and emails from class pages.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "downloadFullAvatar",
@@ -80,7 +80,7 @@
       label: "Download Full Avatar",
       description: "Open full-resolution profile pictures.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
     {
       key: "fixInvalidPages",
@@ -88,7 +88,7 @@
       label: "Fix Invalid Pages",
       description: "Recover from broken assignment pages.",
       defaultValue: true,
-      appliesTo: ["enhanced", "orbit"],
+      appliesTo: [UI_MODES.ENHANCED, UI_MODES.NEXT],
     },
   ];
 
@@ -105,13 +105,17 @@
     return MODE_DEFINITIONS.some(({ key }) => key === mode);
   }
 
+  function normalizeUiMode(uiMode) {
+    return isValidMode(uiMode) ? uiMode : DEFAULT_SETTINGS.uiMode;
+  }
+
   function normalizeBoolean(value, defaultValue) {
     return typeof value === "boolean" ? value : defaultValue;
   }
 
   function normalizeSettings(raw = {}) {
     const settings = {
-      uiMode: isValidMode(raw.uiMode) ? raw.uiMode : DEFAULT_SETTINGS.uiMode,
+      uiMode: normalizeUiMode(raw.uiMode),
     };
 
     FEATURE_DEFINITIONS.forEach(({ key, legacyKey, defaultValue }) => {

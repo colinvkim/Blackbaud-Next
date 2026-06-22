@@ -1,6 +1,6 @@
-export type OrbitConnectionState = "checking" | "connected" | "fallback";
+export type NextConnectionState = "checking" | "connected" | "fallback";
 
-export interface OrbitUserStatus {
+export interface NextUserStatus {
   UnreadMessageCount?: number;
   TokenValid?: boolean;
   MinutesSinceActive?: number;
@@ -9,26 +9,32 @@ export interface OrbitUserStatus {
   CurrentVersion?: string;
 }
 
-export interface OrbitBootstrapPayload {
-  connection: OrbitConnectionState;
+export interface NextPageRoute {
+  id: "student-progress";
+  label: string;
+}
+
+export interface NextBootstrapPayload {
+  connection: NextConnectionState;
   errorMessage: string;
   nativeHidden: boolean;
   route: {
     href: string;
     hash: string;
+    nextPage: NextPageRoute | null;
     schoolHostname: string;
     shellKind: string;
   };
-  session: OrbitUserStatus | null;
+  session: NextUserStatus | null;
   settings: {
     uiMode: string;
   };
   updatedAt: string;
 }
 
-type OrbitBridgeAction = "bootstrap" | "refresh-session" | "toggle-native";
+type NextBridgeAction = "bootstrap" | "refresh-session" | "toggle-native";
 
-interface OrbitBridgeResponse<TPayload> {
+interface NextBridgeResponse<TPayload> {
   channel: typeof responseChannel;
   requestId: string;
   ok: boolean;
@@ -36,12 +42,13 @@ interface OrbitBridgeResponse<TPayload> {
   error?: string;
 }
 
-const requestChannel = "blackbaud-next-orbit:request";
-const responseChannel = "blackbaud-next-orbit:response";
+const requestChannel = "blackbaud-next:request";
+const responseChannel = "blackbaud-next:response";
+const eventChannel = "blackbaud-next:event";
 let requestIndex = 0;
 
 export function requestHost<TPayload>(
-  action: OrbitBridgeAction,
+  action: NextBridgeAction,
 ): Promise<TPayload> {
   return new Promise((resolve, reject) => {
     const requestId = `${Date.now()}-${requestIndex + 1}`;
@@ -52,7 +59,7 @@ export function requestHost<TPayload>(
       reject(new Error("Next host did not respond."));
     }, 8000);
 
-    function handleResponse(event: MessageEvent<OrbitBridgeResponse<TPayload>>) {
+    function handleResponse(event: MessageEvent<NextBridgeResponse<TPayload>>) {
       if (event.source !== window || event.origin !== window.location.origin) {
         return;
       }
@@ -87,4 +94,27 @@ export function requestHost<TPayload>(
       window.location.origin,
     );
   });
+}
+
+export function subscribeHostEvents<TPayload>(
+  onPayload: (payload: TPayload) => void,
+) {
+  function handleEvent(event: MessageEvent<{ channel?: string; payload?: TPayload }>) {
+    if (event.source !== window || event.origin !== window.location.origin) {
+      return;
+    }
+
+    const detail = event.data;
+    if (!detail || detail.channel !== eventChannel || !detail.payload) {
+      return;
+    }
+
+    onPayload(detail.payload);
+  }
+
+  window.addEventListener("message", handleEvent);
+
+  return () => {
+    window.removeEventListener("message", handleEvent);
+  };
 }

@@ -16,20 +16,20 @@ html.${nativeHiddenClass} app-root {
   display: none !important;
 }
 
-#blackbaud-next-orbit-root[data-blackbaud-next-orbit-expanded="1"] {
+#blackbaud-next-root[data-blackbaud-next-expanded="1"] {
   min-height: 100vh;
 }
 `,
     );
   }
 
-  function syncOrbitRootState() {
-    const orbitRoot = document.getElementById("blackbaud-next-orbit-root");
-    if (!orbitRoot) {
+  function syncNextRootState() {
+    const nextRoot = document.getElementById("blackbaud-next-root");
+    if (!nextRoot) {
       return;
     }
 
-    orbitRoot.dataset.blackbaudNextOrbitExpanded = isNativeHidden() ? "1" : "0";
+    nextRoot.dataset.blackbaudNextExpanded = isNativeHidden() ? "1" : "0";
   }
 
   function getNativeShells() {
@@ -41,12 +41,12 @@ html.${nativeHiddenClass} app-root {
   function hideNativeBlackbaud() {
     installVisibilityStyles();
     document.documentElement.classList.add(nativeHiddenClass);
-    syncOrbitRootState();
+    syncNextRootState();
   }
 
   function showNativeBlackbaud() {
     document.documentElement.classList.remove(nativeHiddenClass);
-    syncOrbitRootState();
+    syncNextRootState();
   }
 
   function isNativeHidden() {
@@ -80,8 +80,8 @@ html.${nativeHiddenClass} app-root {
     document.documentElement.dataset.blackbaudNextFallbackReason = reason || "unknown";
   }
 
-  function orbitCanOwnCurrentRoute() {
-    return BN.shared.routes.isAuthenticatedLmsPage();
+  function nextCanOwnCurrentRoute() {
+    return Boolean(BN.shared.routes.getNextPageRoute());
   }
 
   BN.define("native.controller", {
@@ -90,7 +90,7 @@ html.${nativeHiddenClass} app-root {
     installEscapeHatch,
     installVisibilityStyles,
     isNativeHidden,
-    orbitCanOwnCurrentRoute,
+    nextCanOwnCurrentRoute,
     revealForFallback,
     showNativeBlackbaud,
     toggleNativeVisibility,

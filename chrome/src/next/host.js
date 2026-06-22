@@ -1,13 +1,14 @@
 (function () {
   const BN = globalThis.BlackbaudNext;
 
-  const rootId = "blackbaud-next-orbit-root";
-  const appMountId = "blackbaud-next-orbit-app";
-  const scriptId = "blackbaud-next-orbit-script";
-  const stylesheetId = "blackbaud-next-orbit-stylesheet";
-  const fontStyleId = "blackbaud-next-orbit-fonts";
-  const requestChannel = "blackbaud-next-orbit:request";
-  const responseChannel = "blackbaud-next-orbit:response";
+  const rootId = "blackbaud-next-root";
+  const appMountId = "blackbaud-next-app";
+  const scriptId = "blackbaud-next-script";
+  const stylesheetId = "blackbaud-next-stylesheet";
+  const fontStyleId = "blackbaud-next-fonts";
+  const requestChannel = "blackbaud-next:request";
+  const responseChannel = "blackbaud-next:response";
+  const eventChannel = "blackbaud-next:event";
 
   let currentSettings = null;
   let bridgeInstalled = false;
@@ -15,6 +16,7 @@
   let lastSession = null;
   let lastConnection = "checking";
   let lastErrorMessage = "";
+  let routeWatcherInstalled = false;
 
   function extensionUrl(path) {
     return browser.runtime.getURL(path);
@@ -33,7 +35,7 @@
   font-family: "Inter Variable";
   font-style: normal;
   font-weight: 100 900;
-  src: url("${extensionUrl("dist/orbit/inter-latin-wght-normal.woff2")}") format("woff2-variations");
+  src: url("${extensionUrl("dist/next/inter-latin-wght-normal.woff2")}") format("woff2-variations");
   unicode-range:
     U+0000-00ff,
     U+0131,
@@ -65,7 +67,7 @@
     if (!root) {
       root = document.createElement("div");
       root.id = rootId;
-      root.setAttribute("data-blackbaud-next-orbit-host", "1");
+      root.setAttribute("data-blackbaud-next-host", "1");
       (document.body || document.documentElement).appendChild(root);
     }
 
@@ -76,7 +78,7 @@
       stylesheet = document.createElement("link");
       stylesheet.id = stylesheetId;
       stylesheet.rel = "stylesheet";
-      stylesheet.href = extensionUrl("dist/orbit/orbit.css");
+      stylesheet.href = extensionUrl("dist/next/next.css");
       shadow.appendChild(stylesheet);
     }
 
@@ -90,13 +92,22 @@
     return root;
   }
 
+  function setRootVisible(visible) {
+    const root = document.getElementById(rootId);
+    if (!root) {
+      return;
+    }
+
+    root.style.display = visible ? "" : "none";
+  }
+
   function syncRootState(nativeHidden = BN.native.controller.isNativeHidden()) {
     const root = document.getElementById(rootId);
     if (!root) {
       return;
     }
 
-    root.dataset.blackbaudNextOrbitExpanded = nativeHidden ? "1" : "0";
+    root.dataset.blackbaudNextExpanded = nativeHidden ? "1" : "0";
   }
 
   function loadBundle() {
@@ -113,7 +124,7 @@
     bundlePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.id = scriptId;
-      script.src = extensionUrl("dist/orbit/orbit.js");
+      script.src = extensionUrl("dist/next/next.js");
       script.async = true;
       script.addEventListener("load", () => resolve());
       script.addEventListener("error", () => {
@@ -131,6 +142,7 @@
 
   function buildPayload() {
     const nativeHidden = BN.native.controller.isNativeHidden();
+    const nextPage = BN.shared.routes.getNextPageRoute();
     syncRootState(nativeHidden);
 
     return {
@@ -140,6 +152,7 @@
       route: {
         href: window.location.href,
         hash: window.location.hash || "",
+        nextPage,
         schoolHostname: BN.shared.routes.getSchoolHostname(),
         shellKind: BN.sources.dom.nativeShell.getShellKind(),
       },
@@ -160,7 +173,7 @@
       lastSession = null;
       lastConnection = "fallback";
       lastErrorMessage = serializeError(error);
-      BN.native.controller.revealForFallback("orbit-userstatus-failed");
+      BN.native.controller.revealForFallback("next-userstatus-failed");
     }
 
     return buildPayload();
@@ -174,6 +187,16 @@
         ok: !errorMessage,
         payload,
         error: errorMessage,
+      },
+      window.location.origin,
+    );
+  }
+
+  function publishPayload(payload = buildPayload()) {
+    window.postMessage(
+      {
+        channel: eventChannel,
+        payload,
       },
       window.location.origin,
     );
@@ -209,7 +232,7 @@
 
       respond(requestId, buildPayload(), `Unsupported Next action: ${action}`);
     } catch (error) {
-      BN.native.controller.revealForFallback("orbit-host-error");
+      BN.native.controller.revealForFallback("next-host-error");
       respond(requestId, buildPayload(), serializeError(error));
     }
   }
@@ -223,35 +246,72 @@
     window.addEventListener("message", handleBridgeRequest);
   }
 
-  async function mount(settings) {
-    if (settings.uiMode !== BN.shared.settings.UI_MODES.ORBIT) {
-      return;
-    }
-
-    if (!BN.native.controller.orbitCanOwnCurrentRoute()) {
-      return;
-    }
-
+  async function syncCurrentRoute(settings) {
     currentSettings = settings;
+
+    if (
+      settings.uiMode !== BN.shared.settings.UI_MODES.NEXT ||
+      !BN.native.controller.nextCanOwnCurrentRoute()
+    ) {
+      BN.native.controller.showNativeBlackbaud();
+      setRootVisible(false);
+      publishPayload();
+      return;
+    }
+
     BN.native.controller.installEscapeHatch();
     BN.native.controller.installVisibilityStyles();
     BN.native.controller.hideNativeBlackbaud();
     ensureFonts();
     ensureRoot();
+    setRootVisible(true);
     installBridge();
     syncRootState();
+    publishPayload();
 
     try {
       await loadBundle();
+      publishPayload();
     } catch (error) {
       lastConnection = "fallback";
       lastErrorMessage = serializeError(error);
-      BN.native.controller.revealForFallback("orbit-bundle-failed");
+      BN.native.controller.revealForFallback("next-bundle-failed");
       syncRootState();
+      publishPayload();
     }
   }
 
-  BN.define("orbit.host", {
+  function scheduleRouteSync(settings) {
+    window.setTimeout(() => {
+      syncCurrentRoute(settings).catch((error) => {
+        lastConnection = "fallback";
+        lastErrorMessage = serializeError(error);
+        BN.native.controller.revealForFallback("next-route-sync-failed");
+        publishPayload();
+      });
+    }, 0);
+  }
+
+  function installRouteWatcher(settings) {
+    if (routeWatcherInstalled) {
+      return;
+    }
+
+    routeWatcherInstalled = true;
+    window.addEventListener("hashchange", () => scheduleRouteSync(settings));
+    window.addEventListener("popstate", () => scheduleRouteSync(settings));
+  }
+
+  async function mount(settings) {
+    if (settings.uiMode !== BN.shared.settings.UI_MODES.NEXT) {
+      return;
+    }
+
+    installRouteWatcher(settings);
+    await syncCurrentRoute(settings);
+  }
+
+  BN.define("next.host", {
     mount,
   });
 })();

@@ -19,8 +19,8 @@
       return;
     }
 
-    if (settings.uiMode === modes.ORBIT) {
-      await BN.orbit.host.mount(settings);
+    if (settings.uiMode === modes.NEXT) {
+      await BN.next.host.mount(settings);
     }
   }
 

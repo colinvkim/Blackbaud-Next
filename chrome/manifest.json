@@ -33,7 +33,7 @@
         "src/native-enhancements/roster-tools.js",
         "src/native-enhancements/avatar-download.js",
         "src/native-enhancements/index.js",
-        "src/orbit/host.js",
+        "src/next/host.js",
         "src/boot/runtime.js",
         "src/boot/main.js"
       ],
@@ -57,9 +57,9 @@
     {
       "resources": [
         "assets/blackbaud.png",
-        "dist/orbit/inter-latin-wght-normal.woff2",
-        "dist/orbit/orbit.css",
-        "dist/orbit/orbit.js"
+        "dist/next/inter-latin-wght-normal.woff2",
+        "dist/next/next.css",
+        "dist/next/next.js"
       ],
       "matches": ["https://*.myschoolapp.com/*"]
     }

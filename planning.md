@@ -6,13 +6,13 @@ Blackbaud Next has been rewritten into a mode-based Chrome extension:
 
 - `original`: no changes to native Blackbaud.
 - `enhanced`: current Blackbaud Next native UI enhancements.
-- `orbit`: extension-mounted Next Beta React app.
+- `next`: extension-mounted Next Beta React app.
 
 The first Next foundation exists:
 
-- Vite + React + TypeScript app in `apps/orbit-extension`.
-- Static build output in `chrome/dist/orbit`.
-- Shadow DOM mount via `chrome/src/orbit/host.js`.
+- Vite + React + TypeScript app in `apps/next-extension`.
+- Static build output in `chrome/dist/next`.
+- Shadow DOM mount via `chrome/src/next/host.js`.
 - Bridge actions for bootstrap, session refresh, and native visibility toggle.
 - `/api/webapp/userstatus` connectivity verified manually.
 
@@ -20,7 +20,7 @@ The first Next foundation exists:
 
 1. Keep `native-enhancements/` as the home for native Blackbaud UI patches.
 2. Use root-level commands for routine checks and builds.
-3. Decide whether `chrome/dist/orbit/` remains committed release output or becomes package-time generated output.
+3. Decide whether `chrome/dist/next/` remains committed release output or becomes package-time generated output.
 4. Add a short manual smoke checklist to `README.md`.
 5. Add automated checks for manifest references and content-script syntax.
 
@@ -108,7 +108,7 @@ For each route:
 
 ## Open Decisions
 
-- Whether to commit generated `chrome/dist/orbit` assets long term.
+- Whether to commit generated `chrome/dist/next` assets long term.
 - Whether the extension host should eventually be bundled too.
 - Whether to use React Router or a small custom router for Next.
 - Whether to support Chrome versions below 148 with a `browser` namespace fallback.
@@ -116,7 +116,7 @@ For each route:
 
 ## Non-Goals For Now
 
-- Do not port the whole experimental Next.js `Orbit/` app into the extension.
+- Do not port the whole experimental standalone Next.js app into the extension.
 - Do not hide native Blackbaud by default until Next owns a route safely.
 - Do not add broad extension permissions unless a concrete feature requires them.
 - Do not store sensitive student data in `browser.storage.sync`.

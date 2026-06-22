@@ -4,8 +4,8 @@
   "private": true,
   "packageManager": "pnpm@11.5.2",
   "scripts": {
-    "build": "pnpm --dir apps/orbit-extension build",
-    "build:orbit": "pnpm --dir apps/orbit-extension build:orbit",
-    "check": "pnpm --dir apps/orbit-extension check"
+    "build": "pnpm --dir apps/next-extension build",
+    "build:next": "pnpm --dir apps/next-extension build:next",
+    "check": "pnpm --dir apps/next-extension check"
   }
 }

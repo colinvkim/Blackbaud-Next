@@ -1,76 +1,32 @@
-# Blackbaud Next Agent Notes
+# Repository Guidelines
 
-## Product Shape
+## Project Structure & Module Organization
 
-Blackbaud Next is a Manifest V3 Chrome extension for `*.myschoolapp.com`.
+Blackbaud Next is a Chrome extension with a pnpm workspace. `chrome/` contains the shipped extension: `manifest.json`, popup UI, content scripts, native enhancements, shared utilities, and generated Next assets in `chrome/dist/next/`. `apps/next-extension/` contains the React/Vite Next Beta host app; its build output is written into `chrome/dist/next/`. `branding/` stores Affinity source artwork. Root files define workspace metadata, lockfile, license, README, and planning notes.
 
-It has three UI modes:
+## Build, Test, and Development Commands
 
-- `original`: native Blackbaud only.
-- `enhanced`: native Blackbaud plus Blackbaud Next enhancements.
-- `orbit`: experimental Next Beta React UI mounted by the extension.
+- `rtk pnpm install` installs workspace dependencies using pnpm 11.
+- `rtk pnpm build` runs type checking and builds Next assets into `chrome/dist/next/`.
+- `rtk pnpm build:next` runs only the Vite Next build.
+- `rtk pnpm check` runs `tsc --noEmit` for `apps/next-extension`.
 
-Next Beta is not a separate hosted web app. It is built into static extension assets and mounted on authenticated Blackbaud pages. The internal mode key and paths still use the `orbit` codename.
+For local manual testing, open `chrome://extensions/`, enable Developer mode, choose Load unpacked, and select `chrome/`.
 
-The extension targets Chrome 148+ and uses `browser.*`, not `chrome.*`.
+## Coding Style & Naming Conventions
 
-## Agent Workflow
+Use TypeScript and React conventions in `apps/next-extension/src`: 2-space indentation, named exports, PascalCase components, camelCase functions and values, and strict TypeScript types. JSX uses the React automatic runtime. Legacy extension code under `chrome/src` is plain JavaScript organized by feature area; keep modules small and names descriptive, such as `login-flow.js` or `avatar-download.js`. Prefer existing shared helpers in `chrome/src/shared/` before adding new utility code.
 
-- Prefix shell commands with `rtk`.
-- Use Conventional Commits for commit messages.
+## Testing Guidelines
 
-## Important Paths
+No automated test runner is currently configured. Treat `rtk pnpm check` and `rtk pnpm build` as required verification before submitting code. Manually test extension behavior in Chrome after changes to `chrome/src`, `chrome/manifest.json`, popup files, or generated Next assets. For UI changes, verify relevant modes: Normal, Enhanced, and Next Beta.
 
-- `chrome/manifest.json`: Chrome extension manifest.
-- `chrome/src/boot/`: content-script startup and mode selection.
-- `chrome/src/auth/`: Blackbaud/Google login helpers and loading overlay.
-- `chrome/src/native/`: native Blackbaud visibility, fallback, and escape hatch.
-- `chrome/src/native-enhancements/`: current native Blackbaud UI enhancements.
-- `chrome/src/orbit/host.js`: content-script host for the Next app bundle.
-- `chrome/src/shared/`: settings, route, DOM, and clipboard helpers.
-- `chrome/src/sources/`: Blackbaud API, network, and DOM source adapters.
-- `chrome/src/data/`: normalizers and future shared Next data models.
-- `chrome/src/popup/`: extension popup.
-- `apps/orbit-extension/`: Vite + React + TypeScript Next app.
-- `chrome/dist/orbit/`: built Next assets loaded by the extension.
+## Commit & Pull Request Guidelines
 
-## Build Commands
+Git history uses Conventional Commits, for example `feat: add mode-based Next extension`, `fix(next): load Inter and hide native`, and `feat!: rewrite code base to prepare for v2`. Keep subjects imperative and under 72 characters when practical. Use scopes for focused areas, such as `next`, `auth`, or `popup`.
 
-```sh
-pnpm check
-pnpm build
-```
+Pull requests should include a short summary, verification steps, linked issues when available, and screenshots or recordings for visible UI changes. Note any manual Chrome testing, affected UI mode, and whether `chrome/dist/next/` was regenerated.
 
-`pnpm build` type-checks `apps/orbit-extension` and builds:
+## Security & Configuration Tips
 
-- `chrome/dist/orbit/orbit.js`
-- `chrome/dist/orbit/orbit.css`
-
-## Architecture Rules
-
-- Keep extension host code boring and small.
-- Do not mix Next product UI into `chrome/src/boot`, `chrome/src/auth`, or `chrome/src/native`.
-- Put React UI in `apps/orbit-extension`.
-- Put Blackbaud native UI patches in `chrome/src/native-enhancements`.
-- Keep auth/session helpers separate from UI mode behavior.
-- Keep student/LMS data out of `browser.storage.sync`; settings only.
-- Do not load remote JavaScript or React from a CDN.
-- Preserve native Blackbaud fallback for Next failures.
-
-## Current Verified Behavior
-
-The user has manually verified:
-
-- Normal mode leaves Blackbaud alone.
-- Enhanced mode runs current features.
-- Next Beta mode mounts the React app.
-- `/api/webapp/userstatus` returns connected state.
-- Hide native / show native controls work.
-
-## Next Bridge
-
-`chrome/src/orbit/host.js` creates the Next root, attaches Shadow DOM, loads `chrome/dist/orbit/orbit.js`, and handles app requests over `window.postMessage`.
-
-Current bridge actions are `bootstrap`, `refresh-session`, and `toggle-native`.
-
-The Next app should request host capabilities through `apps/orbit-extension/src/bridge.ts`, not by reaching into `window.BlackbaudNext` directly.
+Do not commit school-specific credentials, session data, or copied Blackbaud responses. Keep host permissions limited to documented extension needs, and review `chrome/manifest.json` when changing network, DOM, or authentication behavior.

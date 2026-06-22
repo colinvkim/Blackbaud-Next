@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  apps/orbit-extension:
+  apps/next-extension:
     dependencies:
       '@fontsource-variable/inter':
         specifier: ^5.2.8

@@ -43,6 +43,46 @@
     return isMyschoolApp() && !isLegacyLoginPage();
   }
 
+  const STUDENT_PROGRESS_ROUTE = {
+    hashPrefix: "#studentmyday/progress",
+    id: "student-progress",
+    label: "Progress",
+    pathname: "/app/student",
+  };
+
+  const NEXT_PAGE_ROUTES = [STUDENT_PROGRESS_ROUTE];
+
+  function routeMatchesCurrentUrl(route) {
+    const url = currentUrl();
+    const hash = (window.location.hash || "").toLowerCase();
+    const hashMatches =
+      hash === route.hashPrefix ||
+      hash.startsWith(`${route.hashPrefix}/`) ||
+      hash.startsWith(`${route.hashPrefix}?`);
+
+    return (
+      isMyschoolApp() &&
+      url.pathname === route.pathname &&
+      hashMatches
+    );
+  }
+
+  function isStudentProgressPage() {
+    return routeMatchesCurrentUrl(STUDENT_PROGRESS_ROUTE);
+  }
+
+  function getNextPageRoute() {
+    const route = NEXT_PAGE_ROUTES.find(routeMatchesCurrentUrl);
+    if (!route) {
+      return null;
+    }
+
+    return {
+      id: route.id,
+      label: route.label,
+    };
+  }
+
   function getSchoolHostname() {
     return isMyschoolApp() ? hostname() : "";
   }
@@ -94,6 +134,7 @@
     getBlackbaudSigninUrl,
     getLegacyAssignmentCenterUrl,
     getNumericHashSegment,
+    getNextPageRoute,
     getSchoolHostname,
     getStudentDashboardUrl,
     hostname,
@@ -108,5 +149,6 @@
     isMyschoolApp,
     isNewAssignmentCenterRoute,
     isRosterPage,
+    isStudentProgressPage,
   });
 })();

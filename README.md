@@ -47,13 +47,13 @@ chrome/src/
   sources/         # API, network, and DOM source adapters
   data/            # stable model and normalizer helpers
   native-enhancements/ # native Blackbaud enhancement modules
-  orbit/           # small Next content-script host, internally still named Orbit
+  next/            # Next content-script host
   popup/           # extension popup
   shared/          # settings, routes, DOM, clipboard utilities
 
-apps/orbit-extension/
+apps/next-extension/
   src/             # extension-native Next React app
-  vite.config.ts   # builds static assets into chrome/dist/orbit/
+  vite.config.ts   # builds static assets into chrome/dist/next/
 ```
 
 ## Developing Locally
