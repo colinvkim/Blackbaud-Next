@@ -1,7 +1,10 @@
 import {
   Activity,
+  CalendarDays,
   Eye,
   EyeOff,
+  GraduationCap,
+  ListChecks,
   RefreshCw,
   ShieldCheck,
   Wifi,
@@ -10,7 +13,12 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { requestHost, subscribeHostEvents } from "./bridge";
-import type { NextBootstrapPayload, NextConnectionState } from "./bridge";
+import type {
+  NextBootstrapPayload,
+  NextConnectionState,
+  NextProgressCourse,
+  NextProgressPayload,
+} from "./bridge";
 
 const initialPayload: NextBootstrapPayload = {
   connection: "checking",
@@ -23,6 +31,7 @@ const initialPayload: NextBootstrapPayload = {
     schoolHostname: window.location.hostname,
     shellKind: "unknown",
   },
+  progress: null,
   session: null,
   settings: {
     uiMode: "next",
@@ -158,10 +167,7 @@ function ProgressPage({
       className="next-grid"
       aria-label="Student progress"
     >
-      <Panel title="Course Progress" icon={<Activity size={18} aria-hidden="true" />}>
-        <StatusPill state="checking" label="Not loaded" />
-        <p className="next-panel-copy">No progress data loaded.</p>
-      </Panel>
+      <CourseProgressPanel progress={payload.progress} />
 
       <Panel title="Route" icon={<Activity size={18} aria-hidden="true" />}>
         <dl className="next-facts">
@@ -173,6 +179,128 @@ function ProgressPage({
 
       <ConnectionPanel payload={payload} statusLabel={statusLabel} />
     </section>
+  );
+}
+
+function CourseProgressPanel({ progress }: { progress: NextProgressPayload | null }) {
+  const status = getProgressStatus(progress);
+
+  return (
+    <Panel
+      title="Course Progress"
+      icon={<GraduationCap size={18} aria-hidden="true" />}
+      className="next-panel-wide"
+    >
+      <StatusPill state={status.state} label={status.label} />
+
+      {!progress ? (
+        <p className="next-panel-copy">Loading progress data.</p>
+      ) : progress.state === "error" ? (
+        <p className="next-panel-copy">
+          {progress.errorMessage || "Progress data could not be loaded."}
+        </p>
+      ) : (
+        <>
+          <dl className="next-facts next-progress-summary">
+            <Fact label="Courses" value={formatNumber(progress.summary.courseCount)} />
+            <Fact label="Due Today" value={formatNumber(progress.summary.dueTodayCount)} />
+            <Fact
+              label="Active"
+              value={formatNumber(progress.summary.activeAssignmentCount)}
+            />
+            <Fact
+              label="Upcoming"
+              value={formatNumber(progress.summary.upcomingCount)}
+            />
+          </dl>
+
+          {progress.metadataErrorMessage ? (
+            <p className="next-panel-copy">{progress.metadataErrorMessage}</p>
+          ) : null}
+
+          {progress.courses.length > 0 ? (
+            <ol className="next-course-list" aria-label="Courses">
+              {progress.courses.map((course) => (
+                <CourseProgressItem key={course.id} course={course} />
+              ))}
+            </ol>
+          ) : (
+            <p className="next-panel-copy">No course progress returned.</p>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function CourseProgressItem({ course }: { course: NextProgressCourse }) {
+  const assignments = course.assignments.slice(0, 4);
+  const extraAssignmentCount = course.assignments.length - assignments.length;
+
+  return (
+    <li className="next-course-item">
+      <div className="next-course-heading">
+        <div>
+          <h4>{course.title}</h4>
+          <p>
+            {[course.term, course.room, course.schoolLevel]
+              .filter(Boolean)
+              .join(" / ") || "Course"}
+          </p>
+        </div>
+        <strong>{course.cumulativeDisplay || course.grade || "No grade"}</strong>
+      </div>
+
+      {course.teacherName || course.teacherEmail ? (
+        <p className="next-course-owner">
+          {[course.teacherName, course.teacherEmail].filter(Boolean).join(" / ")}
+        </p>
+      ) : null}
+
+      <dl className="next-course-stats" aria-label={`${course.title} assignment totals`}>
+        <AssignmentStat label="Due Today" value={course.assignmentStats.dueToday} />
+        <AssignmentStat label="Assigned" value={course.assignmentStats.assignedToday} />
+        <AssignmentStat label="Active" value={course.assignmentStats.active} />
+        <AssignmentStat label="Upcoming" value={course.assignmentStats.upcoming} />
+        <AssignmentStat label="Overdue" value={course.assignmentStats.overdue} />
+      </dl>
+
+      {assignments.length > 0 ? (
+        <ul className="next-assignment-list" aria-label={`${course.title} assignments`}>
+          {assignments.map((assignment) => (
+            <li key={assignment.id}>
+              <span className="next-assignment-icon" aria-hidden="true">
+                <ListChecks size={15} />
+              </span>
+              <div>
+                <h5>{assignment.title}</h5>
+                <p>
+                  <CalendarDays size={13} aria-hidden="true" />
+                  {formatAssignmentDate(assignment.dueDate)}
+                  {assignment.type ? ` / ${assignment.type}` : ""}
+                </p>
+              </div>
+              <strong>{formatAssignmentGrade(assignment)}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {extraAssignmentCount > 0 ? (
+        <p className="next-assignment-more">
+          +{extraAssignmentCount} more assignments
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function AssignmentStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{formatNumber(value)}</dd>
+    </div>
   );
 }
 
@@ -249,16 +377,18 @@ function SurfacePanel({ payload }: { payload: NextBootstrapPayload }) {
 }
 
 function Panel({
+  className = "",
   children,
   icon,
   title,
 }: {
+  className?: string;
   children: ReactNode;
   icon: ReactNode;
   title: string;
 }) {
   return (
-    <article className="next-panel">
+    <article className={`next-panel ${className}`.trim()}>
       <div className="next-panel-title">
         <span>{icon}</span>
         <h3>{title}</h3>
@@ -299,6 +429,25 @@ function getStatus(state: NextConnectionState) {
   return { label: "Checking" };
 }
 
+function getProgressStatus(progress: NextProgressPayload | null): {
+  label: string;
+  state: NextConnectionState;
+} {
+  if (!progress) {
+    return { label: "Loading", state: "checking" };
+  }
+
+  if (progress.state === "error") {
+    return { label: "Progress unavailable", state: "fallback" };
+  }
+
+  if (progress.state === "empty") {
+    return { label: "No progress data", state: "connected" };
+  }
+
+  return { label: "Loaded", state: "connected" };
+}
+
 function formatBoolean(value: boolean | undefined) {
   if (typeof value !== "boolean") {
     return "Unknown";
@@ -309,6 +458,34 @@ function formatBoolean(value: boolean | undefined) {
 
 function formatNumber(value: number | undefined) {
   return typeof value === "number" ? String(value) : "Unknown";
+}
+
+function formatAssignmentDate(value: string) {
+  return value || "No due date";
+}
+
+function formatAssignmentGrade({
+  displayGrade,
+  maxPoints,
+  score,
+}: {
+  displayGrade: string;
+  maxPoints: number | null;
+  score: number | null;
+}) {
+  if (displayGrade) {
+    return displayGrade;
+  }
+
+  if (typeof score === "number" && typeof maxPoints === "number") {
+    return `${score}/${maxPoints}`;
+  }
+
+  if (typeof score === "number") {
+    return String(score);
+  }
+
+  return "No grade";
 }
 
 function formatMinutes(value: number | undefined) {

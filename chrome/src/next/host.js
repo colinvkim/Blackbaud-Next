@@ -16,6 +16,7 @@
   let lastSession = null;
   let lastConnection = "checking";
   let lastErrorMessage = "";
+  let lastProgress = null;
   let routeWatcherInstalled = false;
 
   function extensionUrl(path) {
@@ -156,12 +157,54 @@
         schoolHostname: BN.shared.routes.getSchoolHostname(),
         shellKind: BN.sources.dom.nativeShell.getShellKind(),
       },
+      progress: nextPage?.id === "student-progress" ? lastProgress : null,
       session: lastSession,
       settings: {
         uiMode: currentSettings?.uiMode || "",
       },
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  function buildProgressError(error) {
+    return {
+      state: "error",
+      attendance: [],
+      errorMessage: serializeError(error),
+      fetchedAt: new Date().toISOString(),
+      gradeLevel: "",
+      performance: [],
+      schoolYearLabel: "",
+      source: "/api/datadirect/ParentStudentUserClassesGet",
+      userId: "",
+      summary: {
+        activeAssignmentCount: 0,
+        assignedTodayCount: 0,
+        averageScore: null,
+        assignmentCount: 0,
+        courseCount: 0,
+        dueTodayCount: 0,
+        gradedAssignmentCount: 0,
+        overdueCount: 0,
+        upcomingCount: 0,
+      },
+      courses: [],
+    };
+  }
+
+  async function refreshProgressIfNeeded() {
+    const nextPage = BN.shared.routes.getNextPageRoute();
+
+    if (nextPage?.id !== "student-progress") {
+      lastProgress = null;
+      return;
+    }
+
+    try {
+      lastProgress = await BN.sources.api.client.getProgress();
+    } catch (error) {
+      lastProgress = buildProgressError(error);
+    }
   }
 
   async function refreshSession() {
@@ -175,6 +218,8 @@
       lastErrorMessage = serializeError(error);
       BN.native.controller.revealForFallback("next-userstatus-failed");
     }
+
+    await refreshProgressIfNeeded();
 
     return buildPayload();
   }
@@ -248,6 +293,10 @@
 
   async function syncCurrentRoute(settings) {
     currentSettings = settings;
+
+    if (!BN.shared.routes.isStudentProgressPage()) {
+      lastProgress = null;
+    }
 
     if (
       settings.uiMode !== BN.shared.settings.UI_MODES.NEXT ||

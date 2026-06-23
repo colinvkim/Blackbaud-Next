@@ -14,6 +14,76 @@ export interface NextPageRoute {
   label: string;
 }
 
+export type NextProgressState = "loaded" | "empty" | "error";
+
+export interface NextProgressAssignment {
+  id: string;
+  title: string;
+  type: string;
+  assignedDate: string;
+  dueDate: string;
+  displayGrade: string;
+  score: number | null;
+  maxPoints: number | null;
+  status: string;
+  missing: boolean;
+  late: boolean;
+}
+
+export interface NextProgressCourse {
+  assignmentStats: {
+    active: number;
+    assignedToday: number;
+    dueToday: number;
+    overdue: number;
+    upcoming: number;
+  };
+  canViewAssignments: boolean;
+  cumulativeDisplay: string;
+  id: string;
+  leadSectionId: string;
+  room: string;
+  schoolLevel: string;
+  sectionId: string;
+  teacherEmail: string;
+  teacherName: string;
+  term: string;
+  title: string;
+  grade: string;
+  assignments: NextProgressAssignment[];
+}
+
+export interface NextProgressPayload {
+  state: NextProgressState;
+  attendance: Array<{
+    category: string;
+    count: number;
+  }>;
+  errorMessage?: string;
+  fetchedAt: string;
+  gradeLevel: string;
+  metadataErrorMessage?: string;
+  performance: Array<{
+    description: string;
+    type: string;
+  }>;
+  schoolYearLabel: string;
+  source: string;
+  userId: string;
+  summary: {
+    activeAssignmentCount: number;
+    assignedTodayCount: number;
+    averageScore: number | null;
+    assignmentCount: number;
+    courseCount: number;
+    dueTodayCount: number;
+    gradedAssignmentCount: number;
+    overdueCount: number;
+    upcomingCount: number;
+  };
+  courses: NextProgressCourse[];
+}
+
 export interface NextBootstrapPayload {
   connection: NextConnectionState;
   errorMessage: string;
@@ -25,6 +95,7 @@ export interface NextBootstrapPayload {
     schoolHostname: string;
     shellKind: string;
   };
+  progress: NextProgressPayload | null;
   session: NextUserStatus | null;
   settings: {
     uiMode: string;

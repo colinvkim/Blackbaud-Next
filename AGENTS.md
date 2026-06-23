@@ -13,6 +13,16 @@ Blackbaud Next is a Chrome extension with a pnpm workspace. `chrome/` contains t
 
 For local manual testing, open `chrome://extensions/`, enable Developer mode, choose Load unpacked, and select `chrome/`.
 
+## Computer Use Sign-In
+
+When using Computer Use to inspect Polytechnic Blackbaud pages, open Chrome to `https://polytechnic.myschoolapp.com`.
+
+If the Blackbaud Next extension is enabled, click Sign in with Google and wait for the extension to complete Google account selection and redirect back to Blackbaud.
+
+If the extension is disabled, enter any random email address in the login email field, continue, click Sign in with Google, then choose the Google account ending in `@students.polytechnic.org`.
+
+After login, inspect the target route, such as `https://polytechnic.myschoolapp.com/app/student?svcid=edu#studentmyday/progress`.
+
 ## Coding Style & Naming Conventions
 
 Use TypeScript and React conventions in `apps/next-extension/src`: 2-space indentation, named exports, PascalCase components, camelCase functions and values, and strict TypeScript types. JSX uses the React automatic runtime. Legacy extension code under `chrome/src` is plain JavaScript organized by feature area; keep modules small and names descriptive, such as `login-flow.js` or `avatar-download.js`. Prefer existing shared helpers in `chrome/src/shared/` before adding new utility code.
@@ -24,6 +34,8 @@ No automated test runner is currently configured. Treat `rtk pnpm check` and `rt
 ## Commit & Pull Request Guidelines
 
 Git history uses Conventional Commits, for example `feat: add mode-based Next extension`, `fix(next): load Inter and hide native`, and `feat!: rewrite code base to prepare for v2`. Keep subjects imperative and under 72 characters when practical. Use scopes for focused areas, such as `next`, `auth`, or `popup`.
+
+Use the `caveman-commit` skill for every commit message.
 
 Pull requests should include a short summary, verification steps, linked issues when available, and screenshots or recordings for visible UI changes. Note any manual Chrome testing, affected UI mode, and whether `chrome/dist/next/` was regenerated.
 
