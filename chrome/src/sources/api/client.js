@@ -97,7 +97,7 @@
     const url = new URL(path, window.location.origin);
 
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== "") {
+      if (value !== undefined && value !== null) {
         url.searchParams.set(key, String(value));
       }
     });
@@ -188,6 +188,18 @@
       grades.find((grade) => grade.CurrentInd === true || grade.CurrentInd === 1) ||
       grades[0] ||
       null
+    );
+  }
+
+  function getCourseDurationList(terms, currentGradeLevel) {
+    const academicTerms = arrayFrom(terms).filter(
+      (term) => firstString(term, ["OfferingType", "offeringType"]) === "1",
+    );
+    const firstAcademicTerm = academicTerms[0] || arrayFrom(terms)[0] || null;
+
+    return (
+      firstString(firstAcademicTerm, ["DurationId", "durationId"]) ||
+      firstString(currentGradeLevel, ["DurationId"])
     );
   }
 
@@ -363,29 +375,32 @@
     }
 
     const schoolYearLabel = firstString(currentGradeLevel, ["SchoolYearLabel"]);
-    const durationList = firstString(currentGradeLevel, ["DurationId"]);
-    const memberLevel = firstString(currentGradeLevel, ["LevelNum", "GradeLevel"]);
+    const memberLevel = "3";
 
-    const [termsResult, attendanceResult, performanceResult, classesResult] =
-      await Promise.allSettled([
-        getStudentGroupTerms({ personaId, schoolYearLabel, userId }),
-        getStudentAttendance({ personaId, schoolYearLabel, userId }),
-        getStudentPerformance({ personaId, schoolYearLabel, userId }),
-        getStudentClasses({
-          durationList,
-          memberLevel,
-          personaId,
-          schoolYearLabel,
-          userId,
-        }),
-      ]);
+    const [termsResult, attendanceResult, performanceResult] = await Promise.allSettled([
+      getStudentGroupTerms({ personaId, schoolYearLabel, userId }),
+      getStudentAttendance({ personaId, schoolYearLabel, userId }),
+      getStudentPerformance({ personaId, schoolYearLabel, userId }),
+    ]);
+    const terms = termsResult.status === "fulfilled" ? termsResult.value : [];
+    const durationList = getCourseDurationList(terms, currentGradeLevel);
+    const classesResult = await Promise.allSettled([
+      getStudentClasses({
+        durationList,
+        memberLevel,
+        personaId,
+        schoolYearLabel,
+        userId,
+      }),
+    ]);
+    const classesValue = classesResult[0];
 
-    if (classesResult.status === "rejected") {
-      throw classesResult.reason;
+    if (classesValue.status === "rejected") {
+      throw classesValue.reason;
     }
 
     const optionalErrors = [];
-    const classes = classesResult.value;
+    const classes = classesValue.value;
     const markingPeriodsResult = await Promise.allSettled([
       getGradeBookMyDayMarkingPeriods({ classes, personaId, userId }),
     ]);
@@ -415,7 +430,7 @@
       performance: performanceResult.status === "fulfilled" ? performanceResult.value : [],
       source:
         "/api/datadirect/StudentGradeLevelList,/api/DataDirect/StudentGroupTermList,/api/datadirect/ParentStudentUserClassesGet,/api/datadirect/ParentStudentUserAttendance,/api/datadirect/ParentStudentUserPerformance,/api/gradebook/GradeBookMyDayMarkingPeriods",
-      terms: termsResult.status === "fulfilled" ? termsResult.value : [],
+      terms,
       userId,
     });
   }
