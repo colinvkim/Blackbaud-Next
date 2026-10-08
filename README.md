@@ -1,75 +1,87 @@
 <p align="center">
-    <img src="./chrome/assets/128x128.png" alt="Blackbaud Next" width="120">
+  <img src="./assets/128x128.png" alt="Blackbaud Next" width="120">
 </p>
 
 # Blackbaud Next
 
-A Chrome extension that supercharges the Blackbaud student portal with quality-of-life features students actually use.
+A Chrome extension that improves Blackbaud’s existing student portal with clearer layouts, simpler sign-in, and useful tools.
 
-## Download
-
-Get it on the [Chrome Web Store](https://chromewebstore.google.com/detail/ofadcfkogaiddhcmbabpgidjimnkfkij).
-
-## Why Blackbaud Next?
-
-Blackbaud's student portal works, but it has rough edges. Pages break, layouts are narrow, the login flow is slow, and simple things like copying a class roster take too many clicks. Blackbaud Next can run the original site unchanged, enhance the native Blackbaud UI, or mount the experimental Next Beta UI layer.
-
-## UI Modes
-
-| Mode         | What It Does                                      |
-| ------------ | ------------------------------------------------- |
-| **Normal**   | Use the unmodified Blackbaud UI                   |
-| **Enhanced** | Use native Blackbaud with Blackbaud Next features |
-| **Next Beta** | Mount the experimental Blackbaud Next UI host    |
+Version 2 rewrites the extension in TypeScript. Blackbaud keeps its native navigation, permissions, and workflows; the extension adds reversible improvements directly to its pages. There is no separate dashboard or replacement LMS app.
 
 ## Features
 
-Features are toggleable from the extension popup:
+All features are controlled from the extension popup. Changes apply to open tabs without a refresh.
 
-| Toggle                    | What It Does                                    |
-| ------------------------- | ----------------------------------------------- |
-| **Automatic Login**       | Skip extra login steps                          |
-| **Optimize Login Page**   | Clean up the login flow                         |
-| **Loading Overlay**       | Show loading indicator between page transitions |
-| **Fix Empty Favicon**     | Add a proper tab icon                           |
-| **Old Assignment Center** | Revert to previous assignment center            |
-| **Roster Tools**          | Copy class rosters easily                       |
-| **Download Full Avatar**  | Download full-resolution profile pictures       |
-| **Fix Invalid Pages**     | Patch broken assignment pages                   |
+| Feature | Behavior |
+| --- | --- |
+| Page appearance | Improve native course layouts, table spacing, typography, and keyboard focus. |
+| Simpler sign-in | Add a direct Google sign-in button while keeping native login controls. |
+| Automatic login | Continue through Blackbaud and select one matching school Google account. |
+| Sign-in progress | Show a dismissible status with a **Continue manually** action. |
+| Tab icon | Add a recognizable icon without deleting the school’s own icon. |
+| Roster tools | Copy names or emails from the selected class and term. |
+| Full-size profile photos | Open the original directory photo in a separate tab. |
+| Legacy assignment center | Optionally route assignment navigation to the older native view. |
+| Assignment loading recovery | Offer a manual reload after prolonged loading; never reload automatically. |
 
-## Source Layout
+The **Enabled** switch pauses all enhancements and restores their native controls and styles. Individual feature choices are retained. Old Normal settings migrate to paused; Enhanced and Next Beta migrate to enabled, preserving existing feature switches.
 
-```text
-chrome/src/
-  boot/            # startup and mode selection
-  auth/            # Blackbaud/Google login helpers
-  native/          # native shell visibility and fallback controls
-  sources/         # API, network, and DOM source adapters
-  data/            # stable model and normalizer helpers
-  native-enhancements/ # native Blackbaud enhancement modules
-  next/            # Next content-script host
-  popup/           # extension popup
-  shared/          # settings, routes, DOM, clipboard utilities
+Automatic account selection requires one exact matching email address or domain. Polytechnic students have a school-specific default. Other schools can set their Google email or account domain in the popup. Multiple matches, authentication challenges, and missing accounts leave selection manual. The extension never enters passwords or bypasses Google challenges.
 
-apps/next-extension/
-  src/             # extension-native Next React app
-  vite.config.ts   # builds static assets into chrome/dist/next/
+For the fastest account selection, enter your full Google email in the popup. Exact email preferences select the intended account as soon as it becomes available; domain preferences wait briefly for the account list to settle so a second school account is not overlooked. Sign-in scripts start when the page DOM is ready and react to controls becoming enabled.
+
+## Development
+
+Use Node.js 24+ and pnpm 11:
+
+```sh
+rtk pnpm install
+rtk pnpm check
+rtk pnpm test
+rtk pnpm build
 ```
 
-## Developing Locally
+Load `chrome/` as an unpacked extension from `chrome://extensions/`. After rebuilding, reload the extension and refresh the Blackbaud tab so Chrome loads the new content scripts. Existing settings switches apply immediately once those scripts are running.
 
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `chrome/` directory in this project
+`rtk pnpm dev` watches TypeScript and imported styles. Restart it after editing the manifest, popup HTML, or source assets. The build verifies that every manifest resource and popup bundle exists.
 
-The extension loads immediately. Toggle features in the popup and refresh Blackbaud pages to see changes.
+## Source layout
 
-## Requirements
+```text
+src/
+  entrypoints/       LMS, authentication, and popup bundles
+  runtime/           Navigation, settings changes, feature lifecycle
+  blackbaud/         Routes, account matching, roster and photo adapters
+  features/          Independent native-page enhancements
+  popup/             Settings interface
+  shared/            Typed settings, DOM observation, extension API boundary
+extension/           Source manifest
+assets/              Source icons
+scripts/             Production build
+tests/               Node test runner and synthetic JSDOM fixtures
+chrome/              Built unpacked extension
+```
 
-- **Chrome 148+**
-- Works on any school using `*.myschoolapp.com`
+Each feature declares its settings and supported routes, mounts with an abort signal, and supplies cleanup. Navigation, disabled settings, and replaced native elements cancel old work and remove injected controls. Native DOM watchers share a batched observer. Same-origin roster requests validate response shapes and remain in memory; preferences are the only synced data. Short-lived sign-in flow metadata is stored locally and expires after five minutes.
+
+## Manual smoke checks
+
+- Pause and resume the extension; verify native styles and controls return and no duplicate tools appear.
+- Sign in using the added Google button, then sign out and sign in again immediately. Verify account selection, native password/challenge handling, and **Continue manually**.
+- Navigate to Progress and exercise native grade, term, course, and message controls.
+- Open a class roster, copy names/emails, and switch semesters. Verify the new section is used.
+- Navigate between classes and use Back/Forward; tools must stay associated with the current page.
+- Open a directory; verify each photo action belongs to that row.
+- Toggle legacy assignment navigation; verify native links are restored when disabled.
+- Verify that prolonged assignment loading offers a manual recovery action and that completed loading removes it.
+- Check the popup with keyboard navigation and light/dark appearance.
+
+Automated tests cover settings migration, account matching and cancellation, navigation lifecycle, DOM rerenders, roster selection and validation, profile association, bounded recovery, and popup storage failures.
+
+## Compatibility
+
+Chrome 120+ on schools using `*.myschoolapp.com`. Appearance improvements target the legacy student portal; newer SKY pages keep their native layout. Different school configurations may require adapter updates.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).

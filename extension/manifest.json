@@ -1,0 +1,18 @@
+{
+  "name": "Blackbaud Next: Supercharge your education",
+  "short_name": "Blackbaud Next",
+  "description": "A clearer Blackbaud LMS with simpler sign-in and useful student tools.",
+  "version": "2.0.0",
+  "manifest_version": 3,
+  "minimum_chrome_version": "120",
+  "permissions": ["storage"],
+  "action": { "default_popup": "popup.html" },
+  "content_scripts": [
+    { "js": ["dist/lms.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_end" },
+    { "js": ["dist/auth.js"], "matches": ["https://accounts.google.com/*", "https://app.blackbaud.com/signin*"], "run_at": "document_end" }
+  ],
+  "web_accessible_resources": [
+    { "resources": ["assets/blackbaud.png"], "matches": ["https://*.myschoolapp.com/*"] }
+  ],
+  "icons": { "16": "assets/16x16.png", "32": "assets/32x32.png", "48": "assets/48x48.png", "128": "assets/128x128.png" }
+}
