@@ -19,12 +19,18 @@ All features are controlled from the extension popup. Changes apply to open tabs
 | Automatic login | Continue through Blackbaud and select one matching school Google account. |
 | Sign-in progress | Show a dismissible status with a **Continue manually** action. |
 | Tab icon | Add a recognizable icon without deleting the school’s own icon. |
+| Useful tab titles | Identify the page, class, or assignment in the browser tab. |
+| Assignment shortcuts | Show all loaded assignments, unfinished work, or work due today or tomorrow. |
+| Assignment previews | Read instructions, due dates, course names, links, and file attachments beside the list. |
+| Resource Board search | Filter resource cards by name or description with a compact matching layout. |
 | Roster tools | Copy names or emails from the selected class and term. |
 | Full-size profile photos | Open the original directory photo in a separate tab. |
 | Legacy assignment center | Optionally route assignment navigation to the older native view. |
 | Assignment loading recovery | Offer a manual reload after prolonged loading; never reload automatically. |
 
 The **Enabled** switch pauses all enhancements and restores their native controls and styles. Individual feature choices are retained. Old Normal settings migrate to paused; Enhanced and Next Beta migrate to enabled, preserving existing feature switches.
+
+Assignment shortcuts work on the modern Assignment Center’s loaded rows; native search and filters still apply. Today and tomorrow use your local calendar date. Preview buttons keep the native assignment links available, and the full assignment remains the place for submissions and embedded content. Previews load only when opened and keep their data in memory.
 
 Automatic account selection requires one exact matching email address or domain. Polytechnic students have a school-specific default. Other schools can set their Google email or account domain in the popup. Multiple matches, authentication challenges, and missing accounts leave selection manual. The extension never enters passwords or bypasses Google challenges.
 
@@ -51,7 +57,7 @@ Load `chrome/` as an unpacked extension from `chrome://extensions/`. After rebui
 src/
   entrypoints/       LMS, authentication, and popup bundles
   runtime/           Navigation, settings changes, feature lifecycle
-  blackbaud/         Routes, account matching, roster and photo adapters
+  blackbaud/         Routes, account matching, and native page/data adapters
   features/          Independent native-page enhancements
   popup/             Settings interface
   shared/            Typed settings, DOM observation, extension API boundary
@@ -73,10 +79,14 @@ Each feature declares its settings and supported routes, mounts with an abort si
 - Navigate between classes and use Back/Forward; tools must stay associated with the current page.
 - Open a directory; verify each photo action belongs to that row.
 - Toggle legacy assignment navigation; verify native links are restored when disabled.
+- In the modern Assignment Center, try each shortcut, native search/filter changes, and expanded/collapsed groups. Check the loaded-row count.
+- Open and switch assignment previews; verify instructions, links/files, full assignment navigation, Escape, focus return, and cleanup when disabled.
+- Search the Resource Board, clear the search, and check that cards retain their native actions and layout, including after resizing.
+- Navigate between classes, assignment details, and student pages; verify tab titles update and restore when disabled.
 - Verify that prolonged assignment loading offers a manual recovery action and that completed loading removes it.
 - Check the popup with keyboard navigation and light/dark appearance.
 
-Automated tests cover settings migration, account matching and cancellation, navigation lifecycle, DOM rerenders, roster selection and validation, profile association, bounded recovery, and popup storage failures.
+Automated tests cover settings migration, account matching and cancellation, navigation lifecycle, DOM rerenders, roster selection and validation, profile association, bounded recovery, assignment dates and preview cancellation/sanitization, resource filtering, title restoration, and popup storage failures.
 
 ## Compatibility
 
