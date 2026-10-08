@@ -22,6 +22,8 @@ const styles = `
 
 export const assignmentShortcutsFeature: Feature = {
   id: 'assignment-shortcuts',
+  settingsKeys: [],
+  routeScope: 'document',
   enabled: (settings) => settings.assignmentShortcuts,
   matches: isAssignmentCenter,
   mount: ({ signal }) => {

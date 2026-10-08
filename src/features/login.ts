@@ -356,6 +356,7 @@ function mountLogin(context: FeatureContext): Cleanup {
 
 export const loginFeature: Feature = {
   id: 'login',
+  settingsKeys: ['automaticLogin', 'optimizeLoginPage', 'loadingOverlay', 'accountPreference'],
   enabled: (settings) => settings.automaticLogin || settings.optimizeLoginPage,
   matches: (url) => isSchoolPage(url) || isBlackbaudSignin(url) || isGoogleOAuth(url),
   mount: mountLogin,

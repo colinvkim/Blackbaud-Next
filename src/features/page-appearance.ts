@@ -47,6 +47,8 @@ html[data-blackbaud-next-appearance] .site-login-input input[type="text"], html[
 
 export const toolStylesFeature: Feature = {
   id: 'tool-styles',
+  settingsKeys: [],
+  routeScope: 'document',
   enabled: () => true,
   matches: isSchoolPage,
   mount: () => addStyle('tools', TOOL_STYLES),
@@ -54,6 +56,8 @@ export const toolStylesFeature: Feature = {
 
 export const pageAppearanceFeature: Feature = {
   id: 'page-appearance',
+  settingsKeys: [],
+  routeScope: 'document',
   enabled: (settings) => settings.pageAppearance,
   matches: isSchoolPage,
   mount: () => {

@@ -75,6 +75,68 @@ export function watchElements<T extends Element>(
   return cleanup;
 }
 
+// Discover self-matching elements once, then examine only added subtrees and
+// the elements whose identifying attributes changed. Descendant-dependent
+// selectors belong in a scoped observeDom callback instead.
+export function watchAddedElements<T extends Element>(
+  selector: string,
+  mount: (element: T) => Cleanup | void,
+  signal: AbortSignal,
+  root: QueryRoot = document,
+  identifyingAttributes: string[] = ['id', 'class'],
+): Cleanup {
+  if (signal.aborted) return () => {};
+  const mounted = new Map<T, Cleanup>();
+  let disposed = false;
+  const remove = (element: T) => {
+    mounted.get(element)?.();
+    mounted.delete(element);
+  };
+  const consider = (element: T) => {
+    if (disposed || signal.aborted) return;
+    if (!element.isConnected || !root.contains(element) || !element.matches(selector)) {
+      remove(element);
+    } else if (!mounted.has(element)) {
+      const cleanup = mount(element) ?? (() => {});
+      if (disposed || signal.aborted || !element.isConnected || !root.contains(element)) cleanup();
+      else mounted.set(element, cleanup);
+    }
+  };
+  const discover = (node: Node) => {
+    if (node.nodeType !== 1) return;
+    const element = node as T;
+    if (element.matches(selector)) consider(element);
+    for (const candidate of element.querySelectorAll<T>(selector)) consider(candidate);
+  };
+  const observer = new MutationObserver((records) => {
+    if (disposed) return;
+    if (records.some((record) => record.removedNodes.length > 0)) {
+      for (const element of mounted.keys()) {
+        if (!element.isConnected || !root.contains(element)) remove(element);
+      }
+    }
+    for (const record of records) {
+      if (record.type === 'attributes') consider(record.target as T);
+      else for (const node of record.addedNodes) discover(node);
+    }
+  });
+  observer.observe(root, {
+    childList: true,
+    subtree: true,
+    ...(identifyingAttributes.length ? { attributes: true, attributeFilter: identifyingAttributes } : {}),
+  });
+  const cleanup = () => {
+    if (disposed) return;
+    disposed = true;
+    observer.disconnect();
+    for (const element of mounted.keys()) remove(element);
+    signal.removeEventListener('abort', cleanup);
+  };
+  signal.addEventListener('abort', cleanup, { once: true });
+  for (const element of root.querySelectorAll<T>(selector)) consider(element);
+  return cleanup;
+}
+
 export function addStyle(id: string, css: string): Cleanup {
   const style = document.createElement('style');
   style.id = `blackbaud-next-${id}`;

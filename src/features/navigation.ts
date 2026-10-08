@@ -20,6 +20,7 @@ let searchNumber = 0;
 
 export const helpfulTabTitlesFeature: Feature = {
   id: 'helpful-tab-titles',
+  settingsKeys: [],
   enabled: (settings) => settings.helpfulTabTitles,
   matches: isLmsPage,
   mount: ({ url, signal }) => {
@@ -61,6 +62,8 @@ export const helpfulTabTitlesFeature: Feature = {
 
 export const resourceSearchFeature: Feature = {
   id: 'resource-search',
+  settingsKeys: [],
+  routeScope: 'document',
   enabled: (settings) => settings.resourceSearch,
   matches: isResourceBoard,
   mount: ({ signal }) => {
@@ -153,7 +156,8 @@ export const resourceSearchFeature: Feature = {
             layout.setAttribute(resourceFilteredAttribute, '');
           } else restoreLayout(layout);
         }
-        clear.hidden = !input.value;
+        const hideClear = !input.value;
+        if (clear.hidden !== hideClear) clear.hidden = hideClear;
         const message = terms.length
           ? matches ? `${matches} of ${total} resources` : `No resources match your search (0 of ${total}).`
           : `${total} ${total === 1 ? 'resource' : 'resources'}`;

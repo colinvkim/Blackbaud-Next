@@ -8,12 +8,14 @@ import { pageAppearanceFeature, toolStylesFeature } from '../features/page-appea
 import { assignmentShortcutsFeature } from '../features/assignment-shortcuts.ts';
 import { assignmentPreviewFeature } from '../features/assignment-preview.ts';
 import { helpfulTabTitlesFeature, resourceSearchFeature } from '../features/navigation.ts';
+import { classNavigationFeature } from '../features/class-navigation.ts';
 
 function start() {
   void startExtension([
     toolStylesFeature, loginFeature, pageAppearanceFeature, faviconFeature,
     oldAssignmentCenterFeature, assignmentRecoveryFeature, rosterToolsFeature, avatarDownloadFeature,
     assignmentShortcutsFeature, assignmentPreviewFeature, helpfulTabTitlesFeature, resourceSearchFeature,
+    classNavigationFeature,
   ]).catch((error) => console.warn('Blackbaud Next could not start.', error));
 }
 start();

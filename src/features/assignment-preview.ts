@@ -23,6 +23,7 @@ const styles = `
 
 export const assignmentPreviewFeature: Feature = {
   id: 'assignment-previews',
+  settingsKeys: [],
   enabled: (settings) => settings.assignmentPreviews,
   matches: isLmsPage,
   mount: ({ url, signal }) => {

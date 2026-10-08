@@ -10,9 +10,10 @@ Improve everyday student workflows directly in native Blackbaud pages. Preserve 
 - `extension/manifest.json` and `assets/` are the sources for the unpacked `chrome/` output.
 - A feature has an ID, settings predicate, route predicate, and synchronous mount returning cleanup.
 - Context supplies the current URL, normalized settings, and an abort signal.
-- Navigation and settings changes abort prior work and dispose active enhancements.
+- Features declare mount-time settings dependencies and a page or document route scope. Missing declarations conservatively depend on every setting and the exact URL.
+- Updates reconcile each feature independently. Unchanged features retain their controls, state, and abort signal; changed or disabled features cancel and clean up before replacements mount.
 - Hash/Back navigation is handled immediately. URL polling also detects native history changes without patching Blackbaud’s JavaScript environment.
-- Native DOM changes are observed in batches; feature controls are removed when their anchors disappear.
+- Native DOM changes are observed in batches; incremental discovery examines added subtrees and identifying attributes. Feature controls are removed when their anchors disappear.
 - A failing feature does not prevent other features from mounting.
 
 ## Settings
@@ -23,9 +24,9 @@ Schema version 2 replaces UI modes with `enabled` and independent feature switch
 
 Login is an explicit, bounded flow across the school, Blackbaud sign-in, and a verified Google OAuth callback. Direct sign-in preserves native form controls. Exact school/account matching refuses ambiguity. Users can cancel automation across the flow, and metadata expires after five minutes. Error recovery is manual and limited.
 
-Roster tools read the current native term picker, accept only semantic route identifiers or fresh requests belonging to the mounted roster, validate response shapes, deduplicate copy values, and abort obsolete requests. Raw roster data is never persisted.
+Roster tools read the current native term picker, accept only semantic route identifiers or fresh requests belonging to the mounted roster, validate response shapes, deduplicate copy values, and abort obsolete requests. One mounted picker owns a single in-flight or completed read shared between copy actions for up to 15 seconds. Its key includes the view, selected term, roster kind, and roster ID; term/view changes, failures, and cleanup invalidate it. Raw roster data is never persisted.
 
-Profile photo actions use an unambiguous native profile boundary and open only recognizable HTTPS photo URLs. Assignment compatibility is optional and restores native links on cleanup. Loading recovery offers a manual action after a sustained wait mask, suppresses explicit native errors, and uses a per-tab cooldown.
+Roster picker discovery stays within native class content, and directory discovery stays within its results container. Profile updates observe individual native rows/cards. Profile photo actions use an unambiguous native profile boundary and open only recognizable HTTPS photo URLs. Assignment compatibility is optional and restores native links on cleanup. Loading recovery offers a manual action after a sustained wait mask, suppresses explicit native errors, and uses a per-tab cooldown.
 
 Appearance styles target native legacy components and retain school branding and native controls. Newer SKY components keep their own layouts. Every appearance change can be removed through the popup.
 
@@ -37,7 +38,9 @@ Assignment previews add an explicit button beside native title links. A cancella
 
 Helpful tab titles follow the current page and late native course or assignment headings. Resource Board search filters existing cards by title and description, temporarily compacts matching cards, and retains native actions. It preserves native card dimensions so Blackbaud can still calculate its layout when the window resizes during a search. Both features restore native state on cleanup.
 
-General page performance work remains separate from these workflow features.
+The native desktop and mobile Classes menus gain local search. Class links retain their destination class, term, query parameters, and native click behavior while preserving the current Bulletin Board, Assignments, or Roster section. Unsupported sections keep the native destination. Cleanup restores native hrefs and filtered rows without overwriting newer native link changes.
+
+Rendering containment such as `content-visibility: auto` remains an experiment for future profiling; it is not applied by this release.
 
 ## Verification and extension points
 

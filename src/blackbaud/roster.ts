@@ -8,6 +8,36 @@ export interface RosterEntry {
   email: string;
 }
 
+export const ROSTER_PICKER_SELECTOR = '#roster-term-picker';
+export const ROSTER_CACHE_LIFETIME = 15_000;
+
+export function rosterViewSelector(url: URL): string {
+  return /^#academicclass\//i.test(url.hash) ? '#academicclassmaincontainer' : '#site-main';
+}
+
+export function rosterPickerIdentity(picker: Element): string {
+  if (picker instanceof HTMLSelectElement) {
+    const option = picker.selectedOptions[0];
+    return [picker.value, option?.dataset.termId, option?.dataset.sectionId, option?.dataset.teamId].join(':');
+  }
+  return [picker.getAttribute('data-value'), picker.getAttribute('data-section-id'), picker.getAttribute('data-team-id')].join(':');
+}
+
+export function rosterTargetFromPicker(picker: Element, url: URL): RosterTarget | null {
+  const selected = picker instanceof HTMLSelectElement ? picker.selectedOptions[0] : null;
+  // Native academic options identify the selected term's section, which can
+  // differ from the section that originally opened this class page.
+  if (picker instanceof HTMLSelectElement && picker.matches(ROSTER_PICKER_SELECTOR) &&
+    /^#academicclass\/[1-9]\d*(?:\/|\?|$)/i.test(url.hash) && /^[1-9]\d*$/.test(picker.value)) {
+    return { kind: 'section', id: picker.value };
+  }
+  const sectionId = selected?.dataset.sectionId ?? picker.getAttribute('data-section-id');
+  const teamId = selected?.dataset.teamId ?? picker.getAttribute('data-team-id');
+  if (sectionId && /^[1-9]\d*$/.test(sectionId) && !teamId) return { kind: 'section', id: sectionId };
+  if (teamId && /^[1-9]\d*$/.test(teamId) && !sectionId) return { kind: 'team', id: teamId };
+  return null;
+}
+
 function identifier(value: string | null | undefined): string | null {
   return value && /^[1-9]\d*$/.test(value) ? value : null;
 }
@@ -81,4 +111,34 @@ export async function fetchRoster(target: RosterTarget, signal: AbortSignal): Pr
   const response = await fetch(path, { credentials: 'same-origin', signal, headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error(`The roster could not be loaded (${response.status}).`);
   return normalizeRoster(await response.json());
+}
+
+// One mounted roster owns one bounded read. Both copy actions can reuse the
+// request/result, while a changed term or route discards it rather than keeping
+// school data in storage or a cross-page cache.
+export function createRosterReader(now = () => performance.now()) {
+  type Read = { key: string; controller: AbortController; promise: Promise<RosterEntry[]>; expiresAt: number | null };
+  let current: Read | null = null;
+  const clear = () => {
+    current?.controller.abort();
+    current = null;
+  };
+  const read = (target: RosterTarget, identity: string): Promise<RosterEntry[]> => {
+    const key = JSON.stringify([identity, target.kind, target.id]);
+    if (current?.key === key && (current.expiresAt === null || current.expiresAt > now())) return current.promise;
+    clear();
+    const controller = new AbortController();
+    const entry: Read = { key, controller, expiresAt: null, promise: Promise.resolve([]) };
+    current = entry;
+    entry.promise = fetchRoster(target, controller.signal).then((roster) => {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (current === entry) entry.expiresAt = now() + ROSTER_CACHE_LIFETIME;
+      return roster;
+    }, (error: unknown) => {
+      if (current === entry) current = null;
+      throw error;
+    });
+    return entry.promise;
+  };
+  return { read, clear };
 }

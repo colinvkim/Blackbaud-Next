@@ -39,6 +39,7 @@ export function recoveryRemaining(storage: Pick<Storage, 'getItem'>, route: stri
 
 export const oldAssignmentCenterFeature: Feature = {
   id: 'legacy-assignment-center',
+  settingsKeys: [],
   enabled: (settings) => settings.oldAssignmentCenter,
   matches: isLmsPage,
   mount: ({ url, signal }) => {
@@ -72,6 +73,7 @@ export const oldAssignmentCenterFeature: Feature = {
 
 export const assignmentRecoveryFeature: Feature = {
   id: 'assignment-loading-recovery',
+  settingsKeys: [],
   enabled: (settings) => settings.fixInvalidPages && !settings.oldAssignmentCenter,
   matches: isAssignmentCenter,
   mount: ({ url, signal }) => {

@@ -11,6 +11,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in progress', description: 'Show a dismissible status while automatic login runs.', group: 'login', defaultValue: true },
   { key: 'fixFavicon', label: 'Tab icon', description: 'Give Blackbaud tabs a recognizable icon.', group: 'tools', defaultValue: true },
   { key: 'rosterTools', legacyKey: 'copyRosterTools', label: 'Roster tools', description: 'Copy roster names or email addresses in one click.', group: 'tools', defaultValue: true },
+  { key: 'classSwitching', label: 'Better class switching', description: 'Search classes and keep Assignments or Roster open when switching.', group: 'tools', defaultValue: true },
   { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', group: 'tools', defaultValue: true },
   { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Open the original photo from a directory profile.', group: 'tools', defaultValue: true },
   { key: 'oldAssignmentCenter', label: 'Legacy assignment center', description: 'Use the older assignment center when available.', group: 'compatibility', defaultValue: false },

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { observeDom, watchElements, waitForElement } from '../src/shared/dom.ts';
+import { observeDom, watchAddedElements, watchElements, waitForElement } from '../src/shared/dom.ts';
 
 test('rerenders mount controls once and remove disconnected controls and observers', async () => {
   const dom = new JSDOM('<div id="host"><span class="target"></span></div>');
@@ -89,4 +89,57 @@ test('waiting for a missing anchor settles on cancellation and finds late anchor
     assert.equal(await found, element);
     controller.abort();
   } finally { Object.assign(globalThis, previous); dom.window.close(); }
+});
+
+test('incremental discovery follows moved, reused, and replaced elements only within its root', async () => {
+  const dom = new JSDOM('<div id="host"><span class="target"></span><i></i></div><aside><span class="target"></span></aside>');
+  const previous = { document: globalThis.document, MutationObserver: globalThis.MutationObserver };
+  Object.assign(globalThis, { document: dom.window.document, MutationObserver: dom.window.MutationObserver });
+  const controller = new AbortController();
+  const mounted = new Set<Element>();
+  const removed: Element[] = [];
+  try {
+    const host = document.querySelector('#host')!;
+    const cleanup = watchAddedElements('.target', (element) => {
+      mounted.add(element);
+      return () => { mounted.delete(element); removed.push(element); };
+    }, controller.signal, host, ['class']);
+    assert.equal(mounted.size, 1);
+    const reused = host.querySelector('i')!;
+    reused.className = 'target';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(mounted.size, 2);
+    reused.className = '';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(removed, [reused]);
+    const original = host.querySelector('.target')!;
+    document.querySelector('aside')!.append(original);
+    host.insertAdjacentHTML('beforeend', '<section><b class="target"></b></section>');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(mounted.size, 1);
+    assert.equal(mounted.has(original), false);
+    controller.abort();
+    cleanup();
+    assert.equal(mounted.size, 0);
+    assert.equal(removed.length, 3);
+  } finally { controller.abort(); Object.assign(globalThis, previous); dom.window.close(); }
+});
+
+test('incremental discovery cleans a mount canceled before it returns', () => {
+  const dom = new JSDOM('<span class="target"></span><span class="target"></span>');
+  const previous = { document: globalThis.document, MutationObserver: globalThis.MutationObserver };
+  Object.assign(globalThis, { document: dom.window.document, MutationObserver: dom.window.MutationObserver });
+  const controller = new AbortController();
+  let mounts = 0;
+  let removals = 0;
+  try {
+    const cleanup = watchAddedElements('.target', () => {
+      mounts += 1;
+      controller.abort();
+      return () => { removals += 1; };
+    }, controller.signal);
+    cleanup();
+    assert.equal(mounts, 1);
+    assert.equal(removals, 1);
+  } finally { controller.abort(); Object.assign(globalThis, previous); dom.window.close(); }
 });

@@ -4,6 +4,8 @@ import type { Feature } from '../shared/types.ts';
 
 export const faviconFeature: Feature = {
   id: 'favicon',
+  settingsKeys: [],
+  routeScope: 'document',
   enabled: (settings) => settings.fixFavicon,
   matches: isSchoolPage,
   mount: () => {
