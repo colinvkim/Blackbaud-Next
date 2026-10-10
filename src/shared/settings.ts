@@ -6,6 +6,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'helpfulTabTitles', label: 'Useful tab titles', description: 'Identify the course, assignment, or page in each browser tab.', group: 'appearance', defaultValue: true },
   { key: 'assignmentShortcuts', label: 'Assignment shortcuts', description: 'Quickly focus on unfinished work or assignments due today and tomorrow.', group: 'assignments', defaultValue: true },
   { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', group: 'assignments', defaultValue: true },
+  { key: 'prepareAssignmentCenter', label: 'Faster Assignment Center', description: 'Prepare Assignment Center in the background while you view Schedule.', group: 'assignments', defaultValue: true },
   { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'Simpler sign-in', description: 'Add a direct Google sign-in option on the school login page.', group: 'login', defaultValue: true },
   { key: 'automaticLogin', label: 'Automatic login', description: 'Continue through Blackbaud and select your school Google account.', group: 'login', defaultValue: true },
   { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in progress', description: 'Show a dismissible status while automatic login runs.', group: 'login', defaultValue: true },
@@ -14,6 +15,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'classSwitching', label: 'Better class switching', description: 'Search classes and keep Assignments or Roster open when switching.', group: 'tools', defaultValue: true },
   { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', group: 'tools', defaultValue: true },
   { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Open the original photo from a directory profile.', group: 'tools', defaultValue: true },
+  { key: 'enhancedDirectory', label: 'Better directories', description: 'Search and browse any directory with compact results and local sorting.', group: 'tools', defaultValue: true },
   { key: 'oldAssignmentCenter', label: 'Legacy assignment center', description: 'Use the older assignment center when available.', group: 'compatibility', defaultValue: false },
   { key: 'fixInvalidPages', legacyKey: 'fixBrokenAssignmentCenter', label: 'Assignment loading recovery', description: 'Offer recovery when the assignment center stays stuck.', group: 'compatibility', defaultValue: true },
 ] as const;

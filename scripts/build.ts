@@ -16,7 +16,7 @@ await copyFile(resolve(root, 'extension/manifest.json'), resolve(output, 'manife
 await copyFile(resolve(root, 'src/popup/index.html'), resolve(output, 'popup.html'));
 await cp(resolve(root, 'assets'), resolve(output, 'assets'), { recursive: true });
 
-for (const entry of ['lms', 'auth', 'popup']) {
+for (const entry of ['lms', 'auth', 'popup', 'directory-page']) {
   await build({
     configFile: false,
     root,
@@ -29,7 +29,7 @@ for (const entry of ['lms', 'auth', 'popup']) {
       lib: {
         entry: resolve(root, `src/entrypoints/${entry}.ts`),
         formats: ['iife'],
-        name: `BlackbaudNext_${entry}`,
+        name: `BlackbaudNext_${entry.replaceAll('-', '_')}`,
         fileName: () => `${entry}.js`,
         cssFileName: entry,
       },

@@ -6,7 +6,7 @@ Improve everyday student workflows directly in native Blackbaud pages. Preserve 
 
 ## Implemented foundation
 
-- One TypeScript project builds LMS, authentication, and popup IIFE bundles.
+- One TypeScript project builds LMS, authentication, popup, and native Directory adapter IIFE bundles.
 - `extension/manifest.json` and `assets/` are the sources for the unpacked `chrome/` output.
 - A feature has an ID, settings predicate, route predicate, and synchronous mount returning cleanup.
 - Context supplies the current URL, normalized settings, and an abort signal.
@@ -15,6 +15,7 @@ Improve everyday student workflows directly in native Blackbaud pages. Preserve 
 - Hash/Back navigation is handled immediately. URL polling also detects native history changes without patching Blackbaud’s JavaScript environment.
 - Native DOM changes are observed in batches; incremental discovery examines added subtrees and identifying attributes. Feature controls are removed when their anchors disappear.
 - A failing feature does not prevent other features from mounting.
+- LMS and authentication runtimes wait for prerender activation before reading settings, mounting features, or changing sign-in flow metadata. Ordinary background tabs start normally, and BFCache restores start a fresh runtime.
 
 ## Settings
 
@@ -40,7 +41,54 @@ Helpful tab titles follow the current page and late native course or assignment 
 
 The native desktop and mobile Classes menus gain local search. Class links retain their destination class, term, query parameters, and native click behavior while preserving the current Bulletin Board, Assignments, or Roster section. Unsupported sections keep the native destination. Cleanup restores native hrefs and filtered rows without overwriting newer native link changes.
 
+Standard native directories gain a contained replacement for search, filters, and results. A document-scoped native-link capture starts a direct authenticated read before navigation; the route feature consumes that one-shot read or starts one alongside metadata readiness. A narrow MAIN-world adapter verifies the current native Directory view, facet-array shape, initial collection presence, and directory identity across a versioned DOM channel without waiting for its records. The isolated adapter validates unique IDs, consistent reported totals, names, publication flags, emails, and recognizable photo URLs. It distinguishes complete responses from limited responses instead of treating a reported total as loaded people. It prepares the initial sort and retains safe photo filenames until native metadata supplies a verified photo prefix. Only projected display records remain in memory. Refresh and server name searches use a strictly current-route cancellable endpoint; intent reads tolerate only the captured source-to-destination transition and expire after 15 seconds.
+
+The replacement provides name/preferred-name search, optional query-aware grade counts, deterministic sorting, bounded pages, small lazy photos, published email copying, and native profile links. Complete directories search locally; limited responses use debounced, cancellable server name search without reapplying the local name matcher to server results. Native Directories navigation chooses the directory, with no redundant enhanced picker. Native configuration and the initial results read still run for dependable fallback, so the extension makes one additional initial direct read in this version. Metadata acquisition leaves native methods usable until the isolated records are ready. Activation then pauses only that view's results, result rendering, facet-value methods, and matching DirectoryList scrolling; network APIs stay untouched. Current-view fallback/watchdog recovery restores methods and replays owed row/filter work from the native collection without another results GET. Navigation/pagehide skip obsolete replay. Unsupported configurations fail open to the original directory.
+
+Directory ownership restores method descriptors only while owned wrappers remain installed. Cleanup runs on hash/history changes, view replacement, pagehide, explicit release, and heartbeat expiry; the page adapter can independently reveal native content and remove the replacement if the isolated runtime disappears. Its inert listener survives BFCache restoration. All directory data stays in memory, with no new manifest permissions or extension APIs exposed to the page.
+
+### Directory startup investigation (2026-10-08)
+
+A direct GET to `/api/directory/directoryresultsget?directoryId=<native-id>&searchVal=&facets=&searchAll=false` succeeds from an authenticated Progress page even when no Directory view or result collection has been initialized. The live check returned HTTP 200 and the complete student list using normal same-origin session cookies and an Accept header; omitting cookies returned HTTP 403. No Directory-page token or preceding metadata request was needed in this session. The response uses `Cache-Control: no-cache, no-store, must-revalidate`.
+
+Native startup is sequential: `renderDirectory` reads directory metadata, the view's initializer synchronously reads the introduction, `getFacets` synchronously reads filter definitions, and `renderTemplate` starts the asynchronous results read. Results success computes contact display fields, renders native rows, and synchronously reads filter values. `p3.renderMainPage` assigns `_currentMainView` after rendering the new view, so the first native results request has already started before the existing ownership check can succeed.
+
+One temporary click-capture experiment started a direct request before the native navigation handler. All times below are milliseconds after the same click; these are development samples, not performance guarantees.
+
+| Milestone | Time |
+| --- | ---: |
+| Early direct request started | 0 |
+| Early response finished transferring | 701 |
+| Native facets finished / shell setup continued | 723 |
+| Native results request started | 726 |
+| Early records validated, sorted, and prepared for search | 773 |
+| Native results response finished transferring | 1385 |
+| Native row rendering finished | 1491 |
+| Native synchronous filter-values method returned | 2011 |
+
+The early sample spent about 5 ms parsing and 36 ms preparing records. It deliberately allowed both results requests; no first-paint or interactive-time improvement has been shipped or established by this experiment. The temporary instrumentation and data were confined to a disposable tab.
+
+The implemented pipeline now follows that experiment: one cancellable read on verified native Directory intent, metadata/support validation separate from collection readiness, and rendering once both metadata and prepared records are ready. Initial native loading remains for reliable fallback, with unnecessary row/filter-value work suppressed only after activation of the verified owned view. Measure first usable enhanced rows before optimizing duplicate traffic. Any future reusable memory cache needs session identity checks; this version consumes each captured result once and never caches it across navigation.
+
+Live verification of the installed build measured one Progress-to-Student click with native metadata ready at 948 ms, ownership acknowledged at 1512 ms, and the first 50 enhanced rows present at 1546 ms. The second animation frame after those rows was 1580 ms, with search enabled; this is a usable-frame observation, not a precise paint timestamp. The retained native results transfer finished at 2295 ms. Network events confirmed exactly two results requests (one extension and one native), no native filter-value request after ownership, and no directory requests for local search, grade filtering, sorting, or clearing filters. Server and session timings vary, so this sample does not establish a fixed speedup.
+
+Native fallback was verified both before and after the retained results request completed. Returning after completion replayed native filter work without another results request; returning while pending let the existing native callback finish normally. Profile navigation and Back restored enhanced rows, and Faculty remained native without an error notice. A synthetic queued-hashchange regression additionally verifies that a rapid destination-to-source return aborts the abandoned intent before a later click can claim it.
+
+Switching directories after the retained request completed exposed an obsolete filter-value request: releasing the Student lease while its URL was still current replayed work immediately before navigating to Faculty. The selector now changes the hash before synchronous cleanup, so the old lease restores methods without recovering a departed view. An integration fixture verifies this behavior through the real page bridge and isolated client.
+
+After the final extension reload, live Network events confirmed that immediate Student-to-Progress departure cancels the captured extension request. A subsequent Student visit started a fresh extension read alongside the retained native read and displayed all 891 students in bounded pages. Switching to Faculty after native completion made zero requests for the departed Student directory. Original/enhanced toggling restored both views, and local search and sorting again made no directory requests. All 267 regression tests, type checking, and the production build passed.
+
+### All-directory support investigation (2026-10-08)
+
+The native menu exposes Alumni, Faculty, Staff, Student, and Parent. Faculty returned 161 records with a matching total, and Staff returned 90 with a matching total. Their name/publication fields follow the Student format. Faculty's published `GradeDisplay` can contain multiple comma-separated grades; these must contribute to individual grade counts and filter membership rather than become combined dropdown options. The enhanced Directory picker is removed; native Directories navigation remains the only picker.
+
+Alumni's native collection and direct blank-query JSON both contained 2,016 unique records while reporting 6,137 matches; its native maximum-2,000 warning was visible. Parent's blank query returned 127 unique records while reporting 1,268, while its native `a` name search returned 106 records and a matching total. That query's records were all present in the initial 127; the cause of Parent's initial count difference is not established. A greater reported total therefore marks the response as limited without assuming a specific server cap, authorization rule, or complete local index. Larger totals no longer reject an otherwise validated response; contradictory/unsafe totals and duplicate IDs still fail. Limited directories retain cancellable server name search, and the UI counts received names instead of implying that every reported person is loaded.
+
+The common native Directory view initializes its results collection inside `getResults`; the collection exists before the normal current-view ownership check. However, `renderTemplate` intentionally skips that read when `DefaultResults` is false and no search has run. Metadata recognizes that explicit search-first configuration without requiring a collection, and its enhanced view keeps server search even when the initial blank response is empty. Returning to native restores the original search-first behavior without inventing a results request. Normal configurations still require collection presence, but never wait for records to finish loading.
+
 Rendering containment such as `content-visibility: auto` remains an experiment for future profiling; it is not applied by this release.
+
+Assignment Center preparation uses one browser-managed prerender of the exact same-origin native student link from Schedule. A short settle timer waits for native Schedule content; a 30-second expiry bounds data age and resource use. Hidden tabs, changed destinations, disabled settings, legacy routing, and navigation remove only the owned rule. There are no background tabs, page bridges, request overrides, or extra manifest permissions. Chrome retains control over eligibility and activation; native navigation remains available when preparation is skipped. The destination's own initialization and session requests may run while prepared, while extension work waits until activation.
 
 ## Verification and extension points
 
