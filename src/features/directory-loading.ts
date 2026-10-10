@@ -1,6 +1,7 @@
 import { createDirectoryLoadingManager, registerDirectoryLoadingManager } from '../blackbaud/directory-loading.ts';
 import type { DirectoryPreparedReader } from '../blackbaud/directory-loading.ts';
 import { directoryNavigationIntent, fetchDirectoryPreparedSnapshot } from '../blackbaud/directory.ts';
+import { enableIndependentDirectory } from '../blackbaud/directory-independent.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
 import { isActionable } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
@@ -14,6 +15,7 @@ export function createDirectoryLoadingFeature(readPrepared: DirectoryPreparedRea
     matches: (url) => isLmsPage(url) && !url.username && !url.password && /^\/app\/[^/]+\/?$/.test(url.pathname),
     mount: ({ signal }) => {
       if (signal.aborted) return;
+      const disableIndependentDirectory = enableIndependentDirectory(signal);
       const manager = createDirectoryLoadingManager(readPrepared);
       const unregister = registerDirectoryLoadingManager(manager);
       let disposed = false;
@@ -53,6 +55,7 @@ export function createDirectoryLoadingFeature(readPrepared: DirectoryPreparedRea
         if (disposed) return;
         disposed = true;
         unregister();
+        disableIndependentDirectory();
         clearInterval(navigationCheck);
         document.removeEventListener('click', capture, true);
         window.removeEventListener('hashchange', updateRoute);

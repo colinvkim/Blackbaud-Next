@@ -5,6 +5,7 @@ import { acquireDirectory, DirectoryUnsupportedError } from '../src/blackbaud/di
 import type { DirectoryLease } from '../src/blackbaud/directory-bridge.ts';
 import { installDirectoryPageBridge } from '../src/blackbaud/directory-page.ts';
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_UI_ATTRIBUTE } from '../src/blackbaud/directory-protocol.ts';
+import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE } from '../src/blackbaud/directory-independent-protocol.ts';
 import { normalizeDirectorySnapshot } from '../src/blackbaud/directory.ts';
 import type { DirectorySnapshot } from '../src/blackbaud/directory.ts';
 import { createEnhancedDirectoryFeature, DIRECTORY_PAGE_SIZE, DIRECTORY_REQUEST_TIMEOUT, DIRECTORY_SEARCH_DELAY, enhancedDirectoryFeature } from '../src/features/directory.ts';
@@ -115,6 +116,86 @@ function deferred<T>() {
   const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail; });
   return { promise, resolve, reject };
 }
+
+test('independent loading keeps one original action and choosing it cancels enhancement without a failure notice', async () => {
+  const root = fixture();
+  root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
+  const pending = document.createElement('div');
+  pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
+  const original = document.createElement('button');
+  original.textContent = 'Use original directory';
+  pending.append(original);
+  root.append(pending);
+  let readSignal: AbortSignal | undefined;
+  let nativeCalls = 0;
+  original.addEventListener('click', () => { nativeCalls += 1; });
+  const ready = deferred<DirectoryLease>();
+  mount({ acquireDirectory: async (_target, signal) => { readSignal = signal; return ready.promise; } });
+  assert.equal([...document.querySelectorAll('button')].filter((button) => button.textContent === 'Use original directory').length, 1);
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+  original.click();
+  assert.equal(readSignal?.aborted, true);
+  assert.equal(nativeCalls, 1);
+  const late = lease(root);
+  ready.resolve(late.value);
+  await flush();
+  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.equal(late.releases(), 1);
+  assert.match(document.querySelector('.bn-directory-notice')?.textContent ?? '', /Using the original Blackbaud directory/);
+  assert.doesNotMatch(document.querySelector('.bn-directory-notice')?.textContent ?? '', /could not load/);
+});
+
+test('a delayed independent shell keeps one original action and its fallback cancels the pending enhancement', async () => {
+  const root = fixture();
+  const shell = root.cloneNode(true) as HTMLElement;
+  shell.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
+  const pending = document.createElement('div');
+  pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
+  const original = document.createElement('button');
+  original.textContent = 'Use original directory';
+  pending.append(original);
+  shell.append(pending);
+  let readSignal: AbortSignal | undefined;
+  let nativeCalls = 0;
+  original.addEventListener('click', () => { nativeCalls += 1; });
+  const ready = deferred<DirectoryLease>();
+  mount({ acquireDirectory: async (_target, signal) => { readSignal = signal; return ready.promise; } });
+  assert.match(document.querySelector('.bn-directory-notice')?.textContent ?? '', /Preparing/);
+  document.getElementById('site-main')!.replaceChildren(shell);
+  await flush();
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+  assert.equal([...document.querySelectorAll('button')].filter((button) => button.textContent === 'Use original directory').length, 1);
+  original.click();
+  assert.equal(readSignal?.aborted, true);
+  assert.equal(nativeCalls, 1);
+  assert.ok(button('Use enhanced directory'));
+  ready.reject(new Error('The native directory resumed.'));
+  await flush();
+  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.match(document.querySelector('.bn-directory-notice')?.textContent ?? '', /Using the original Blackbaud directory/);
+  assert.doesNotMatch(document.querySelector('.bn-directory-notice')?.textContent ?? '', /could not load/);
+});
+
+test('independent loading listeners are detached when the route feature is disabled', async () => {
+  const root = fixture();
+  root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
+  const pending = document.createElement('div');
+  pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
+  const original = document.createElement('button');
+  original.textContent = 'Use original directory';
+  pending.append(original);
+  root.append(pending);
+  const ready = deferred<DirectoryLease>();
+  const mounted = mount({ acquireDirectory: async () => ready.promise });
+  mounted.controller.abort();
+  original.click();
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+  const late = lease(root);
+  ready.resolve(late.value);
+  await flush();
+  assert.equal(late.releases(), 1);
+  assert.equal(document.querySelector('.bn-directory'), null);
+});
 async function flush() { for (let index = 0; index < 8; index += 1) await Promise.resolve(); }
 
 afterEach(() => {
@@ -683,6 +764,66 @@ test('returning to native restores the page, cancels refresh, and permits a fres
   assert.equal(leases.length, 2);
   assert.equal(rows().length, 3);
   assert.equal(document.activeElement, field('Search people'));
+});
+
+test('asynchronous native root replacement retains the enhanced switch and permits a fresh lease', async () => {
+  const root = fixture();
+  const nativeRoot = root.cloneNode(true) as HTMLElement;
+  root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
+  const main = document.getElementById('site-main')!;
+  const nativeRead = deferred<void>();
+  const replacement = nativeRead.promise.then(() => main.replaceChildren(nativeRoot));
+  const firstLease = lease(root);
+  let acquisitions = 0;
+  mount({ acquireDirectory: async () => {
+    acquisitions += 1;
+    return acquisitions === 1 ? firstLease.value : lease(nativeRoot).value;
+  } });
+  await flush();
+  button('Use original directory').click();
+  const switchControl = button('Use enhanced directory');
+  const notice = switchControl.closest('.bn-directory-notice');
+  assert.ok(notice);
+  assert.equal(firstLease.releases(), 1);
+  assert.equal(document.querySelector('.bn-directory'), null);
+  nativeRead.resolve();
+  await replacement;
+  await flush();
+  assert.equal(root.isConnected, false);
+  assert.equal(nativeRoot.querySelector('#overview > .bn-directory-notice'), notice);
+  assert.equal(button('Use enhanced directory'), switchControl);
+  switchControl.click();
+  await flush();
+  assert.equal(acquisitions, 2);
+  assert.equal(nativeRoot.querySelectorAll('.bn-directory-row').length, 3);
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+});
+
+test('fallback notice observation disconnects on cleanup and cannot recreate UI after native replacement', async (t) => {
+  const root = fixture();
+  const nativeRoot = root.cloneNode(true) as HTMLElement;
+  const main = document.getElementById('site-main')!;
+  const disconnect = window.MutationObserver.prototype.disconnect;
+  let disconnections = 0;
+  t.mock.method(window.MutationObserver.prototype, 'disconnect', function (this: MutationObserver) {
+    disconnections += 1;
+    disconnect.call(this);
+  });
+  let acquisitions = 0;
+  const mounted = mount({ acquireDirectory: async () => { acquisitions += 1; return lease(root).value; } });
+  await flush();
+  button('Use original directory').click();
+  const oldSwitch = button('Use enhanced directory');
+  const beforeCleanup = disconnections;
+  mounted.controller.abort();
+  assert.ok(disconnections > beforeCleanup);
+  main.replaceChildren(nativeRoot);
+  await flush();
+  oldSwitch.click();
+  await flush();
+  assert.equal(acquisitions, 1);
+  assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);
+  assert.equal(document.querySelector('#blackbaud-next-directory'), null);
 });
 
 test('intentionally unsupported directories quietly keep the original native view without a retry notice', async () => {

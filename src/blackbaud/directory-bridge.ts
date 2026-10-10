@@ -1,5 +1,6 @@
 import { directoryTargetFromUrl, fetchDirectoryPreparedSnapshot, finalizeDirectorySnapshot } from './directory.ts';
 import type { DirectorySnapshot, DirectoryTarget } from './directory.ts';
+import { acquireIndependentDirectory, independentDirectoryRequested } from './directory-independent.ts';
 import { claimDirectoryPreparedSnapshot } from './directory-loading.ts';
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_OWNER_ATTRIBUTE, DIRECTORY_REQUEST_EVENT, DIRECTORY_RESPONSE_EVENT, DIRECTORY_UI_ATTRIBUTE } from './directory-protocol.ts';
 
@@ -24,6 +25,11 @@ export interface DirectoryLease {
 
 export async function acquireDirectory(target: DirectoryTarget, signal: AbortSignal): Promise<DirectoryLease> {
   signal.throwIfAborted();
+  if (independentDirectoryRequested()) {
+    const independent = await acquireIndependentDirectory(target, signal);
+    if (independent) return independent;
+    signal.throwIfAborted();
+  }
   const current = directoryTargetFromUrl(new URL(window.location.href));
   if (!current || current.origin !== target.origin || current.directoryId !== target.directoryId) throw new Error('The directory changed.');
   const href = window.location.href;
