@@ -16,8 +16,8 @@ export const rosterToolsFeature: Feature = {
       toolbar.dataset.blackbaudNextRoster = '1';
       toolbar.setAttribute('role', 'group');
       toolbar.setAttribute('aria-label', 'Roster tools');
-      const names = createButton('Copy roster names');
-      const emails = createButton('Copy roster emails');
+      const names = createButton('Copy roster names', 'copy');
+      const emails = createButton('Copy roster emails', 'copy');
       const status = document.createElement('span');
       status.className = 'bn-tool-status';
       status.setAttribute('role', 'status');

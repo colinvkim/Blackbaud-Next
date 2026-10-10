@@ -57,9 +57,34 @@ export function classDestinationForSection(href: string, current: URL): string |
   }
 }
 
+function modernClassMenuLinks(menu: HTMLElement, current: URL): HTMLAnchorElement[] {
+  if (!isLmsPage(current) || current.username || current.password || !menu.matches('div.subnav')) return [];
+  const page = menu.ownerDocument;
+  const controls = page.querySelectorAll<HTMLAnchorElement>('a#group-header-Classes');
+  const navigation = page.querySelectorAll('#site-nav-container');
+  const control = controls[0];
+  const item = control?.parentElement;
+  const list = item?.parentElement;
+  // Angular omits the legacy link class. Its known root action and direct menu
+  // rows establish the scope before accepting task/route-based class links.
+  if (page.querySelectorAll('#group-header-Classes').length !== 1 || controls.length !== 1 || navigation.length !== 1 ||
+    !control?.classList.contains('root-nav-item') || control.getAttribute('href') !== '#' || item?.tagName !== 'LI' ||
+    menu.parentElement !== item || item.querySelectorAll(':scope > a').length !== 1 || item.querySelectorAll(':scope > .subnav').length !== 1 ||
+    list?.tagName !== 'UL' || !list.classList.contains('topnav') || !navigation[0]!.contains(list)) return [];
+  return [...menu.querySelectorAll<HTMLAnchorElement>(':scope > ul:not(.subnavfooter) > li > a[data-taskid="1853"][href*="#academicclass/"]')]
+    .filter((link) => {
+      try {
+        const destination = new URL(link.getAttribute('href')!, current);
+        return /^\/app\/student\/?$/i.test(destination.pathname) && destination.origin === current.origin &&
+          !destination.username && !destination.password;
+      } catch { return false; }
+    });
+}
+
 export function nativeClassMenuItems(menu: HTMLElement, current: URL): NativeClassMenuItem[] {
   const items: NativeClassMenuItem[] = [];
-  for (const link of menu.querySelectorAll<HTMLAnchorElement>(NATIVE_CLASS_LINK_SELECTOR)) {
+  const links = new Set([...menu.querySelectorAll<HTMLAnchorElement>(NATIVE_CLASS_LINK_SELECTOR), ...modernClassMenuLinks(menu, current)]);
+  for (const link of links) {
     const row = link.parentElement;
     const href = link.getAttribute('href');
     if (!row || row.tagName !== 'LI' || row.closest('.subnavfooter') || !href || classDestinationForSection(href, current) === null) continue;

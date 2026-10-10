@@ -6,6 +6,8 @@ import type { DirectoryEntry, DirectorySnapshot } from '../blackbaud/directory.t
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_UI_ATTRIBUTE } from '../blackbaud/directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE } from '../blackbaud/directory-independent-protocol.ts';
 import { addStyle, createButton } from '../shared/dom.ts';
+import { createIcon } from '../shared/icons.ts';
+import type { IconName } from '../shared/icons.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 import { directoryStyles } from './directory-styles.ts';
 
@@ -27,11 +29,15 @@ function ownedElement<K extends keyof HTMLElementTagNameMap>(tag: K, className: 
   return element;
 }
 
-function labelControl(text: string, control: HTMLElement): HTMLLabelElement {
+function labelControl(text: string, control: HTMLElement, icon?: IconName): HTMLLabelElement {
   const label = document.createElement('label');
   label.className = 'bn-directory-field';
   const caption = document.createElement('span');
   caption.textContent = text;
+  if (icon) {
+    caption.className = 'bn-icon-label';
+    caption.prepend(createIcon(icon));
+  }
   label.append(caption, control);
   return label;
 }
@@ -83,7 +89,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         }
         if (!notice.isConnected) noticeHost()?.append(notice);
       };
-      const showNotice = (message: string, action: string, handler: () => void) => {
+      const showNotice = (message: string, action: string, handler: () => void, icon: IconName = 'refresh') => {
         clearNotice();
         if (!isCurrent()) return;
         const host = noticeHost();
@@ -92,7 +98,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         const text = document.createElement('p');
         text.setAttribute('role', 'status');
         text.textContent = message;
-        const button = createButton(action);
+        const button = createButton(action, icon);
         button.addEventListener('click', handler);
         notice.append(text, button);
         host.append(notice);
@@ -122,7 +128,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
       const returnToNative = () => {
         cancelAcquisition();
         clearMounted();
-        showNotice('Using the original Blackbaud directory, with its full search, filters, and contact details.', 'Use enhanced directory', () => { void prepare(true); });
+        showNotice('Using the original Blackbaud directory, with its full search, filters, and contact details.', 'Use enhanced directory', () => { void prepare(true); }, 'users');
       };
 
       const buildDirectory = (lease: DirectoryLease): Cleanup => {
@@ -151,10 +157,10 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         title.textContent = 'Browse people';
         const actions = document.createElement('div');
         actions.className = 'bn-directory-actions';
-        const refreshButton = createButton('Refresh');
-        const cancelRefresh = createButton('Cancel refresh');
+        const refreshButton = createButton('Refresh', 'refresh');
+        const cancelRefresh = createButton('Cancel refresh', 'x');
         cancelRefresh.hidden = true;
-        const nativeButton = createButton('Use original directory');
+        const nativeButton = createButton('Use original directory', 'arrow-left');
         nativeButton.title = 'Use Blackbaud’s original filters and additional contact details.';
         actions.append(refreshButton, cancelRefresh, nativeButton);
         heading.append(title, actions);
@@ -170,7 +176,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         const gradeField = labelControl('Grade', grades);
         const order = document.createElement('select');
         order.append(option('last', 'Last name'), option('first', 'First name'));
-        controls.append(labelControl('Search people', search), gradeField, labelControl('Sort by', order));
+        controls.append(labelControl('Search people', search, 'search'), gradeField, labelControl('Sort by', order));
         const count = document.createElement('p');
         count.className = 'bn-directory-count';
         count.setAttribute('role', 'status');
@@ -185,14 +191,14 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         const empty = document.createElement('div');
         empty.className = 'bn-directory-empty';
         const emptyMessage = document.createElement('p');
-        const reset = createButton('Clear filters');
+        const reset = createButton('Clear filters', 'x');
         empty.append(emptyMessage, reset);
         const pagination = document.createElement('nav');
         pagination.className = 'bn-directory-pagination';
         pagination.setAttribute('aria-label', 'Directory pages');
-        const previous = createButton('Previous');
+        const previous = createButton('Previous', 'chevron-left');
         const pageText = document.createElement('span');
-        const next = createButton('Next');
+        const next = createButton('Next', 'chevron-right');
         pagination.append(previous, pageText, next);
         const feedback = document.createElement('p');
         feedback.className = 'bn-directory-feedback';
@@ -263,7 +269,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
             const address = document.createElement('a');
             address.setAttribute('href', `mailto:${encodeURIComponent(entry.email).replace(/%40/gu, '@')}`);
             address.textContent = entry.email;
-            const copy = createButton('Copy');
+            const copy = createButton('Copy', 'copy');
             copy.setAttribute('aria-label', `Copy email for ${entry.displayName}`);
             copy.addEventListener('click', () => {
               void (async () => {
@@ -466,7 +472,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           detachPendingNative = detachNativeAction;
         }
         if (!pending) {
-          showNotice('Preparing the enhanced directory…', 'Use original directory', returnToNative);
+          showNotice('Preparing the enhanced directory…', 'Use original directory', returnToNative, 'arrow-left');
         }
         let lease: DirectoryLease | null = null;
         try {
@@ -480,7 +486,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
             if (mounted?.lease !== currentLease) return;
             clearMounted();
             queueMicrotask(() => {
-              if (isCurrent() && !mounted && !acquisition) showNotice('The original directory is available. The enhanced view stopped when Blackbaud updated.', 'Try enhanced directory', () => { void prepare(true); });
+              if (isCurrent() && !mounted && !acquisition) showNotice('The original directory is available. The enhanced view stopped when Blackbaud updated.', 'Try enhanced directory', () => { void prepare(true); }, 'users');
             });
           };
           lease.signal.addEventListener('abort', unexpectedRelease, { once: true });

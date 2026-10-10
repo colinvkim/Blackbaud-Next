@@ -24,6 +24,14 @@ function mobileMenu(): string {
   return `<ul><li class="clearfix"><i></i><a id="mobile-group-header-Classes">Classes</a><div class="app-mobile-level"><h2>Classes</h2><div class="app-mobile-back">Back</div><ul>${classLink(123, 'Geometry', true)}${classLink(456, 'Café Studies', true)}<li><a href="#otherclasses">View Other Classes</a></li></ul></div></li></ul>`;
 }
 
+function modernClassLink(id: number, name: string, href = `/app/student?svcid=edu#academicclass/${id}/0/bulletinboard`, task = '1853'): string {
+  return `<li><a class="sec-25-bgc-hover" data-taskid="${task}" href="${href}"><span class="desc"><span class="title">${name}</span></span></a></li>`;
+}
+
+function modernMenu(links = Array.from({ length: 14 }, (_, index) => modernClassLink(index + 100, index === 0 ? 'Geometry' : `Course ${index + 1}`)).join('')): string {
+  return `<nav id="site-nav-container"><ul class="topnav"><li><a id="group-header-Classes" class="root-nav-item" href="#"><div class="desc"><div class="title"><div>Classes</div></div></div></a><div class="subnavtop"></div><div class="subnav subnav-multicol"><ul>${links}</ul><ul class="subnavfooter"><li><a href="/app/student?svcid=edu#otherclasses"><span class="desc"><span class="title">View Other Classes</span></span></a></li></ul></div></li></ul></nav>`;
+}
+
 function fixture(html: string, route = '#academicclass/999/10/assignments') {
   dom = new JSDOM(html, { url: `https://example.myschoolapp.com/app/student?svcid=edu${route}` });
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
@@ -119,6 +127,84 @@ test('desktop class search filters names without altering native footer actions 
   assert.equal(menu.hasAttribute('data-blackbaud-next-class-menu'), false);
   assert.deepEqual([...menu.querySelectorAll('a')].map((link) => link.getAttribute('href')), originalHrefs);
   assert.equal(footer.innerHTML, originalFooter);
+});
+
+test('modern class search recognizes Angular rows, filters all classes, and restores native actions on cleanup', () => {
+  const win = fixture(modernMenu(), '');
+  dom!.reconfigure({ url: 'https://example.myschoolapp.com/lms-assignment/assignment-center/student?svcid=edu' });
+  const menu = document.querySelector<HTMLElement>('.subnav')!;
+  const before = menu.innerHTML;
+  const link = menu.querySelector<HTMLAnchorElement>('a[data-taskid="1853"]')!;
+  const nativeHref = link.getAttribute('href');
+  let clicks = 0;
+  link.addEventListener('click', (event) => { event.preventDefault(); clicks++; });
+  const { controller } = mount();
+  assert.equal(nativeClassMenuItems(menu, new URL(win.location.href)).length, 14);
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '14 classes');
+  search('geometry');
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 14 classes');
+  assert.equal(menu.querySelectorAll('[data-blackbaud-next-class-hidden]').length, 13);
+  assert.equal(menu.querySelector('.subnavfooter li')!.hasAttribute('data-blackbaud-next-class-hidden'), false);
+  assert.equal(link.getAttribute('href'), nativeHref, 'modern pages keep their native class destination');
+  link.click();
+  assert.equal(clicks, 1);
+  controller.abort();
+  assert.equal(menu.innerHTML, before);
+  link.click();
+  assert.equal(clicks, 2);
+});
+
+test('modern task-based class recognition stays inside one verified Classes menu and excludes nested, footer and invalid routes', () => {
+  fixture(modernMenu(modernClassLink(100, 'Geometry') +
+    modernClassLink(101, 'Wrong task', undefined, '9999') +
+    modernClassLink(102, 'Foreign', 'https://foreign.example/app/student#academicclass/102/0/bulletinboard') +
+    modernClassLink(103, 'Credentials', 'https://user:secret@example.myschoolapp.com/app/student#academicclass/103/0/bulletinboard') +
+    modernClassLink(104, 'Wrong app', '/different-app#academicclass/104/0/bulletinboard') +
+    modernClassLink(105, 'Wrong route', '/app/student#athleticteam/105/0/bulletinboard') +
+    '<li><div><ul>' + modernClassLink(106, 'Nested course') + '</ul></div></li>') +
+    `<div id="unrelated-menu" class="subnav"><ul>${modernClassLink(107, 'Body course')}</ul></div>`);
+  const menu = document.querySelector<HTMLElement>(NATIVE_CLASSES_MENU_SELECTOR)!;
+  const url = new URL(window.location.href);
+  menu.querySelector('.subnavfooter')!.insertAdjacentHTML('beforeend', modernClassLink(108, 'Footer course'));
+  const items = () => nativeClassMenuItems(menu, url);
+  assert.deepEqual(items().map(({ name }) => name), ['Geometry']);
+  assert.deepEqual(nativeClassMenuItems(document.querySelector<HTMLElement>('#unrelated-menu')!, url), []);
+  const control = document.querySelector<HTMLElement>('#group-header-Classes')!;
+  control.classList.remove('root-nav-item');
+  assert.deepEqual(items(), []);
+  control.classList.add('root-nav-item');
+  assert.equal(items().length, 1);
+  control.setAttribute('href', '/other');
+  assert.deepEqual(items(), []);
+  control.setAttribute('href', '#');
+  const duplicate = control.cloneNode(true);
+  document.body.append(duplicate);
+  assert.deepEqual(items(), []);
+  duplicate.parentNode!.removeChild(duplicate);
+  const duplicateMenu = menu.cloneNode(true);
+  menu.after(duplicateMenu);
+  assert.deepEqual(items(), []);
+  duplicateMenu.parentNode!.removeChild(duplicateMenu);
+  assert.equal(items().length, 1, 'verified menu recovers after ambiguity clears');
+});
+
+test('modern class row replacement preserves an active query and restores detached native rows', async () => {
+  fixture(modernMenu(modernClassLink(100, 'Geometry') + modernClassLink(101, 'English')), '');
+  dom!.reconfigure({ url: 'https://example.myschoolapp.com/lms-assignment/assignment-center/student?svcid=edu' });
+  const { controller } = mount();
+  const menu = document.querySelector<HTMLElement>('.subnav')!;
+  search('geometry');
+  const oldRow = menu.querySelectorAll<HTMLElement>('ul:not(.subnavfooter) > li')[1]!;
+  assert.equal(oldRow.hasAttribute('data-blackbaud-next-class-hidden'), true);
+  oldRow.outerHTML = modernClassLink(102, 'Geometry II');
+  await flush();
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '2 of 2 classes');
+  assert.equal(oldRow.hasAttribute('data-blackbaud-next-class-hidden'), false);
+  assert.equal(menu.querySelectorAll('.bn-class-search').length, 1);
+  assert.equal(menu.querySelector<HTMLInputElement>('.bn-class-search input')!.value, 'geometry');
+  controller.abort();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  assert.equal(menu.querySelector('[data-blackbaud-next-class-hidden]'), null);
 });
 
 test('native class handlers receive unchanged normal and modified click events', () => {

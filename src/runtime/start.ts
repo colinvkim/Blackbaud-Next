@@ -3,8 +3,15 @@ import { getSettings, subscribeSettings } from '../shared/settings.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Feature, Cleanup } from '../shared/types.ts';
 
-export async function startExtension(features: Feature[]): Promise<Cleanup> {
+export interface StartOptions {
+  // Read preferences immediately while parser-dependent features wait for a root.
+  ready?: (signal: AbortSignal) => Promise<void>;
+}
+
+export async function startExtension(features: Feature[], options: StartOptions = {}): Promise<Cleanup> {
   const controller = new FeatureController(features);
+  const startup = new AbortController();
+  let ready = !options.ready;
   let settings: Settings | null = null;
   let disposed = false;
   let reading = 0;
@@ -20,7 +27,7 @@ export async function startExtension(features: Feature[]): Promise<Cleanup> {
       if (navigated && loadingRevision === null) void loadSettings();
       return;
     }
-    controller.update(new URL(href), settings);
+    if (ready) controller.update(new URL(href), settings);
   };
   const loadSettings = async () => {
     const revision = ++reading;
@@ -51,6 +58,7 @@ export async function startExtension(features: Feature[]): Promise<Cleanup> {
   const cleanup = () => {
     if (disposed) return;
     disposed = true;
+    startup.abort();
     unsubscribe();
     clearInterval(navigationCheck);
     window.removeEventListener('hashchange', refresh);
@@ -60,6 +68,18 @@ export async function startExtension(features: Feature[]): Promise<Cleanup> {
   };
   // The entrypoint starts a fresh runtime when pageshow restores the BFCache.
   window.addEventListener('pagehide', cleanup, { once: true });
-  await loadSettings();
+  const loading = loadSettings();
+  const prepare = options.ready;
+  const preparing = prepare ? Promise.resolve().then(() => prepare(startup.signal)).then(() => {
+    if (disposed) return;
+    ready = true;
+    refresh();
+  }) : Promise.resolve();
+  try {
+    await Promise.all([loading, preparing]);
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
   return cleanup;
 }

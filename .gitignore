@@ -10,6 +10,9 @@ node_modules/
 .env.*
 !.env.example
 
+# Development browser, downloads, and unpacked test builds
+/.local/dev-browser/
+
 # Logs
 *.log
 npm-debug.log*

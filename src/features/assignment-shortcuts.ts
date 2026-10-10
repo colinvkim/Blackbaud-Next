@@ -2,22 +2,24 @@ import { ASSIGNMENT_TOOLBAR_SELECTOR, isNativeAssignmentVisible, matchesAssignme
 import type { AssignmentShortcut } from '../blackbaud/assignment-list.ts';
 import { isAssignmentCenter } from '../blackbaud/routes.ts';
 import { addStyle, createButton, observeDom, watchElements } from '../shared/dom.ts';
+import type { IconName } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const hiddenAttribute = 'data-blackbaud-next-shortcut-hidden';
-const shortcuts: Array<{ key: AssignmentShortcut; label: string }> = [
-  { key: 'all', label: 'All loaded' },
-  { key: 'unfinished', label: 'Unfinished' },
-  { key: 'today', label: 'Due today' },
-  { key: 'tomorrow', label: 'Due tomorrow' },
+const shortcuts: Array<{ key: AssignmentShortcut; label: string; icon: IconName }> = [
+  { key: 'all', label: 'All loaded', icon: 'clipboard-list' },
+  { key: 'unfinished', label: 'Unfinished', icon: 'list-filter' },
+  { key: 'today', label: 'Due today', icon: 'calendar' },
+  { key: 'tomorrow', label: 'Due tomorrow', icon: 'calendar' },
 ];
 
 const styles = `
 [${hiddenAttribute}="true"] { display: none !important; }
-.bn-assignment-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 15px; border-bottom: 1px solid #dfe5ed; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
-.bn-assignment-shortcuts .bn-button[aria-pressed="true"] { background: #244f7c; color: #fff; border-color: #244f7c; }
-.bn-assignment-shortcuts .bn-button[aria-pressed="true"]:hover { background: #163963; color: #fff; }
+.bn-assignment-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-assignment-shortcuts .bn-button[aria-pressed="true"] { background: var(--bn-accent-soft, #eef6fa); color: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent, #0066a1); }
+.bn-assignment-shortcuts .bn-button[aria-pressed="true"]:hover { background: var(--bn-accent, #0066a1); color: #fff; border-color: var(--bn-accent, #0066a1); }
 .bn-assignment-shortcuts .bn-tool-status { margin-left: 4px; }
+@media (max-width: 480px) { .bn-assignment-shortcuts { padding: 12px; } .bn-assignment-shortcuts .bn-tool-status { flex-basis: 100%; margin: 2px 0 0; } }
 `;
 
 export const assignmentShortcutsFeature: Feature = {
@@ -40,8 +42,8 @@ export const assignmentShortcutsFeature: Feature = {
       const status = page.createElement('span');
       status.className = 'bn-tool-status';
       status.setAttribute('role', 'status');
-      const controls = shortcuts.map(({ key, label }) => {
-        const button = createButton(label);
+      const controls = shortcuts.map(({ key, label, icon }) => {
+        const button = createButton(label, icon);
         const choose = () => {
           if (disposed || signal.aborted) return;
           selected = key;

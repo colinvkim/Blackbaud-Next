@@ -1,20 +1,24 @@
 import { formatNativePageTitle, isNativeResourceVisible, isResourceBoard, nativePageTitle, nativeResourceOuterWidth, normalizeResourceText, RESOURCE_BOARD_SELECTOR, resourceBoardCards, resourceBoardLayout, resourceSearchTerms } from '../blackbaud/navigation.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
 import { addStyle, createButton, observeDom, watchElements } from '../shared/dom.ts';
+import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const resourceHiddenAttribute = 'data-blackbaud-next-resource-hidden';
 const resourceFilteredAttribute = 'data-blackbaud-next-resource-filtered';
 const resourceColumnProperty = '--blackbaud-next-resource-column-width';
 const RESOURCE_SEARCH_STYLES = `
-.bn-resource-search { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; font: 14px/1.5 system-ui, -apple-system, sans-serif; }
-.bn-resource-search label { margin: 0; font-weight: 600; }
-.bn-resource-search input { min-height: 36px; width: min(100%, 320px); padding: 6px 10px; border: 1px solid #bdc9d7; border-radius: 6px; color: #22354e; background: #fff; font: inherit; }
-.bn-resource-search input:focus-visible { outline: 3px solid #316bb6; outline-offset: 2px; }
+.bn-resource-search { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 12px 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--bn-border, #dde3e8); color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-resource-search label { margin: 0; font-size: 13px; font-weight: 600; }
+.bn-resource-search input { box-sizing: border-box; min-height: 40px; flex: 1 1 200px; min-width: 0; max-width: 360px; padding: 8px 12px; border: 1px solid var(--bn-border-strong, #bbc7d1); border-radius: var(--bn-radius, 8px); color: var(--bn-text, #222a35); background: var(--bn-surface, #fff); font: inherit; }
+.bn-resource-search .bn-button { min-height: 40px; }
+.bn-resource-search input:focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
 .bn-resource-search button[hidden] { display: none !important; }
 #board-container .board-container[${resourceFilteredAttribute}] { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(${resourceColumnProperty}, 277px)), 1fr)); align-items: start; gap: 16px; height: auto !important; overflow: visible !important; }
 #board-container .board-container[${resourceFilteredAttribute}] > .container-container.boxTopic.isotope-item { position: static !important; transform: none !important; }
 #board-container .board-container[${resourceFilteredAttribute}] > .container-container.boxTopic.isotope-item[${resourceHiddenAttribute}] { visibility: hidden !important; position: absolute !important; pointer-events: none !important; }
+@media (max-width: 480px) { .bn-resource-search { gap: 8px; } .bn-resource-search label { width: 100%; } .bn-resource-search input { max-width: none; } .bn-resource-search .bn-tool-status { flex-basis: 100%; } }
+@media (max-width: 480px), (pointer: coarse) { .bn-resource-search :is(input, .bn-button) { min-height: 44px; } }
 `;
 let searchNumber = 0;
 
@@ -82,7 +86,9 @@ export const resourceSearchFeature: Feature = {
       input.placeholder = 'Names or descriptions';
       label.htmlFor = input.id;
       label.textContent = 'Search resources';
-      const clear = createButton('Clear');
+      label.className = 'bn-icon-label';
+      label.prepend(createIcon('search'));
+      const clear = createButton('Clear', 'x');
       clear.hidden = true;
       const status = document.createElement('span');
       status.className = 'bn-tool-status';

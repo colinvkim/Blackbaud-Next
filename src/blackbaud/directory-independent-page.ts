@@ -1,5 +1,6 @@
 import { DIRECTORY_OWNER_ATTRIBUTE } from './directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_GATE_LIFETIME, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT, independentDirectoryRequest } from './directory-independent-protocol.ts';
+import { createIcon } from '../shared/icons.ts';
 import type { Cleanup } from '../shared/types.ts';
 
 type NativeMethod = (this: unknown, ...args: unknown[]) => unknown;
@@ -227,7 +228,9 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     message.textContent = 'Loading directory…';
     const original = page.document.createElement('button');
     original.type = 'button';
+    original.className = 'bn-button';
     original.textContent = 'Use original directory';
+    original.prepend(createIcon('arrow-left', page.document));
     original.addEventListener('click', () => { if (active === lease) release(true); });
     pendingUi.append(message, original);
     root.append(overview, pendingUi);

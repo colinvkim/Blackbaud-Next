@@ -1,21 +1,20 @@
 import { classDestinationForSection, classSearchTerms, NATIVE_CLASSES_MENU_SELECTOR, nativeClassMenuItems, nativeClassRowVisible, nativeClassSearchReference, normalizeClassSearch } from '../blackbaud/class-navigation.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
 import { addStyle, createButton, observeDom, watchElements } from '../shared/dom.ts';
+import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const hiddenAttribute = 'data-blackbaud-next-class-hidden';
 const menuAttribute = 'data-blackbaud-next-class-menu';
 const styles = `
-[${menuAttribute}] .bn-class-search { display: flex; flex-wrap: wrap; align-items: center; clear: both; box-sizing: border-box; width: 100%; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #dfe5ed; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
-.bn-class-search label { margin: 0; font-weight: 600; }
-.bn-class-search input { min-height: 34px; flex: 1 1 160px; min-width: 0; padding: 5px 9px; border: 1px solid #bdc9d7; border-radius: 6px; background: #fff; color: #22354e; font: inherit; }
-.bn-class-search input:focus-visible { outline: 3px solid #316bb6; outline-offset: 2px; }
+[${menuAttribute}] .bn-class-search { display: flex; flex-wrap: wrap; align-items: center; clear: both; box-sizing: border-box; width: 100%; gap: 8px; padding: 12px; border-bottom: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-class-search label { margin: 0; color: var(--bn-text, #222a35); font-size: 13px; font-weight: 600; }
+.bn-class-search input { box-sizing: border-box; min-height: 36px; flex: 1 1 160px; min-width: 0; padding: 6px 10px; border: 1px solid var(--bn-border-strong, #bbc7d1); border-radius: var(--bn-radius, 8px); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: inherit; }
+.bn-class-search input:focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
 .bn-class-search [hidden] { display: none !important; }
 [${menuAttribute}] li[${hiddenAttribute}] { display: none !important; }
-.bn-class-search .bn-tool-status { flex-basis: 100%; }
-#site-mobile-menu .bn-class-search { border-bottom-color: #50627d; }
-#site-mobile-menu .bn-class-search label { color: #f1f5f9; }
-#site-mobile-menu .bn-class-search .bn-tool-status { color: #cbd5e1; }
+.bn-class-search .bn-tool-status { flex-basis: 100%; color: var(--bn-muted, #657080); }
+@media (max-width: 480px), (pointer: coarse) { .bn-class-search input { min-height: 44px; } }
 `;
 let searchNumber = 0;
 
@@ -50,7 +49,9 @@ export const classNavigationFeature: Feature = {
       input.value = query;
       label.htmlFor = input.id;
       label.textContent = 'Search classes';
-      const clear = createButton('Clear');
+      label.className = 'bn-icon-label';
+      label.prepend(createIcon('search'));
+      const clear = createButton('Clear', 'x');
       const status = document.createElement('span');
       status.className = 'bn-tool-status';
       status.setAttribute('role', 'status');

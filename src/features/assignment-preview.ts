@@ -2,23 +2,41 @@ import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, assignmentInstructions, assignmentPre
 import type { AssignmentPreviewTarget } from '../blackbaud/assignment-preview.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
 import { addStyle, createButton, isActionable, observeDom } from '../shared/dom.ts';
+import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const panelId = 'blackbaud-next-assignment-preview';
 const styles = `
-.bn-preview-button { margin-left: 10px; min-height: 28px; padding: 3px 9px; font-size: 12px; }
-.bn-preview-panel { position: fixed; inset: 0 0 0 auto; z-index: 100000; box-sizing: border-box; width: min(460px, 100vw); padding: 24px; overflow: auto; border-left: 1px solid #d1dbe7; background: #fff; color: #22354e; box-shadow: -8px 0 32px #18314e24; font: 14px/1.55 system-ui, -apple-system, sans-serif; }
+.bn-preview-button { margin-left: 8px; min-height: 28px; padding: 4px 8px; vertical-align: middle; font-size: 12px; }
+.bn-preview-panel { position: fixed; inset: 0 0 0 auto; z-index: 100000; box-sizing: border-box; width: min(460px, 100vw); padding: 24px; overflow: auto; overscroll-behavior: contain; scroll-padding-block: 20px; border-left: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); box-shadow: -8px 0 32px #222a3514; font: 15px/1.6 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
 .bn-preview-panel * { box-sizing: border-box; }
-.bn-preview-panel h2 { margin: 16px 0 10px; font-size: 22px; line-height: 1.35; overflow-wrap: anywhere; }
-.bn-preview-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
-.bn-preview-meta { color: #526174; margin: 0 0 16px; }
+.bn-preview-panel > h2 { margin: 16px 0 8px; color: var(--bn-text, #222a35); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.bn-preview-panel :is(a, button, pre, table):focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
+.bn-preview-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--bn-border, #dde3e8); }
+.bn-preview-panel .bn-button { max-width: 100%; white-space: normal; }
+.bn-preview-actions > a.bn-button { background: var(--bn-accent, #0066a1); border-color: var(--bn-accent, #0066a1); color: #fff; }
+.bn-preview-actions > a.bn-button:hover { background: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent-hover, #004d7a); color: #fff; }
+.bn-preview-meta { color: var(--bn-muted, #657080); margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
 .bn-preview-instructions { overflow-wrap: anywhere; }
+.bn-preview-instructions :is(p, ul, ol, blockquote, pre, table) { margin: 0 0 12px; }
+.bn-preview-instructions :is(ul, ol) { padding-left: 20px; }
+.bn-preview-instructions blockquote { padding: 8px 12px; }
 .bn-preview-instructions :is(pre, table) { max-width: 100%; overflow: auto; }
-.bn-preview-instructions a, .bn-preview-attachments a { color: #245d9e; text-decoration: underline; }
-.bn-preview-attachments { margin-top: 24px; }
-.bn-preview-attachments h3 { font-size: 16px; }
-.bn-preview-attachments li { margin: 8px 0; }
-.bn-preview-note { margin-top: 24px; color: #526174; font-size: 12px; }
+.bn-preview-instructions table { display: block; width: max-content; }
+.bn-preview-instructions :is(h1, h2, h3, h4, h5, h6) { margin: 16px 0 8px; color: var(--bn-text, #222a35); font: 600 16px/1.4 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-preview-instructions :is(h1, h2) { font-size: 18px; }
+.bn-preview-instructions > :first-child { margin-top: 0; }
+.bn-preview-instructions > :last-child { margin-bottom: 0; }
+.bn-preview-instructions a, .bn-preview-attachments a { color: var(--bn-accent, #0066a1); text-decoration: underline; }
+.bn-preview-instructions a:hover, .bn-preview-attachments a:hover { color: var(--bn-accent-hover, #004d7a); }
+.bn-preview-attachments { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--bn-border, #dde3e8); }
+.bn-preview-attachments h3 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+.bn-preview-attachments ul { margin: 0; padding-left: 20px; }
+.bn-preview-attachments li { margin: 0; overflow-wrap: anywhere; }
+.bn-preview-attachments li + li { margin-top: 8px; }
+.bn-preview-note { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--bn-border, #dde3e8); color: var(--bn-muted, #657080); font-size: 12px; }
+@media (max-width: 480px) { .bn-preview-panel { padding: 16px; } .bn-preview-panel > h2 { font-size: 22px; } }
+@media (max-width: 480px), (pointer: coarse) { .bn-preview-button, .bn-preview-panel .bn-button { min-height: 44px; } }
 `;
 
 export const assignmentPreviewFeature: Feature = {
@@ -69,12 +87,13 @@ export const assignmentPreviewFeature: Feature = {
       currentPanel.setAttribute('aria-labelledby', `${panelId}-title`);
       const actions = document.createElement('div');
       actions.className = 'bn-preview-actions';
-      const closeButton = createButton('Close preview');
+      const closeButton = createButton('Close preview', 'x');
       closeButton.addEventListener('click', () => close());
       const full = document.createElement('a');
       full.className = 'bn-button';
       full.href = target.detailsUrl;
       full.textContent = 'Open full assignment';
+      full.prepend(createIcon('external-link'));
       actions.append(closeButton, full);
       const title = document.createElement('h2');
       title.id = `${panelId}-title`;
@@ -138,7 +157,7 @@ export const assignmentPreviewFeature: Feature = {
         } catch {
           if (!isCurrent()) return;
           status.textContent = 'The preview could not be loaded. You can retry or open the full assignment.';
-          const retry = createButton('Retry preview');
+          const retry = createButton('Retry preview', 'refresh');
           retry.addEventListener('click', () => { closeButton.focus(); void load(); });
           content.append(retry);
         }
@@ -158,7 +177,7 @@ export const assignmentPreviewFeature: Feature = {
         if (!target) continue;
         let control = controls.get(link);
         if (!control) {
-          const button = createButton('Preview');
+          const button = createButton('Preview', 'eye');
           button.classList.add('bn-preview-button');
           button.dataset.blackbaudNextPreview = 'true';
           button.setAttribute('aria-controls', panelId);

@@ -1,4 +1,6 @@
 import type { Cleanup } from './types.ts';
+import { createIcon } from './icons.ts';
+import type { IconName } from './icons.ts';
 
 type QueryRoot = Document | Element;
 type Watcher = () => void;
@@ -145,11 +147,12 @@ export function addStyle(id: string, css: string): Cleanup {
   return () => style.remove();
 }
 
-export function createButton(text: string): HTMLButtonElement {
+export function createButton(text: string, icon?: IconName): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'bn-button';
-  button.textContent = text;
+  if (icon) button.append(createIcon(icon));
+  button.append(document.createTextNode(text));
   return button;
 }
 

@@ -10,14 +10,17 @@ const TAB_FLOW_KEY = 'blackbaud-next-auth-flow-id';
 const pendingClaims = new WeakMap<Document, Promise<void>>();
 const providerFlows = new WeakMap<Document, string>();
 const LOGIN_STYLE = `
-.bn-login-option { margin-top: 12px; font: 14px/1.5 system-ui, sans-serif; }
-.bn-login-option .bn-button { width: 100%; padding: 10px 16px; color: #fff; background: #244e8f; border: 1px solid #244e8f; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600; }
-.bn-login-option .bn-button:focus-visible, #blackbaud-next-signin-status button:focus-visible { outline: 3px solid #f0b627; outline-offset: 3px; }
-.bn-login-option small { display: block; margin-top: 6px; color: #555; }
-#blackbaud-next-signin-status { position: fixed; bottom: 20px; right: 20px; z-index: 100000; width: min(360px, calc(100vw - 40px)); box-sizing: border-box; background: #fff; border: 1px solid #d8e1ed; border-radius: 10px; padding: 14px; box-shadow: 0 8px 30px #10284924; font: 14px/1.5 system-ui, sans-serif; color: #18314e; }
-#blackbaud-next-signin-status p { margin: 0 0 10px; }
+.bn-login-option { margin-top: 12px; color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-login-option .bn-button { width: 100%; min-height: 40px; padding: 10px 16px; color: #fff; background: var(--bn-accent, #0066a1); border: 1px solid var(--bn-accent, #0066a1); border-radius: var(--bn-radius, 8px); cursor: pointer; font: inherit; font-weight: 600; }
+.bn-login-option .bn-button:hover:not(:disabled) { background: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent-hover, #004d7a); }
+.bn-login-option .bn-button:disabled { opacity: .6; cursor: default; }
+.bn-login-option .bn-button:focus-visible, #blackbaud-next-signin-status button:focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
+.bn-login-option small { display: block; margin-top: 8px; color: var(--bn-muted, #657080); }
+#blackbaud-next-signin-status { position: fixed; bottom: 20px; right: 20px; z-index: 100000; width: min(360px, calc(100vw - 40px)); box-sizing: border-box; background: var(--bn-surface, #fff); border: 1px solid var(--bn-border, #dde3e8); border-radius: var(--bn-radius-lg, 12px); padding: 16px; box-shadow: var(--bn-shadow, 0 4px 16px #222a3510); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); color: var(--bn-text, #222a35); }
+#blackbaud-next-signin-status p { margin: 0 0 12px; }
 #blackbaud-next-signin-status .bn-login-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-#blackbaud-next-signin-status button { border: 1px solid #bdcbdc; border-radius: 5px; background: #f6f8fb; padding: 5px 9px; color: #18314e; font: inherit; cursor: pointer; }
+#blackbaud-next-signin-status button { min-height: 36px; border: 1px solid var(--bn-border-strong, #bbc7d1); border-radius: var(--bn-radius, 8px); background: var(--bn-surface, #fff); padding: 6px 10px; color: var(--bn-text, #222a35); font: inherit; font-weight: 600; cursor: pointer; }
+#blackbaud-next-signin-status button:hover { background: var(--bn-accent-soft, #eef6fa); border-color: var(--bn-accent, #0066a1); color: var(--bn-accent-hover, #004d7a); }
 @media (prefers-reduced-motion: reduce) { #blackbaud-next-signin-status { scroll-behavior: auto; } }
 `;
 

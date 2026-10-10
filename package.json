@@ -4,18 +4,27 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.5.2",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "pnpm check && node scripts/build.ts",
     "dev": "node scripts/build.ts --watch",
+    "dev:browser": "node scripts/dev-browser.ts",
     "check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:browser": "node --experimental-strip-types --test tests/*.smoke.ts"
   },
   "devDependencies": {
+    "@puppeteer/browsers": "3.2.4",
     "@types/jsdom": "^21.1.7",
     "@types/node": "20.19.41",
     "jsdom": "^27.0.0",
+    "puppeteer-core": "25.13.0",
     "typescript": "5.9.3",
     "vite": "8.0.14"
+  },
+  "dependencies": {
+    "lucide": "^1.53.0"
   }
 }
