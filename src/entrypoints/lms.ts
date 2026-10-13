@@ -3,7 +3,7 @@ import { loginFeature } from '../features/login.ts';
 import { rosterToolsFeature } from '../features/roster-tools.ts';
 import { avatarDownloadFeature } from '../features/avatar-download.ts';
 import { faviconFeature } from '../features/favicon.ts';
-import { oldAssignmentCenterFeature, assignmentRecoveryFeature } from '../features/assignment-center.ts';
+import { oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature } from '../features/assignment-center.ts';
 import { assignmentShortcutsFeature } from '../features/assignment-shortcuts.ts';
 import { assignmentPreviewFeature } from '../features/assignment-preview.ts';
 import { helpfulTabTitlesFeature, resourceSearchFeature } from '../features/navigation.ts';
@@ -16,7 +16,7 @@ import { directoryLoadingFeature } from '../features/directory-loading.ts';
 function start() {
   void startExtension([
     loginFeature, faviconFeature,
-    oldAssignmentCenterFeature, assignmentRecoveryFeature, rosterToolsFeature, avatarDownloadFeature,
+    oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature, rosterToolsFeature, avatarDownloadFeature,
     assignmentShortcutsFeature, assignmentPreviewFeature, helpfulTabTitlesFeature, resourceSearchFeature,
     classNavigationFeature,
     assignmentWarmupFeature,

@@ -1,11 +1,58 @@
 import { isAssignmentCenter, isLmsPage, legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
 import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
-import { createButton, observeDom, watchElements } from '../shared/dom.ts';
+import { ASSIGNMENT_DETAILS_SELECTOR, assignmentBreadcrumbLinks, assignmentCenterUrl, isAssignmentDetail, isNativeAssignmentBackLink } from '../blackbaud/assignment-navigation.ts';
+import { createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 
 export const ASSIGNMENT_STALL_DELAY = 15_000;
 export const ASSIGNMENT_RECOVERY_COOLDOWN = 60_000;
 const recoveryStorageKey = 'blackbaud-next-assignment-recovery';
+
+export const assignmentBreadcrumbFeature: Feature = {
+  id: 'assignment-breadcrumb',
+  settingsKeys: ['oldAssignmentCenter'],
+  enabled: () => true,
+  matches: isAssignmentDetail,
+  mount: ({ url, settings, signal }) => {
+    const destination = settings.oldAssignmentCenter ? legacyAssignmentCenterUrl(url) : assignmentCenterUrl(url);
+    return watchAddedElements<HTMLElement>(ASSIGNMENT_DETAILS_SELECTOR, (root) => {
+      const nativeHrefs = new Map<HTMLAnchorElement, string>();
+      let disposed = false;
+      const restoreLink = (link: HTMLAnchorElement) => {
+        const nativeHref = nativeHrefs.get(link);
+        if (nativeHref !== undefined && link.getAttribute('href') === destination) link.setAttribute('href', nativeHref);
+        nativeHrefs.delete(link);
+      };
+      const update = () => {
+        if (disposed || signal.aborted || window.location.href !== url.href) return;
+        const currentLinks = new Set(assignmentBreadcrumbLinks(root));
+        for (const link of nativeHrefs.keys()) {
+          if (!currentLinks.has(link) || !root.contains(link)) restoreLink(link);
+        }
+        for (const link of currentLinks) {
+          // The native action is a javascript: href, so a real link fixes Back
+          // without intercepting clicks or changing keyboard/new-tab behavior.
+          if (isNativeAssignmentBackLink(link)) {
+            nativeHrefs.set(link, link.getAttribute('href')!);
+            link.setAttribute('href', destination);
+          } else if (link.getAttribute('href') !== destination) {
+            // A native rerender may give this control a different purpose.
+            nativeHrefs.delete(link);
+          }
+        }
+      };
+      const textObserver = new MutationObserver(update);
+      textObserver.observe(root, { subtree: true, characterData: true });
+      const stop = observeDom(update, signal, root);
+      return () => {
+        disposed = true;
+        stop();
+        textObserver.disconnect();
+        for (const link of nativeHrefs.keys()) restoreLink(link);
+      };
+    }, signal, document, []);
+  },
+};
 
 export function recoveryRemaining(storage: Pick<Storage, 'getItem'>, route: string, now: number): number {
   try {
