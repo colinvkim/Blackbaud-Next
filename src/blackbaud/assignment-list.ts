@@ -2,6 +2,7 @@ export type AssignmentShortcut = 'all' | 'unfinished' | 'today' | 'tomorrow';
 
 export const ASSIGNMENT_LINK_SELECTOR = 'app-assignment-title-link a[href]';
 export const ASSIGNMENT_ROW_SELECTOR = 'sky-repeater-item.assignment-repeater-item';
+export const ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR = 'sky-toolbar';
 export const ASSIGNMENT_TOOLBAR_SELECTOR = 'sky-toolbar:has(input[aria-label="Search items"])';
 
 export interface NativeAssignmentRow {
@@ -28,30 +29,34 @@ export function isFinishedAssignmentStatus(status: string): boolean {
   return /^(?:completed|submitted|graded)$/i.test(status.trim());
 }
 
+export function readAssignmentRow(element: HTMLElement): NativeAssignmentRow | null {
+  if (!element.matches(ASSIGNMENT_ROW_SELECTOR)) return null;
+  const links = [...element.querySelectorAll<HTMLAnchorElement>(ASSIGNMENT_LINK_SELECTOR)].filter((link) =>
+    link.closest(ASSIGNMENT_ROW_SELECTOR) === element && assignmentTitleLinkUrl(link),
+  );
+  if (links.length !== 1) return null;
+  const link = links[0]!;
+  const details = element.querySelector<HTMLElement>('.assignment-center-middle-block > div.assignment-details.sky-font-deemphasized');
+  // Assigned dates and other metadata share this block. Only its labeled Due
+  // field is a source; missing/unsupported dates remain unknown.
+  const dueText = details?.textContent?.split('|').map((field) => field.trim()).find((field) => /^Due:\s*/i.test(field));
+  const status = element.querySelector('app-assignment-status-display button')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  return {
+    element,
+    group: element.parentElement?.closest<HTMLElement>('sky-repeater-item') ?? null,
+    link,
+    title: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    dueDate: dueText ? parseAssignmentDate(dueText.replace(/^Due:\s*/i, '')) : null,
+    status,
+    finished: isFinishedAssignmentStatus(status),
+  };
+}
+
 export function readAssignmentRows(root: Document | Element): NativeAssignmentRow[] {
-  const rows: NativeAssignmentRow[] = [];
-  for (const element of root.querySelectorAll<HTMLElement>(ASSIGNMENT_ROW_SELECTOR)) {
-    const links = [...element.querySelectorAll<HTMLAnchorElement>(ASSIGNMENT_LINK_SELECTOR)].filter((link) =>
-      link.closest(ASSIGNMENT_ROW_SELECTOR) === element && assignmentTitleLinkUrl(link),
-    );
-    if (links.length !== 1) continue;
-    const link = links[0]!;
-    const details = element.querySelector<HTMLElement>('.assignment-center-middle-block > div.assignment-details.sky-font-deemphasized');
-    // Assigned dates and other metadata share this block. Only its labeled Due
-    // field is a source; missing/unsupported dates remain unknown.
-    const dueText = details?.textContent?.split('|').map((field) => field.trim()).find((field) => /^Due:\s*/i.test(field));
-    const status = element.querySelector('app-assignment-status-display button')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-    rows.push({
-      element,
-      group: element.parentElement?.closest<HTMLElement>('sky-repeater-item') ?? null,
-      link,
-      title: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-      dueDate: dueText ? parseAssignmentDate(dueText.replace(/^Due:\s*/i, '')) : null,
-      status,
-      finished: isFinishedAssignmentStatus(status),
-    });
-  }
-  return rows;
+  return [...root.querySelectorAll<HTMLElement>(ASSIGNMENT_ROW_SELECTOR)].flatMap((element) => {
+    const row = readAssignmentRow(element);
+    return row ? [row] : [];
+  });
 }
 
 export function isNativeAssignmentVisible(element: HTMLElement): boolean {

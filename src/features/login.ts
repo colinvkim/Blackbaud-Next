@@ -1,13 +1,12 @@
-import { accountPreferenceForSchool, AUTH_CONTEXT_PREFIX, canAttempt, createAuthContext, parseAuthContext, schoolFromSigninUrl, selectAuthContext, selectProviderAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
+import { accountPreferenceForSchool, canAttempt, hasSigninRedirect, schoolFromSigninUrl, selectAuthContext, selectProviderAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
 import type { AuthContext } from '../blackbaud/auth.ts';
-import { accountChoices, findBlackbaudGoogleButton, findGoogleAccount } from '../blackbaud/auth-dom.ts';
+import { accountChoices, findBlackbaudGoogleButton, findGoogleAccount, findSchoolSigninAnchor } from '../blackbaud/auth-dom.ts';
 import { blackbaudSigninUrl, isBlackbaudSignin, isGoogleOAuth, isLmsPage, isSchoolPage } from '../blackbaud/routes.ts';
 import { addStyle, createButton, observeDom, waitForElement, waitForReadyElement } from '../shared/dom.ts';
-import { extensionApi } from '../shared/extension.ts';
+import { claimAuthAttempt, createAuthFlow, pauseAuthFlow, readAuthContexts, recoverAuthFlow, removeAuthFlow, waitForAuthClaim } from '../shared/auth-flow.ts';
 import type { Cleanup, Feature, FeatureContext } from '../shared/types.ts';
 
 const TAB_FLOW_KEY = 'blackbaud-next-auth-flow-id';
-const pendingClaims = new WeakMap<Document, Promise<void>>();
 const providerFlows = new WeakMap<Document, string>();
 const LOGIN_STYLE = `
 .bn-login-option { margin-top: 12px; color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
@@ -30,38 +29,6 @@ function readTabFlowId(): string | undefined {
 
 function rememberTabFlow(id: string): void {
   try { sessionStorage.setItem(TAB_FLOW_KEY, id); } catch { /* Storage can be disabled by the browser. */ }
-}
-
-async function readContexts(): Promise<AuthContext[]> {
-  const storage = extensionApi().storage.local;
-  const values = await storage.get(null);
-  const contexts: AuthContext[] = [];
-  const expiredKeys: string[] = [];
-  for (const [key, value] of Object.entries(values)) {
-    if (!key.startsWith(AUTH_CONTEXT_PREFIX)) continue;
-    const context = parseAuthContext(value);
-    if (context && key === `${AUTH_CONTEXT_PREFIX}${context.id}`) contexts.push(context);
-    else expiredKeys.push(key);
-  }
-  if (expiredKeys.length) await storage.remove(expiredKeys);
-  return contexts;
-}
-
-function saveContext(context: AuthContext): Promise<void> {
-  return extensionApi().storage.local.set({ [`${AUTH_CONTEXT_PREFIX}${context.id}`]: context });
-}
-
-async function releaseUnusedClaim(id: string, step: 'blackbaud' | 'google', token: string): Promise<AuthContext | null> {
-  const key = `${AUTH_CONTEXT_PREFIX}${id}`;
-  const values = await extensionApi().storage.local.get(key);
-  const latest = parseAuthContext(values[key]);
-  // Never undo a reservation made by a newer flow or provider instance. Keep
-  // the latest pause flag and counters belonging to the other provider intact.
-  if (!latest || latest[`${step}Claim`] !== token || latest[`${step}Attempts`] !== 1) return latest;
-  const released = { ...latest, [`${step}Attempts`]: 0 };
-  delete released[`${step}Claim`];
-  await saveContext(released);
-  return released;
 }
 
 async function waitForAccountChoices(signal: AbortSignal, preference: string): Promise<HTMLElement[]> {
@@ -102,8 +69,7 @@ async function waitForAccountChoices(signal: AbortSignal, preference: string): P
 }
 
 async function newContext(hostname: string): Promise<AuthContext> {
-  const context = createAuthContext(hostname, crypto.randomUUID());
-  await saveContext(context);
+  const context = await createAuthFlow(hostname, crypto.randomUUID());
   rememberTabFlow(context.id);
   return context;
 }
@@ -139,8 +105,7 @@ function mountLogin(context: FeatureContext): Cleanup {
     controller.abort();
     hideStatus();
     if (flow) {
-      flow = { ...flow, paused: true };
-      try { await saveContext(flow); } catch { /* This page's automation is already stopped. */ }
+      try { flow = await pauseAuthFlow(flow.id); } catch { /* This page's automation is already stopped. */ }
     }
   };
 
@@ -169,51 +134,12 @@ function mountLogin(context: FeatureContext): Cleanup {
     statusTimer = setTimeout(() => { if (active) void pause(); else hideStatus(); }, 15_000);
   };
 
-  const refreshFlow = async (): Promise<AuthContext | null> => {
-    if (!flow) return null;
-    const values = await extensionApi().storage.local.get(`${AUTH_CONTEXT_PREFIX}${flow.id}`);
-    flow = parseAuthContext(values[`${AUTH_CONTEXT_PREFIX}${flow.id}`]);
-    if (flow?.paused) paused = true;
-    return flow;
-  };
-
   const claimAttempt = async <T extends HTMLElement>(step: 'blackbaud' | 'google', find: () => T | null): Promise<boolean> => {
-    const page = document;
-    const previous = pendingClaims.get(page);
-    const attempt = (async () => {
-      if (previous) await previous;
-      if (signal.aborted || paused) return false;
-      const latest = await refreshFlow();
-      if (signal.aborted || paused || !latest || !canAttempt(latest, step) || !find()) return false;
-      const token = crypto.randomUUID();
-      let clicked = false;
-      try {
-        flow = { ...latest, [`${step}Attempts`]: 1, [`${step}Claim`]: token };
-        await saveContext(flow);
-        if (signal.aborted || paused) return false;
-        const element = find();
-        if (!element) return false;
-        // Keep the final readiness check and click in the same synchronous turn.
-        clicked = true;
-        element.click();
-        return true;
-      } finally {
-        // Release only our unused reservation, including when teardown happened
-        // during the write. A remount waits for this rollback before reading it.
-        if (!clicked) {
-          const current = await releaseUnusedClaim(latest.id, step, token);
-          if (flow?.id === latest.id) flow = current;
-          if (current?.paused) paused = true;
-        }
-      }
-    })();
-    const pending = attempt.then(() => {}, () => {});
-    pendingClaims.set(page, pending);
-    try {
-      return await attempt;
-    } finally {
-      if (pendingClaims.get(page) === pending) pendingClaims.delete(page);
-    }
+    if (signal.aborted || paused || !flow) return false;
+    const result = await claimAuthAttempt(page, flow, step, signal, find);
+    flow = result.flow;
+    if (flow?.paused) paused = true;
+    return result.clicked;
   };
 
   const readyAttempt = async <T extends HTMLElement>(step: 'blackbaud' | 'google', find: () => T | null): Promise<boolean> => {
@@ -233,7 +159,7 @@ function mountLogin(context: FeatureContext): Cleanup {
       for (const [anchor, element] of added) {
         if (!anchor.isConnected || !element.isConnected || anchor.parentElement !== element.parentElement) { element.remove(); added.delete(anchor); }
       }
-      const anchor = document.querySelector('#nextBtn');
+      const anchor = findSchoolSigninAnchor();
       if (!anchor || added.has(anchor)) return;
       const option = document.createElement('div');
       option.className = 'bn-login-option';
@@ -247,8 +173,7 @@ function mountLogin(context: FeatureContext): Cleanup {
           // The school page already prepares a flow for native sign-in. Reuse
           // its ID so the direct button cannot create an ambiguous second flow.
           if (flow && flow.hostname === url.hostname) {
-            flow = createAuthContext(url.hostname, flow.id);
-            await saveContext(flow);
+            flow = await createAuthFlow(url.hostname, flow.id);
             rememberTabFlow(flow.id);
           } else {
             flow = await newContext(url.hostname);
@@ -267,10 +192,9 @@ function mountLogin(context: FeatureContext): Cleanup {
   };
 
   const run = async () => {
-    const pending = pendingClaims.get(page);
-    if (pending) await pending;
+    await waitForAuthClaim(page);
     if (signal.aborted) return;
-    const contexts = await readContexts();
+    const contexts = await readAuthContexts();
     if (signal.aborted) return;
     const storedId = readTabFlowId();
     // Per-origin session storage survives returning to a provider later. An ID
@@ -282,7 +206,7 @@ function mountLogin(context: FeatureContext): Cleanup {
       flow = rememberedId ? selectAuthContext(contexts, { id: rememberedId, hostname: url.hostname }) : null;
       if (isLmsPage(url)) {
         // Clear only the flow belonging to this tab's original school page.
-        if (flow && rememberedId) await extensionApi().storage.local.remove(`${AUTH_CONTEXT_PREFIX}${flow.id}`);
+        if (flow && rememberedId) await removeAuthFlow(flow.id);
         return;
       }
       if (settings.automaticLogin && !flow) flow = await newContext(url.hostname);
@@ -292,6 +216,7 @@ function mountLogin(context: FeatureContext): Cleanup {
 
     if (!settings.automaticLogin) return;
     const school = isBlackbaudSignin(url) ? schoolFromSigninUrl(url) : null;
+    if (isBlackbaudSignin(url) && hasSigninRedirect(url) && !school) return;
     const boundId = providerFlows.get(page);
     flow = boundId
       ? selectAuthContext(contexts, { id: boundId, ...(school ? { hostname: school } : {}) })
@@ -310,13 +235,17 @@ function mountLogin(context: FeatureContext): Cleanup {
         if (flow.recoveryAttempts === 0 && statusActions) {
           const retry = createButton('Retry sign-in');
           retry.addEventListener('click', async () => {
-            const latest = await refreshFlow();
-            if (signal.aborted || !latest || !canAttempt(latest, 'recovery')) return;
-            flow = { ...latest, recoveryAttempts: 1, blackbaudAttempts: 0, googleAttempts: 0 };
-            delete flow.blackbaudClaim;
-            delete flow.googleClaim;
-            await saveContext(flow);
-            if (!signal.aborted) window.location.assign(blackbaudSigninUrl(flow.hostname));
+            if (signal.aborted || retry.disabled || !flow) return;
+            retry.disabled = true;
+            try {
+              flow = await recoverAuthFlow(flow.id);
+              if (!signal.aborted && flow) window.location.assign(blackbaudSigninUrl(flow.hostname));
+            } catch {
+              if (!signal.aborted) {
+                retry.disabled = false;
+                showStatus('Sign-in could not restart. Use Blackbaud’s sign-in controls.');
+              }
+            }
           });
           statusActions.prepend(retry);
         }

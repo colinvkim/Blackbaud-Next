@@ -2,31 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { nativeNavigationIconTargets } from '../src/blackbaud/appearance-icons.ts';
+import { nativeLowerNavigation, nativePrimaryNavigation } from './fixtures/header.ts';
 
 const origin = 'https://example.myschoolapp.com';
 const legacyUrl = `${origin}/app/student?svcid=edu#studentmyday/progress`;
 const modernUrl = `${origin}/lms-assignment/assignment-center/student?svcid=edu`;
-const top = [
-  ['group-header-Classes', 'Classes', 'classes_48.png', '#'],
-  ['group-header-Groups', 'Groups', 'groups.png', '/app/SignOut'],
-  ['group-header-Resources', 'Resources', 'resources.png', '/app/student?svcid=edu#resourceboard'],
-  ['group-header-News', 'News', 'news.png', '#'],
-  ['calendar-subnav', 'Calendar', 'calendar.png', '/app/student?svcid=edu#calendar'],
-  ['directory-subnav', 'Directories', 'directory.png', '#'],
-] as const;
-const lower = [
-  ['progress-btn', 'p3icon-progress', '/app/student?svcid=edu#studentmyday/progress'],
-  ['schedule-btn', 'p3icon-schedule', '/app/student?svcid=edu#studentmyday/schedule'],
-  ['assignment-center-btn', 'p3icon-assignments', '/lms-assignment/assignment-center/student/?svcid=edu'],
-  ['course-requests-btn', 'p3icon-courseRequest', '/edu-self-registration/student-course-requests?svcid=edu'],
-] as const;
-
 function html(modern = false): string {
-  return `<header id="site-header"></header><nav id="site-nav-container"><ul class="topnav">
-    <li><a id="myday" class="${modern ? 'root-nav-item' : ''}" href="/app/student#studentmyday"><span class="dayicon">9</span><span class="desc"><span class="title">My Day</span></span></a></li>
-    ${top.map(([id, title, file, href]) => `<li><a id="${id}" class="${modern ? 'root-nav-item' : ''}" href="${modern && id === 'group-header-Groups' ? '#' : !modern ? href.replace('/app/student', '') : href}"><img src="//libs-w2.myschoolapp.com/p3-cache/img/48x48/${file}"><${modern ? 'div' : 'span'} class="desc"><${modern ? 'div' : 'span'} class="title">${modern ? `<div>${title}</div>` : title}</${modern ? 'div' : 'span'}></${modern ? 'div' : 'span'}><${modern ? 'sky-icon iconname="caret-down"' : 'span class="caret"'}></${modern ? 'sky-icon' : 'span'}></a></li>`).join('')}
-    </ul></nav><nav id="site-nav-lower"><ul>${lower.map(([id, icon, href]) => `<li><a ${modern ? '' : `id="${id}"`} href="${href}"><i class="${icon}"></i>Native navigation</a></li>`).join('')}</ul></nav>
-    ${modern ? '<app-root></app-root>' : '<main id="site-main"></main>'}`;
+  return '<header id="site-header"></header>' +
+    nativePrimaryNavigation(modern, { counts: false, myDayId: 'myday', dayBadge: 'day', relativeLegacyLinks: true }) +
+    nativeLowerNavigation(modern, 'Native navigation') +
+    (modern ? '<app-root></app-root>' : '<main id="site-main"></main>');
 }
 
 function fixture(modern: boolean, inspect: (page: Document, url: URL) => void, path = modern ? modernUrl : legacyUrl): void {

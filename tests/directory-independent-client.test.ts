@@ -400,7 +400,7 @@ test('configuration and people transfer concurrently while the pending shell rem
     '/api/directory/directoryget?directoryId=123',
     '/api/directory/directoryresultsget?directoryId=123&searchVal=&facets=&searchAll=false',
   ]);
-  assert.equal(reads.requests[0]!.signal, reads.requests[1]!.signal);
+  assert.ok(reads.requests.every((request) => !request.signal.aborted));
   reads.finish('people');
   for (let count = 0; count < 5; count++) await Promise.resolve();
   assert.equal(resolved, false);
@@ -433,9 +433,55 @@ test('search-first configuration prevents a complete blank response from enablin
   cleanups.push(lease.release);
   assert.equal(lease.searchOnly, true);
   assert.equal(lease.snapshot.complete, false);
-  // The feature masks initial entries for search-first mode; the lease carries
-  // that policy even when an unexpected blank API response contains people.
-  assert.equal(lease.snapshot.totalCount, 1);
+  // Search-first policy discards the unused blank result before leasing it.
+  assert.equal(lease.snapshot.totalCount, 0);
+  assert.deepEqual(lease.snapshot.entries, []);
+});
+
+for (const failure of ['HTTP failure', 'unsupported records'] as const) {
+  test(`search-first configuration can mount after a speculative blank read returns ${failure}`, async (t) => {
+    const frame = fixture();
+    let resolveConfiguration!: (response: Response) => void;
+    const configurationRead = new Promise<Response>((resolve) => { resolveConfiguration = resolve; });
+    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL) => {
+      if (String(input).includes('/directoryget?')) return configurationRead;
+      return failure === 'HTTP failure'
+        ? new Response('Blank results unavailable', { status: 503 })
+        : new Response(JSON.stringify([{ unsupported: true }]));
+    });
+    const acquisition = acquireIndependentDirectory(target, new AbortController().signal);
+    for (let count = 0; count < 8; count++) await Promise.resolve();
+    assert.equal(frame.actions('release').length, 0);
+    resolveConfiguration(new Response(JSON.stringify({ ...configuration, DefaultResults: false })));
+    const lease = await acquisition;
+    assert.ok(lease);
+    cleanups.push(lease.release);
+    assert.equal(lease.searchOnly, true);
+    assert.deepEqual(lease.snapshot, { entries: [], totalCount: 0, reportedTotalCount: 0, complete: false });
+    assert.equal(frame.root.querySelector(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}]`), null);
+  });
+}
+
+test('search-first configuration cancels a pending click-captured blank read without waiting for it', async (t) => {
+  fixture();
+  const source = new URL(`${target.origin}/app/student?svcid=edu#studentmyday/progress`);
+  let current = source;
+  let captureSignal: AbortSignal | undefined;
+  const manager = createDirectoryLoadingManager((_target, signal) => {
+    captureSignal = signal;
+    return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  }, () => current, () => 0);
+  cleanups.push(registerDirectoryLoadingManager(manager));
+  assert.equal(manager.start(target, source, new URL(href)), true);
+  current = new URL(href);
+  const requests = immediateReads(t, { ...configuration, DefaultResults: false });
+  const lease = await acquireIndependentDirectory(target, new AbortController().signal);
+  assert.ok(lease);
+  cleanups.push(lease.release);
+  assert.equal(captureSignal?.aborted, true);
+  assert.deepEqual(requests, ['/api/directory/directoryget?directoryId=123']);
+  assert.equal(lease.snapshot.totalCount, 0);
+  assert.equal(manager.claim(target, new AbortController().signal), null);
 });
 
 test('a click-captured people read is reused while independent configuration starts separately', async (t) => {

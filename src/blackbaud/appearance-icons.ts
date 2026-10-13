@@ -1,10 +1,21 @@
 import type { IconName } from '../shared/icons.ts';
-import { nativeLegacyAppearanceShell, nativeModernAppearanceShell } from './appearance.ts';
+import { nativeAppearanceShellKind } from './appearance.ts';
+import type { NativeAppearanceShellKind } from './appearance.ts';
 
 export interface NativeNavigationIconTarget {
   control: HTMLAnchorElement;
   kind: IconName;
   original: Element | null;
+}
+
+export interface NativeAppearanceNavigation {
+  shell: NativeAppearanceShellKind | null;
+  icons: NativeNavigationIconTarget[];
+}
+
+export function nativeAppearanceNavigation(page: Document, url: URL): NativeAppearanceNavigation {
+  const shell = nativeAppearanceShellKind(url, page);
+  return { shell, icons: nativeNavigationIconTargets(page, url, shell) };
 }
 
 const topItems = [
@@ -72,7 +83,7 @@ function nativeImage(control: HTMLAnchorElement, file: string, modern: boolean):
   if (images.length !== 1) return undefined;
   const image = images[0]!;
   if (image.matches('.caret, [aria-controls], [aria-haspopup], [onclick]') || image.getAttribute('alt')?.trim() ||
-    image.hasAttribute('aria-label') || image.hasAttribute('tabindex') ||
+    image.hasAttribute('aria-label') || image.hasAttribute('aria-labelledby') || image.hasAttribute('tabindex') ||
     (image.hasAttribute('role') && !['none', 'presentation'].includes(image.getAttribute('role')!))) return undefined;
   try {
     const source = new URL(image.getAttribute('src') ?? '', control.ownerDocument.baseURI);
@@ -87,7 +98,7 @@ function nativeLowerIcon(control: HTMLAnchorElement, className: string): Element
   const icon = icons[0];
   if (icons.length !== 1 || !icon?.classList.contains(className) ||
     [...icon.classList].some((name) => name.startsWith('p3icon-') && name !== className) ||
-    icon.matches('[aria-controls], [aria-haspopup], [onclick]') || icon.hasAttribute('aria-label') ||
+    icon.matches('[aria-controls], [aria-haspopup], [onclick], [aria-label], [aria-labelledby]') ||
     icon.hasAttribute('tabindex') || icon.children.length || icon.textContent?.trim() ||
     (icon.hasAttribute('role') && !['none', 'presentation'].includes(icon.getAttribute('role')!))) return null;
   return icon;
@@ -98,9 +109,9 @@ function nativeDayBadge(control: HTMLAnchorElement): Element | null {
   const badge = badges[0];
   const day = /^(?:0?[1-9]|[12]\d|3[01])$/;
   if (badges.length !== 1 || !badge || !['SPAN', 'DIV'].includes(badge.tagName) ||
-    badge.matches('[aria-controls], [aria-haspopup], [onclick], [tabindex], [aria-label]') ||
+    badge.matches('[aria-controls], [aria-haspopup], [onclick], [tabindex], [aria-label], [aria-labelledby]') ||
     (badge.hasAttribute('role') && !['none', 'presentation'].includes(badge.getAttribute('role')!)) ||
-    badge.querySelector('a, button, input, select, textarea, img, svg, i, sky-icon, [tabindex], [onclick], [aria-controls], [aria-haspopup], [aria-label], [role]:not([role="none"]):not([role="presentation"])') ||
+    badge.querySelector('a, button, input, select, textarea, img, svg, i, sky-icon, [tabindex], [onclick], [aria-controls], [aria-haspopup], [aria-label], [aria-labelledby], [role]:not([role="none"]):not([role="presentation"])') ||
     control.querySelector(':scope > img, :scope > i, :scope > svg:not([data-bn-navigation-icon]), :scope > sky-icon:not([iconname="caret-down"])')) return null;
   if (!badge.children.length) return day.test(badge.textContent?.trim() ?? '') ? badge : null;
   const month = badge.querySelectorAll(':scope > span.month');
@@ -111,10 +122,9 @@ function nativeDayBadge(control: HTMLAnchorElement): Element | null {
 }
 
 /** Read only known native navigation; each returned control keeps its action and text. */
-export function nativeNavigationIconTargets(page: Document, url: URL): NativeNavigationIconTarget[] {
-  const legacy = nativeLegacyAppearanceShell(url, page) !== null;
-  const modern = !legacy && nativeModernAppearanceShell(url, page) !== null;
-  if (!legacy && !modern) return [];
+export function nativeNavigationIconTargets(page: Document, url: URL, shell = nativeAppearanceShellKind(url, page)): NativeNavigationIconTarget[] {
+  if (!shell) return [];
+  const modern = shell === 'modern';
   const navigation = page.querySelector('#site-nav-container')!;
   const controls = [...navigation.querySelectorAll<HTMLAnchorElement>('.topnav > li > a')];
   const targets: NativeNavigationIconTarget[] = [];

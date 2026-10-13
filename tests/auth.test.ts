@@ -7,6 +7,8 @@ import { isBlackbaudSignin, isGoogleOAuth } from '../src/blackbaud/routes.ts';
 import { loginFeature } from '../src/features/login.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import type { Settings } from '../src/shared/settings.ts';
+import { createCoordinator } from '../src/background/coordinator.ts';
+import type { ExtensionApi } from '../src/shared/extension.ts';
 
 test('school account matching requires the complete email or domain', () => {
   assert.equal(accountMatchesPreference('student@students.polytechnic.org', 'students.polytechnic.org'), true);
@@ -127,7 +129,13 @@ function loginFixture(url: string, html: string, settings: Partial<Settings> = {
     },
     async remove(keys: string | string[]) { for (const key of Array.isArray(keys) ? keys : [keys]) delete storage[key]; },
   };
-  for (const [key, value] of Object.entries({ window: page.window, document: page.window.document, MutationObserver: page.window.MutationObserver, sessionStorage: page.window.sessionStorage, chrome: { storage: { local } } })) {
+  const api = { storage: { local }, runtime: { id: 'auth-fixture', getURL: (path: string) => `chrome-extension://auth-fixture/${path}` } } as ExtensionApi;
+  const handle = createCoordinator(api);
+  api.runtime.sendMessage = async (message) => {
+    try { return { ok: true, value: await handle(message, { id: api.runtime.id, url }) }; }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Failed' }; }
+  };
+  for (const [key, value] of Object.entries({ window: page.window, document: page.window.document, MutationObserver: page.window.MutationObserver, sessionStorage: page.window.sessionStorage, chrome: api })) {
     previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
@@ -171,6 +179,54 @@ function loginFixture(url: string, html: string, settings: Partial<Settings> = {
 const settle = () => new Promise<void>((resolve) => setImmediate(() => setImmediate(resolve)));
 const after = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const googleUrl = `https://accounts.google.com/v3/signin/accountchooser?redirect_uri=${encodeURIComponent('https://id.blackbaud.com/bbid.onmicrosoft.com/oauth2/authresp')}`;
+
+test('native lowercase redirect identifies a school and rejects conflicting or unsafe values', () => {
+  const school = 'https://polytechnic.myschoolapp.com/app/student';
+  const url = new URL(`https://app.blackbaud.com/signin/?redirecturl=${encodeURIComponent(school)}`);
+  assert.equal(schoolFromSigninUrl(url), 'polytechnic.myschoolapp.com');
+  url.searchParams.set('redirectUrl', school);
+  assert.equal(schoolFromSigninUrl(url), 'polytechnic.myschoolapp.com');
+  url.searchParams.set('redirectUrl', 'https://chandler.myschoolapp.com/app/student');
+  assert.equal(schoolFromSigninUrl(url), null);
+  url.searchParams.delete('redirectUrl');
+  url.searchParams.set('redirecturl', 'https://polytechnic.myschoolapp.com.evil.example/app/student');
+  assert.equal(schoolFromSigninUrl(url), null);
+});
+
+test('native lowercase direct sign-in creates its own flow and continues once', async () => {
+  const fixture = loginFixture('https://app.blackbaud.com/signin/?redirecturl=https%3A%2F%2Fpolytechnic.myschoolapp.com%2Fapp%2Fstudent', '<button id="google-continue-button">Continue with Google</button>');
+  try {
+    let clicks = 0;
+    fixture.document.querySelector('button')!.addEventListener('click', () => { clicks++; });
+    await settle();
+    assert.equal(clicks, 1);
+    const flows = Object.values(fixture.storage).map((value) => parseAuthContext(value)).filter(Boolean);
+    assert.equal(flows.length, 1);
+    assert.equal(flows[0]!.hostname, 'polytechnic.myschoolapp.com');
+  } finally { fixture.dispose(); }
+});
+
+test('native lowercase sign-in selects the redirected school among concurrent flows', async () => {
+  const school = createAuthContext('polytechnic.myschoolapp.com', 'redirected-school');
+  const other = createAuthContext('chandler.myschoolapp.com', 'other-school');
+  const fixture = loginFixture('https://app.blackbaud.com/signin/?redirecturl=https%3A%2F%2Fpolytechnic.myschoolapp.com%2Fapp%2Fstudent', '<button id="google-continue-button">Continue with Google</button>', {}, {
+    [`${AUTH_CONTEXT_PREFIX}${school.id}`]: school, [`${AUTH_CONTEXT_PREFIX}${other.id}`]: other,
+  });
+  try {
+    await settle();
+    assert.equal((fixture.storage[`${AUTH_CONTEXT_PREFIX}${school.id}`] as typeof school).blackbaudAttempts, 1);
+    assert.deepEqual(fixture.storage[`${AUTH_CONTEXT_PREFIX}${other.id}`], other);
+  } finally { fixture.dispose(); }
+});
+
+test('conflicting native redirect parameters cannot borrow a remembered school flow', async () => {
+  const flow = createAuthContext('polytechnic.myschoolapp.com', 'conflicting-redirect');
+  const fixture = loginFixture('https://app.blackbaud.com/signin/?redirecturl=https%3A%2F%2Fpolytechnic.myschoolapp.com%2Fapp%2Fstudent&redirectUrl=https%3A%2F%2Fchandler.myschoolapp.com%2Fapp%2Fstudent', '<button id="google-continue-button">Continue with Google</button>', {}, { [`${AUTH_CONTEXT_PREFIX}${flow.id}`]: flow }, flow.id);
+  try {
+    await settle();
+    assert.deepEqual(fixture.storage[`${AUTH_CONTEXT_PREFIX}${flow.id}`], flow);
+  } finally { fixture.dispose(); }
+});
 
 test('direct school sign-in retains native controls and reuses the prepared flow', async () => {
   const fixture = loginFixture('https://polytechnic.myschoolapp.com/app?svcid=edu#login', '<input id="email"><input id="remember" type="checkbox"><input id="nextBtn" type="button" value="Next"><iframe></iframe><script id="native-script"></script>');

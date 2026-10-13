@@ -3,6 +3,10 @@ import { isActionable } from '../shared/dom.ts';
 
 const BLACKBAUD_GOOGLE_BUTTON = 'app-spa-auth-google-signin-button button, #google-continue-button';
 
+export function findSchoolSigninAnchor(): Element | null {
+  return document.querySelector('#nextBtn');
+}
+
 export function findBlackbaudGoogleButton(): HTMLButtonElement | null {
   const known = [...document.querySelectorAll<HTMLButtonElement>(BLACKBAUD_GOOGLE_BUTTON)];
   const labeled = [...document.querySelectorAll<HTMLButtonElement>('button')].filter((button) => /^(?:continue|sign in) with google$/i.test(button.textContent?.trim().replace(/\s+/g, ' ') ?? ''));

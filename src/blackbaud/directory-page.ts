@@ -17,7 +17,7 @@ interface NativeView {
   scrollHandler?: NativeMethod;
 }
 interface NativeModule {
-  Data?: { directoryId?: unknown; searchVal?: unknown; searchFacets?: unknown; searchAllFields?: unknown };
+  Data?: { directoryId?: unknown };
   Vs?: { DirectoryList?: { prototype: NativeView } };
 }
 interface NativeApp {
@@ -35,13 +35,10 @@ interface NativeLease {
   root: HTMLElement;
   view: NativeView;
   lastHeartbeat: number;
-  metadata: boolean;
   activated: boolean;
   restores: Cleanup[];
   owed: Map<ReplayMethod, unknown[]>;
 }
-
-const recordFields = ['UserID', 'FirstName', 'LastName', 'UserNameFormatted', 'Nickname', 'PublishUserProfile', 'PublishEmail', 'Email', 'EmailBad', 'LargeFileName', 'Grade', 'GradeDisplay', 'GradeNumericDisplay', 'TotalCount'] as const;
 
 // Only the verified native Directory view is adapted. No network, history,
 // global event, or AJAX hooks are replaced.
@@ -117,7 +114,7 @@ export function installDirectoryPageBridge(page: PageWindow): Cleanup {
     const owned = active;
     if (!owned || !valid(owned)) return false;
     if (owned.activated) return true;
-    if (owned.metadata && (['getResults', 'getFacetValues', 'renderResults'] as const).some((key) =>
+    if ((['getResults', 'getFacetValues', 'renderResults'] as const).some((key) =>
       typeof owned.view[key] !== 'function')) {
       release(false, true);
       return false;
@@ -153,55 +150,31 @@ export function installDirectoryPageBridge(page: PageWindow): Cleanup {
       return;
     }
     const searchOnly = defaultResults === false;
-    if (matches && view && module && root && view.facets && (request.mode !== 'metadata' || ((view.results || searchOnly) && root.querySelector(':scope > #overview')))) {
+    if (matches && view && root && view.facets && (view.results || searchOnly) && root.querySelector(':scope > #overview')) {
       const facets = view.facets.toJSON();
       if (!Array.isArray(facets)) {
         cancelPending();
         respond(request.token, { status: 'unsupported' });
         return;
       }
-      const records = request.mode === 'metadata' ? null : view.results?.toJSON();
-      if (Array.isArray(records) && records.length > 10_000) {
-        cancelPending();
-        respond(request.token, { status: 'unsupported' });
-        return;
-      }
       // Preserve an already-started native read for fallback. Search-first
       // directories explicitly skip that initial read and have no collection.
-      if (request.mode === 'metadata' || (Array.isArray(records) && (records.length > 0 || root.querySelector('#directory-items-container')))) {
-        cancelPending();
-        release(true, true);
-        active = { token: request.token, directoryId: request.directoryId, root, view, lastHeartbeat: Date.now(), metadata: request.mode === 'metadata', activated: false, restores: [], owed: new Map() };
-        watchdog = page.setInterval(check, 2_000);
-        try {
-          root.setAttribute(DIRECTORY_OWNER_ATTRIBUTE, request.token);
-          if (request.mode !== 'metadata' && !activate()) {
-            respond(request.token, { status: 'unavailable' });
-            return;
-          }
-          const collection = Array.isArray(records) ? records : [];
-          const data = request.mode === 'metadata' ? { mode: 'metadata', searchOnly } : {
-            records: collection.map((item: unknown) => {
-              const source = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-              return Object.fromEntries(recordFields.map((key) => {
-                const value = source[key];
-                return [key, ['string', 'boolean', 'number'].includes(typeof value) ? value : null];
-              }));
-            }),
-            // A new empty collection may still be loading beneath old DOM.
-            unfiltered: collection.length > 0 && !module.Data?.searchVal && Array.isArray(module.Data?.searchFacets) && module.Data.searchFacets.length === 0 && !module.Data.searchAllFields,
-          };
-          respond(request.token, {
-            status: 'ready', ...data,
-            name: typeof view.model?.get('DirectoryName') === 'string' ? view.model.get('DirectoryName') : 'Directory',
-            photoBaseUrl: typeof app?.Config?.PhotonForUserPhotoUrl === 'string' ? app.Config.PhotonForUserPhotoUrl : '',
-          });
-        } catch {
-          release(false, true);
-          respond(request.token, { status: 'unavailable' });
-        }
-        return;
+      cancelPending();
+      release(true, true);
+      active = { token: request.token, directoryId: request.directoryId, root, view, lastHeartbeat: Date.now(), activated: false, restores: [], owed: new Map() };
+      watchdog = page.setInterval(check, 2_000);
+      try {
+        root.setAttribute(DIRECTORY_OWNER_ATTRIBUTE, request.token);
+        respond(request.token, {
+          status: 'ready', searchOnly,
+          name: typeof view.model?.get('DirectoryName') === 'string' ? view.model.get('DirectoryName') : 'Directory',
+          photoBaseUrl: typeof app?.Config?.PhotonForUserPhotoUrl === 'string' ? app.Config.PhotonForUserPhotoUrl : '',
+        });
+      } catch {
+        release(false, true);
+        respond(request.token, { status: 'unavailable' });
       }
+      return;
     }
     if (Date.now() >= request.deadline) {
       cancelPending();

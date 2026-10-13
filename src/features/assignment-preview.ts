@@ -1,7 +1,7 @@
-import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, assignmentInstructions, assignmentPreviewReturnFocus, assignmentPreviewTarget, fetchAssignmentPreview } from '../blackbaud/assignment-preview.ts';
+import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, ASSIGNMENT_PREVIEW_ROOT_SELECTOR, assignmentInstructions, assignmentPreviewReturnFocus, assignmentPreviewTarget, fetchAssignmentPreview } from '../blackbaud/assignment-preview.ts';
 import type { AssignmentPreviewTarget } from '../blackbaud/assignment-preview.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { addStyle, createButton, isActionable, observeDom } from '../shared/dom.ts';
+import { addStyle, createButton, isActionable, observeDom, watchAddedElements } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
@@ -47,7 +47,7 @@ export const assignmentPreviewFeature: Feature = {
   mount: ({ url, signal }) => {
     if (signal.aborted) return;
     const removeStyle = addStyle('assignment-previews', styles);
-    const controls = new Map<HTMLAnchorElement, { button: HTMLButtonElement; dispose: () => void }>();
+    const controls = new Map<HTMLAnchorElement, { root: HTMLElement; button: HTMLButtonElement; dispose: () => void }>();
     let panel: HTMLDivElement | null = null;
     let opener: HTMLButtonElement | null = null;
     let openedAssignmentId: string | null = null;
@@ -165,39 +165,55 @@ export const assignmentPreviewFeature: Feature = {
       void load();
     };
 
-    const stop = observeDom(() => {
-      for (const [link, control] of controls) {
-        if (!link.isConnected || !link.matches(ASSIGNMENT_PREVIEW_LINK_SELECTOR) || !assignmentPreviewTarget(link, url.href)) {
+    const stop = watchAddedElements<HTMLElement>(ASSIGNMENT_PREVIEW_ROOT_SELECTOR, (root) => {
+      const update = () => {
+        if (disposed || signal.aborted || !root.isConnected) return;
+        for (const [link, control] of controls) {
+          if (control.root === root && (!root.contains(link) || !link.matches(ASSIGNMENT_PREVIEW_LINK_SELECTOR) || !assignmentPreviewTarget(link, url.href))) {
+            control.dispose();
+            controls.delete(link);
+          }
+        }
+        for (const link of root.querySelectorAll<HTMLAnchorElement>(ASSIGNMENT_PREVIEW_LINK_SELECTOR)) {
+          const target = assignmentPreviewTarget(link, url.href);
+          if (!target) continue;
+          let control = controls.get(link);
+          if (!control) {
+            const button = createButton('Preview', 'eye');
+            button.classList.add('bn-preview-button');
+            button.dataset.blackbaudNextPreview = 'true';
+            button.setAttribute('aria-controls', panelId);
+            button.setAttribute('aria-haspopup', 'dialog');
+            button.setAttribute('aria-expanded', 'false');
+            const click = (event: MouseEvent) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const currentTarget = assignmentPreviewTarget(link, url.href);
+              if (currentTarget) open(currentTarget, button);
+            };
+            button.addEventListener('click', click);
+            control = { root, button, dispose: () => { button.removeEventListener('click', click); button.remove(); } };
+            controls.set(link, control);
+          }
+          control.root = root;
+          const label = `Preview ${target.title}`;
+          if (control.button.getAttribute('aria-label') !== label) control.button.setAttribute('aria-label', label);
+          control.button.setAttribute('aria-expanded', String(panel !== null && openedAssignmentId === target.assignmentIndexId));
+          if (link.nextElementSibling !== control.button) link.insertAdjacentElement('afterend', control.button);
+        }
+      };
+      const textObserver = new MutationObserver(update);
+      textObserver.observe(root, { subtree: true, characterData: true });
+      const stopUpdates = observeDom(update, signal, root);
+      return () => {
+        stopUpdates();
+        textObserver.disconnect();
+        for (const [link, control] of controls) {
+          if (control.root !== root) continue;
           control.dispose();
           controls.delete(link);
         }
-      }
-      for (const link of document.querySelectorAll<HTMLAnchorElement>(ASSIGNMENT_PREVIEW_LINK_SELECTOR)) {
-        const target = assignmentPreviewTarget(link, url.href);
-        if (!target) continue;
-        let control = controls.get(link);
-        if (!control) {
-          const button = createButton('Preview', 'eye');
-          button.classList.add('bn-preview-button');
-          button.dataset.blackbaudNextPreview = 'true';
-          button.setAttribute('aria-controls', panelId);
-          button.setAttribute('aria-haspopup', 'dialog');
-          button.setAttribute('aria-expanded', 'false');
-          const click = (event: MouseEvent) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const currentTarget = assignmentPreviewTarget(link, url.href);
-            if (currentTarget) open(currentTarget, button);
-          };
-          button.addEventListener('click', click);
-          control = { button, dispose: () => { button.removeEventListener('click', click); button.remove(); } };
-          controls.set(link, control);
-        }
-        const label = `Preview ${target.title}`;
-        if (control.button.getAttribute('aria-label') !== label) control.button.setAttribute('aria-label', label);
-        control.button.setAttribute('aria-expanded', String(panel !== null && openedAssignmentId === target.assignmentIndexId));
-        if (link.nextElementSibling !== control.button) link.insertAdjacentElement('afterend', control.button);
-      }
+      };
     }, signal);
     const cleanup = () => {
       if (disposed) return;

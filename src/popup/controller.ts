@@ -9,7 +9,7 @@ import {
 } from '../shared/settings.ts';
 
 type SettingsPatch = Partial<Omit<Settings, 'schemaVersion'>>;
-type PendingWrite = { patch: SettingsPatch };
+type PendingWrite = { patch: SettingsPatch; saved?: boolean };
 
 export function mountPopup(document: Document, window: Window): () => void {
   function element<T extends HTMLElement>(id: string): T {
@@ -32,7 +32,6 @@ export function mountPopup(document: Document, window: Window): () => void {
 
   let storedSettings: Settings | null = null;
   const pendingWrites: PendingWrite[] = [];
-  let draining = false;
   let refreshing = false;
   let refreshRequested = false;
   let readVersion = 0;
@@ -115,38 +114,42 @@ export function mountPopup(document: Document, window: Window): () => void {
     if (!storedSettings || disposed) return;
     // Apply pending choices in order while keeping the last persisted snapshot for rollback.
     readVersion += 1;
-    pendingWrites.push({ patch });
+    const write: PendingWrite = { patch };
+    pendingWrites.push(write);
     lastError = '';
     lastSaved = false;
     render();
-    void drainWrites();
+    // Every accepted choice is handed to the worker in this turn, including
+    // choices made while another save is waiting. Closing the popup cannot
+    // discard an in-memory queue of writes that has not yet been sent.
+    void updateSettings(patch).then(() => finishWrite(write, true), () => finishWrite(write, false));
   }
 
-  async function drainWrites(): Promise<void> {
-    if (draining) return;
-    draining = true;
-    while (pendingWrites.length && !disposed) {
+  function finishWrite(completed: PendingWrite, saved: boolean): void {
+    if (disposed) return;
+    completed.saved = saved;
+    // Settle optimistic state in acceptance order even if replies arrive in a
+    // different order. The worker serializes persistence independently.
+    while (pendingWrites.length && pendingWrites[0]!.saved !== undefined) {
       const write = pendingWrites[0];
-      try {
-        await updateSettings(write.patch);
+      if (write.saved) {
         if (storedSettings) storedSettings = { ...storedSettings, ...write.patch };
         lastSaved = true;
-      } catch {
+      } else {
         lastError = 'Couldn’t save this change. Your previous setting was restored.';
         lastSaved = false;
       }
       pendingWrites.shift();
-      render();
     }
-    draining = false;
+    render();
     // A storage notification can arrive before its write promise resolves. Read only
     // after the queue drains so it cannot replace a more recent local choice.
-    void refreshSettings();
+    if (!pendingWrites.length) void refreshSettings();
   }
 
   async function refreshSettings(): Promise<void> {
     if (disposed) return;
-    if (draining || refreshing) {
+    if (pendingWrites.length || refreshing) {
       refreshRequested = true;
       return;
     }
@@ -159,7 +162,6 @@ export function mountPopup(document: Document, window: Window): () => void {
       if (disposed || version !== readVersion || pendingWrites.length) return;
       storedSettings = settings;
       loadError.hidden = true;
-      if (!unsubscribe) unsubscribe = subscribeSettings(() => { void refreshSettings(); });
     } catch {
       if (disposed || version !== readVersion) return;
       if (storedSettings) lastError = 'Couldn’t reload settings. Try reopening the extension.';
@@ -171,7 +173,7 @@ export function mountPopup(document: Document, window: Window): () => void {
       refreshing = false;
       retryButton.disabled = false;
       render();
-      if (refreshRequested && !draining) void refreshSettings();
+      if (refreshRequested && !pendingWrites.length) void refreshSettings();
     }
   }
 
@@ -215,6 +217,7 @@ export function mountPopup(document: Document, window: Window): () => void {
   }
   window.addEventListener('pagehide', dispose, { once: true });
 
+  unsubscribe = subscribeSettings(() => { readVersion += 1; void refreshSettings(); });
   render();
   void refreshSettings();
   return dispose;

@@ -138,3 +138,17 @@ export function registerDirectoryLoadingManager(manager: DirectoryLoadingManager
 export function claimDirectoryPreparedSnapshot(target: DirectoryTarget, signal: AbortSignal): Promise<DirectoryPreparedSnapshot> | null {
   return managers.get(document)?.claim(target, signal) ?? null;
 }
+
+// Metadata may identify a search-first directory after this speculative read
+// starts. Keep its failure observed and its cancellation separate from the
+// metadata/lease signal so an unused blank result cannot prevent searching.
+export function startDirectoryPreparedRead(target: DirectoryTarget, signal: AbortSignal): {
+  result: Promise<DirectoryPreparedSnapshot>;
+  cancel(): void;
+} {
+  const controller = new AbortController();
+  const readSignal = AbortSignal.any([signal, controller.signal]);
+  const result = claimDirectoryPreparedSnapshot(target, readSignal) ?? fetchDirectoryPreparedSnapshot(target, readSignal);
+  void result.catch(() => {});
+  return { result, cancel: () => controller.abort() };
+}

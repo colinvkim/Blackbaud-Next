@@ -1,27 +1,11 @@
 import { isAssignmentCenter, isLmsPage, legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
+import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
 import { createButton, observeDom, watchElements } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 
-const loadingMaskSelector = '.sky-wait-mask.sky-wait-mask-loading-fixed.sky-wait-mask-loading-blocking';
-const errorSelector = '.sky-error, .sky-error-page, .sky-error-title, .alert-danger';
 export const ASSIGNMENT_STALL_DELAY = 15_000;
 export const ASSIGNMENT_RECOVERY_COOLDOWN = 60_000;
 const recoveryStorageKey = 'blackbaud-next-assignment-recovery';
-
-function visible(element: Element): boolean {
-  if (!element.isConnected || element.closest('[hidden]')) return false;
-  let current: Element | null = element;
-  while (current) {
-    const style = getComputedStyle(current);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
-    current = current.parentElement;
-  }
-  return true;
-}
-
-function hasVisibleError(): boolean {
-  return [...document.querySelectorAll(errorSelector)].some(visible);
-}
 
 export function recoveryRemaining(storage: Pick<Storage, 'getItem'>, route: string, now: number): number {
   try {
@@ -78,7 +62,7 @@ export const assignmentRecoveryFeature: Feature = {
   matches: isAssignmentCenter,
   mount: ({ url, signal }) => {
     let offered = false;
-    return watchElements<HTMLElement>(loadingMaskSelector, (mask) => {
+    return watchElements<HTMLElement>(ASSIGNMENT_LOADING_MASK_SELECTOR, (mask) => {
       let panel: HTMLDivElement | null = null;
       let stallTimer: ReturnType<typeof setTimeout> | undefined;
       let cooldownTimer: ReturnType<typeof setTimeout> | undefined;
@@ -86,7 +70,7 @@ export const assignmentRecoveryFeature: Feature = {
       let reload: HTMLButtonElement | null = null;
       let dismiss: HTMLButtonElement | null = null;
       const isStalled = () => !disposed && !signal.aborted && window.location.href === url.href &&
-        mask.matches(loadingMaskSelector) && visible(mask) && !hasVisibleError();
+        mask.matches(ASSIGNMENT_LOADING_MASK_SELECTOR) && isAssignmentLoadingVisible(mask) && !hasVisibleAssignmentError(mask.ownerDocument);
       const readRemaining = () => {
         try { return recoveryRemaining(window.sessionStorage, url.pathname, Date.now()); } catch { return 0; }
       };

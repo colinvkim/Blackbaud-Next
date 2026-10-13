@@ -799,6 +799,51 @@ test('asynchronous native root replacement retains the enhanced switch and permi
   assert.equal(document.querySelector('.bn-directory-notice'), null);
 });
 
+test('a native rerender inside the same root retains its enhanced switch and cleanup stops reattachment', async () => {
+  const root = fixture();
+  const mounted = mount({ acquireDirectory: async () => lease(root).value });
+  await flush();
+  button('Use original directory').click();
+  const switchControl = button('Use enhanced directory');
+  root.innerHTML = '<header id="overview"><h1>Rerendered directory</h1></header><div id="directory-results">Native results</div>';
+  await flush();
+  assert.equal(button('Use enhanced directory'), switchControl);
+  assert.equal(switchControl.closest('#overview')?.parentElement, root);
+  switchControl.click();
+  await flush();
+  assert.equal(rows().length, 3);
+  button('Use original directory').click();
+  mounted.controller.abort();
+  root.innerHTML = '<header id="overview"><h1>Native after disabling</h1></header>';
+  await flush();
+  assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);
+});
+
+test('pagination and refresh feedback reuse unchanged directory filters and sort order', async () => {
+  const root = fixture();
+  const data = snapshot(103);
+  let nameReads = 0;
+  for (const entry of data.entries) {
+    const lastName = entry.lastName;
+    Object.defineProperty(entry, 'lastName', { get: () => { nameReads += 1; return lastName; } });
+  }
+  mount({ acquireDirectory: async () => lease(root, data).value, fetchDirectorySnapshot: async () => { throw new Error('Refresh unavailable'); } });
+  await flush();
+  assert.ok(nameReads > 0);
+  nameReads = 0;
+  button('Next').click();
+  assert.equal(rows()[0]!.dataset.bnDirectoryUser, '51');
+  assert.equal(nameReads, 0);
+  button('Refresh').click();
+  await flush();
+  assert.match(feedback(), /Could not refresh/);
+  assert.equal(rows()[0]!.dataset.bnDirectoryUser, '51');
+  assert.equal(nameReads, 0);
+  input('No matching name');
+  assert.equal(rows().length, 0);
+  assert.ok(nameReads > 0);
+});
+
 test('fallback notice observation disconnects on cleanup and cannot recreate UI after native replacement', async (t) => {
   const root = fixture();
   const nativeRoot = root.cloneNode(true) as HTMLElement;

@@ -291,3 +291,54 @@ test('resource search preserves measurable native widths and margins across resi
   assert.equal(layout.style.getPropertyValue('--blackbaud-next-resource-column-width'), '123px');
   assert.equal(library.style.width, '269px');
 });
+
+test('resource filtering recovers after native ancestors hide, rerender, and show the board', async () => {
+  fixture(resourceFixture, '#resourceboard');
+  const main = document.getElementById('site-main')!;
+  main.hidden = true;
+  const { controller } = mount(resourceSearchFeature);
+  const status = () => document.querySelector('.bn-resource-search [role="status"]')!.textContent;
+  assert.equal(status(), '0 resources');
+  main.hidden = false;
+  await flush();
+  assert.equal(status(), '2 resources');
+  search('library');
+  main.setAttribute('aria-hidden', 'true');
+  document.querySelector('#library h3')!.firstChild!.textContent = 'Library online';
+  await flush();
+  assert.equal(status(), 'No resources match your search (0 of 0).');
+  assert.equal(document.getElementById('library')!.hasAttribute('data-blackbaud-next-resource-hidden'), true);
+  main.removeAttribute('aria-hidden');
+  await flush();
+  assert.equal(status(), '1 of 2 resources');
+  assert.equal(document.getElementById('library')!.hasAttribute('data-blackbaud-next-resource-hidden'), false);
+  assert.equal(document.getElementById('cafe')!.hasAttribute('data-blackbaud-next-resource-hidden'), true);
+  controller.abort();
+  main.hidden = true;
+  main.hidden = false;
+  await flush();
+  assert.equal(document.querySelector('.bn-resource-search'), null);
+  assert.equal(document.querySelector('[data-blackbaud-next-resource-hidden]'), null);
+});
+
+test('an existing resource board follows native visibility when moved between parents', async () => {
+  fixture(resourceFixture + '<section id="other-parent" style="display:none"></section>', '#resourceboard');
+  mount(resourceSearchFeature);
+  const input = search('library');
+  const board = document.getElementById('board-container')!;
+  const main = document.getElementById('site-main')!;
+  const other = document.getElementById('other-parent')!;
+  other.append(board);
+  await flush();
+  assert.equal(board.previousElementSibling, document.querySelector('.bn-resource-search'));
+  assert.equal(document.querySelector('.bn-resource-search [role="status"]')!.textContent, 'No resources match your search (0 of 0).');
+  other.style.removeProperty('display');
+  await flush();
+  assert.equal(document.querySelector('.bn-resource-search [role="status"]')!.textContent, '1 of 2 resources');
+  main.append(board);
+  await flush();
+  assert.equal(board.previousElementSibling, document.querySelector('.bn-resource-search'));
+  assert.equal(document.querySelector<HTMLInputElement>('.bn-resource-search input'), input);
+  assert.equal(input.value, 'library');
+  assert.equal(document.getElementById('library')!.hasAttribute('data-blackbaud-next-resource-hidden'), false);
+});

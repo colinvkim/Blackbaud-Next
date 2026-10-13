@@ -191,3 +191,54 @@ test('native status changes and local midnight refresh the chosen shortcut', asy
   click('Due tomorrow');
   assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 2 loaded assignments\. No matches/);
 });
+
+test('unrelated page updates do not reread assignment metadata, while changed rows still refresh', async (t) => {
+  fixture(nativeToolbar() + group('native', row(123, '10/7/2026', 'Completed')) + '<nav><span>Native navigation</span></nav>');
+  mount();
+  await flush();
+  click('Unfinished');
+  const assignment = document.querySelector<HTMLElement>('.assignment-repeater-item')!;
+  const query = assignment.querySelectorAll.bind(assignment);
+  let reads = 0;
+  t.mock.method(assignment, 'querySelectorAll', (selector: string) => { reads += 1; return query(selector); });
+  document.querySelector('nav')!.classList.add('open');
+  document.querySelector('nav span')!.textContent = 'Updated native navigation';
+  document.body.insertAdjacentHTML('beforeend', '<aside>Unrelated status</aside>');
+  await flush();
+  assert.equal(reads, 0);
+  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 1 loaded assignments/);
+  assignment.querySelector('app-assignment-status-display button')!.firstChild!.nodeValue = 'To do';
+  await flush();
+  assert.ok(reads > 0);
+  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 1 loaded assignments/);
+});
+
+test('delayed toolbar controls and multiple toolbars share one filter and accurate native totals', async () => {
+  fixture('<sky-toolbar></sky-toolbar>' + group('done', row(123, '10/7/2026', 'Completed')) + group('todo', row(456, '10/8/2026')));
+  mount();
+  assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
+  document.querySelector('sky-toolbar')!.innerHTML = '<input aria-label="Search items">';
+  document.body.insertAdjacentHTML('beforeend', nativeToolbar());
+  await flush();
+  assert.equal(document.querySelectorAll('.bn-assignment-shortcuts').length, 2);
+  click('Unfinished');
+  for (const toolbar of document.querySelectorAll('.bn-assignment-shortcuts')) {
+    assert.equal(toolbar.querySelector('button[aria-pressed="true"]')!.textContent, 'Unfinished');
+    assert.match(toolbar.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 2 loaded assignments/);
+  }
+});
+
+test('native group moves update row ownership and hidden ancestors without replacing the assignment', async () => {
+  fixture(nativeToolbar() + group('first', row(123, '10/7/2026', 'Completed')) + group('second', row(456, '10/8/2026')));
+  mount();
+  click('Unfinished');
+  const assignment = document.querySelector<HTMLElement>('#first .assignment-repeater-item')!;
+  document.querySelector('#second .sky-repeater-item-body')!.append(assignment);
+  await flush();
+  assert.equal(assignment.getAttribute(hiddenAttribute), 'true');
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), null);
+  const second = document.querySelector<HTMLElement>('#second')!;
+  second.hidden = true;
+  await flush();
+  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 0 loaded assignments/);
+});

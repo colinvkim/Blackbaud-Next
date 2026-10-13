@@ -1,7 +1,7 @@
-import { ASSIGNMENT_TOOLBAR_SELECTOR, isNativeAssignmentVisible, matchesAssignmentShortcut, readAssignmentRows } from '../blackbaud/assignment-list.ts';
-import type { AssignmentShortcut } from '../blackbaud/assignment-list.ts';
+import { ASSIGNMENT_ROW_SELECTOR, ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, ASSIGNMENT_TOOLBAR_SELECTOR, isNativeAssignmentVisible, matchesAssignmentShortcut, readAssignmentRow } from '../blackbaud/assignment-list.ts';
+import type { AssignmentShortcut, NativeAssignmentRow } from '../blackbaud/assignment-list.ts';
 import { isAssignmentCenter } from '../blackbaud/routes.ts';
-import { addStyle, createButton, observeDom, watchElements } from '../shared/dom.ts';
+import { addStyle, createButton, watchAddedElements } from '../shared/dom.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
@@ -32,7 +32,102 @@ export const assignmentShortcutsFeature: Feature = {
     if (signal.aborted) return;
     const removeStyle = addStyle('assignment-shortcuts', styles);
     let selected: AssignmentShortcut = 'all';
-    const stopWatching = watchElements<HTMLElement>(ASSIGNMENT_TOOLBAR_SELECTOR, (nativeToolbar) => {
+    let disposed = false;
+    let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
+    const loaded = new Map<HTMLElement, NativeAssignmentRow | null>();
+    const hidden = new Set<HTMLElement>();
+    const toolbars = new Map<HTMLElement, {
+      toolbar: HTMLDivElement;
+      status: HTMLSpanElement;
+      controls: Array<{ key: AssignmentShortcut; button: HTMLButtonElement; choose: () => void }>;
+    }>();
+    const clearHidden = () => {
+      for (const element of hidden) {
+        if (element.getAttribute(hiddenAttribute) === 'true') element.removeAttribute(hiddenAttribute);
+      }
+      hidden.clear();
+    };
+    const hide = (element: HTMLElement) => {
+      element.setAttribute(hiddenAttribute, 'true');
+      hidden.add(element);
+    };
+    const update = () => {
+      if (disposed || signal.aborted) return;
+      clearHidden();
+      if (!toolbars.size) return;
+      const rows = [...loaded.values()].filter((row): row is NativeAssignmentRow => row !== null && isNativeAssignmentVisible(row.element));
+      const now = new Date();
+      let count = 0;
+      const groups = new Map<HTMLElement, boolean>();
+      for (const row of rows) {
+        const matches = matchesAssignmentShortcut(row, selected, now);
+        if (matches) count += 1;
+        else hide(row.element);
+        if (row.group) groups.set(row.group, (groups.get(row.group) ?? false) || matches);
+      }
+      for (const [group, hasMatches] of groups) if (!hasMatches && selected !== 'all') hide(group);
+      const message = `Showing ${count} of ${rows.length} loaded assignments${count === 0 && rows.length > 0 ? '. No matches; native filters still apply.' : '.'}`;
+      for (const [nativeToolbar, { toolbar, status, controls }] of toolbars) {
+        if (toolbar.previousElementSibling !== nativeToolbar) nativeToolbar.insertAdjacentElement('afterend', toolbar);
+        for (const { key, button } of controls) {
+          const pressed = String(key === selected);
+          if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed);
+        }
+        if (status.textContent !== message) status.textContent = message;
+      }
+    };
+    let queued = false;
+    const queueUpdate = () => {
+      if (queued || disposed || signal.aborted) return;
+      queued = true;
+      queueMicrotask(() => { queued = false; update(); });
+    };
+
+    // Discovery examines added subtrees. Each row owns its metadata and the
+    // ancestor visibility that can change without replacing that row.
+    const stopRows = watchAddedElements<HTMLElement>(ASSIGNMENT_ROW_SELECTOR, (element) => {
+      let ancestors: HTMLElement[] = [];
+      const currentAncestors = () => {
+        const result: HTMLElement[] = [];
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) result.push(parent);
+        return result;
+      };
+      const observer = new MutationObserver((records) => {
+        const nextAncestors = currentAncestors();
+        const moved = ancestors.length !== nextAncestors.length || ancestors.some((parent, index) => parent !== nextAncestors[index]);
+        const metadataChanged = records.some((record) => element.contains(record.target));
+        const visibilityChanged = records.some((record) => record.type === 'attributes' && ancestors.includes(record.target as HTMLElement));
+        if (!moved && !metadataChanged && !visibilityChanged) return;
+        if (moved) observeRow();
+        if (moved || metadataChanged) loaded.set(element, readAssignmentRow(element));
+        queueUpdate();
+      });
+      const observeRow = () => {
+        observer.disconnect();
+        observer.observe(element, {
+          childList: true, subtree: true, characterData: true, attributes: true,
+          attributeFilter: ['class', 'href', 'hidden', 'style', 'aria-hidden'],
+        });
+        ancestors = currentAncestors();
+        for (const parent of ancestors) {
+          // Direct child changes also identify moves into a different group.
+          observer.observe(parent, {
+            childList: true, attributes: true,
+            attributeFilter: ['class', 'hidden', 'style', 'aria-hidden'],
+          });
+        }
+      };
+      observeRow();
+      loaded.set(element, readAssignmentRow(element));
+      queueUpdate();
+      return () => {
+        observer.disconnect();
+        loaded.delete(element);
+        queueUpdate();
+      };
+    }, signal);
+
+    const stopToolbars = watchAddedElements<HTMLElement>(ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, (nativeToolbar) => {
       const page = nativeToolbar.ownerDocument;
       const toolbar = page.createElement('div');
       toolbar.className = 'bn-assignment-shortcuts';
@@ -45,7 +140,7 @@ export const assignmentShortcutsFeature: Feature = {
       const controls = shortcuts.map(({ key, label, icon }) => {
         const button = createButton(label, icon);
         const choose = () => {
-          if (disposed || signal.aborted) return;
+          if (disposed || signal.aborted || !toolbars.has(nativeToolbar)) return;
           selected = key;
           update();
         };
@@ -54,83 +149,56 @@ export const assignmentShortcutsFeature: Feature = {
         return { key, button, choose };
       });
       toolbar.append(status);
-      const hidden = new Set<HTMLElement>();
-      let textRows = new Set<HTMLElement>();
-      let disposed = false;
-      let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
-      // Angular also updates existing text nodes without replacing children.
-      // Watch that metadata only in the known assignment rows.
-      const textObserver = new MutationObserver(() => update());
-
-      const clearHidden = () => {
-        for (const element of hidden) {
-          if (element.getAttribute(hiddenAttribute) === 'true') element.removeAttribute(hiddenAttribute);
-        }
-        hidden.clear();
-      };
-      const hide = (element: HTMLElement) => {
-        element.setAttribute(hiddenAttribute, 'true');
-        hidden.add(element);
-      };
-      const update = () => {
+      let parent: HTMLElement | null = null;
+      const observer = new MutationObserver((records) => {
+        if (nativeToolbar.parentElement !== parent ||
+          (toolbars.has(nativeToolbar) && toolbar.previousElementSibling !== nativeToolbar) ||
+          records.some((record) => nativeToolbar.contains(record.target))) refresh();
+      });
+      const refresh = (immediate = false) => {
         if (disposed || signal.aborted || !nativeToolbar.isConnected) return;
-        if (toolbar.previousElementSibling !== nativeToolbar) nativeToolbar.insertAdjacentElement('afterend', toolbar);
-        // Clear only our presentation before inspecting native visibility. This
-        // is synchronous and its attribute is not watched by the shared hub.
-        clearHidden();
-        const loaded = readAssignmentRows(page);
-        const nextTextRows = new Set(loaded.map((row) => row.element));
-        if (textRows.size !== nextTextRows.size || [...textRows].some((row) => !nextTextRows.has(row))) {
-          textObserver.disconnect();
-          for (const row of nextTextRows) textObserver.observe(row, { subtree: true, characterData: true });
-          textRows = nextTextRows;
+        if (nativeToolbar.parentElement !== parent) {
+          parent = nativeToolbar.parentElement;
+          observer.disconnect();
+          observer.observe(nativeToolbar, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label'] });
+          if (parent) observer.observe(parent, { childList: true });
         }
-        const rows = loaded.filter((row) => isNativeAssignmentVisible(row.element));
-        const now = new Date();
-        let count = 0;
-        const groups = new Map<HTMLElement, boolean>();
-        for (const row of rows) {
-          const matches = matchesAssignmentShortcut(row, selected, now);
-          if (matches) count += 1;
-          else hide(row.element);
-          if (row.group) groups.set(row.group, (groups.get(row.group) ?? false) || matches);
-        }
-        for (const [group, hasMatches] of groups) if (!hasMatches && selected !== 'all') hide(group);
-        for (const { key, button } of controls) {
-          const pressed = String(key === selected);
-          if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed);
-        }
-        const message = `Showing ${count} of ${rows.length} loaded assignments${count === 0 && rows.length > 0 ? '. No matches; native filters still apply.' : '.'}`;
-        if (status.textContent !== message) status.textContent = message;
+        if (nativeToolbar.matches(ASSIGNMENT_TOOLBAR_SELECTOR)) toolbars.set(nativeToolbar, { toolbar, status, controls });
+        else { toolbars.delete(nativeToolbar); toolbar.remove(); }
+        if (immediate) update();
+        else queueUpdate();
       };
-      const scheduleRollover = () => {
-        clearTimeout(rolloverTimer);
-        const now = new Date();
-        const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        rolloverTimer = setTimeout(() => {
-          if (disposed || signal.aborted) return;
-          update();
-          scheduleRollover();
-        }, Math.max(1, nextDay.getTime() - now.getTime()));
-      };
-      const visible = () => { update(); scheduleRollover(); };
-      page.addEventListener('visibilitychange', visible);
-      const stop = observeDom(update, signal);
-      scheduleRollover();
+      refresh(true);
       return () => {
-        disposed = true;
-        stop();
-        textObserver.disconnect();
-        textRows.clear();
-        clearTimeout(rolloverTimer);
-        page.removeEventListener('visibilitychange', visible);
+        observer.disconnect();
+        toolbars.delete(nativeToolbar);
         for (const { button, choose } of controls) button.removeEventListener('click', choose);
-        clearHidden();
         toolbar.remove();
+        queueUpdate();
       };
     }, signal);
+
+    const scheduleRollover = () => {
+      clearTimeout(rolloverTimer);
+      const now = new Date();
+      const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      rolloverTimer = setTimeout(() => {
+        if (disposed || signal.aborted) return;
+        update();
+        scheduleRollover();
+      }, Math.max(1, nextDay.getTime() - now.getTime()));
+    };
+    const visible = () => { update(); scheduleRollover(); };
+    document.addEventListener('visibilitychange', visible);
+    scheduleRollover();
     const cleanup = () => {
-      stopWatching();
+      if (disposed) return;
+      disposed = true;
+      stopToolbars();
+      stopRows();
+      clearTimeout(rolloverTimer);
+      document.removeEventListener('visibilitychange', visible);
+      clearHidden();
       removeStyle();
       signal.removeEventListener('abort', cleanup);
     };

@@ -93,7 +93,7 @@ test('prepared data retains only published display fields and safe photo filenam
   assert.deepEqual(prepared.photoFiles, [{ userId: 1, fileName: 'large_user_example.jpg' }, { userId: 2, fileName: 'large_user_example.jpg' }]);
   assert.equal(prepared.snapshot.entries.every((person) => person.photoUrl === ''), true);
   assert.equal(prepared.snapshot.entries.find((person) => person.userId === 2)!.email, '');
-  assert.deepEqual(prepared.snapshot.entries.map((person) => person.userId), [2, 3, 4, 1]);
+  assert.deepEqual(prepared.snapshot.entries.map((person) => person.userId), [1, 2, 3, 4]);
   assert.deepEqual(people.map((person) => person.UserID), [1, 2, 3, 4]);
   assert.equal(/Private street|PreferredAddressId|SpouseID|Private title|large_user_private/u.test(JSON.stringify(prepared)), false);
   people[0]!.FirstName = 'Changed raw person';
@@ -199,19 +199,19 @@ test('native result caps retain received counts while reporting that the matchin
   ]) assert.throws(() => normalizeDirectorySnapshot(payload, origin), /unsupported format/);
 });
 
-test('prepared and finalized capped snapshots preserve completeness metadata through photo projection and sorting', () => {
+test('prepared and finalized capped snapshots preserve completeness metadata and source order through photo projection', () => {
   const people = nativeSnapshot(nativePerson(1, { LastName: 'Zulu' }), nativePerson(2, { LastName: 'Alpha', PublishEmail: false }));
   people[0]!.TotalCount = 100;
   const prepared = prepareDirectorySnapshot(people, origin);
   assert.equal(prepared.snapshot.totalCount, 2);
   assert.equal(prepared.snapshot.reportedTotalCount, 100);
   assert.equal(prepared.snapshot.complete, false);
-  assert.deepEqual(prepared.snapshot.entries.map((person) => person.userId), [2, 1]);
+  assert.deepEqual(prepared.snapshot.entries.map((person) => person.userId), [1, 2]);
   const finalized = finalizeDirectorySnapshot(prepared, origin, photoBase);
   assert.equal(finalized.totalCount, 2);
   assert.equal(finalized.reportedTotalCount, 100);
   assert.equal(finalized.complete, false);
-  assert.equal(finalized.entries[0]!.email, '');
+  assert.equal(finalized.entries[1]!.email, '');
   assert.equal(finalized.entries[0]!.photoUrl, `${photoBase}large_user_example.jpg`);
   assert.equal(prepared.snapshot.entries.every((person) => !person.photoUrl), true);
 });

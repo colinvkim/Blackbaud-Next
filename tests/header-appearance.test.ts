@@ -3,43 +3,11 @@ import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { nativeHeaderAppearanceTargets } from '../src/blackbaud/header-appearance.ts';
 import { createHeaderAppearance, HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE, HEADER_APPEARANCE_CURRENT_ATTRIBUTE, HEADER_APPEARANCE_PART_ATTRIBUTE } from '../src/features/header-appearance.ts';
+import { HEADER_LOWER_ITEMS as lower, nativeHeaderFixtureHtml } from './fixtures/header.ts';
 
 const origin = 'https://example.myschoolapp.com';
-const primary = [
-  ['group-header-Classes', 'Classes', 'classes_48.png', '#', '14'],
-  ['group-header-Groups', 'Groups', 'groups.png', '/app/SignOut', '4'],
-  ['group-header-Resources', 'Resources', 'resources.png', '/app/student?svcid=edu#resourceboard', ''],
-  ['group-header-News', 'News', 'news.png', '#', ''],
-  ['calendar-subnav', 'Calendar', 'calendar.png', '/app/student?svcid=edu#calendar', ''],
-  ['directory-subnav', 'Directories', 'directory.png', '#', '5'],
-];
-const lower = [
-  ['progress-btn', 'p3icon-progress', '/app/student?svcid=edu#studentmyday/progress'],
-  ['schedule-btn', 'p3icon-schedule', '/app/student?svcid=edu#studentmyday/schedule'],
-  ['assignment-center-btn', 'p3icon-assignments', '/lms-assignment/assignment-center/student?svcid=edu'],
-  ['course-requests-btn', 'p3icon-courseRequest', '/edu-self-registration/student-course-requests'],
-];
-
 function fixture(modern = false, path = modern ? '/lms-assignment/assignment-center/student?svcid=edu' : '/app/student?svcid=edu#studentmyday/progress') {
-  const description = (label: string, count = '') => modern ?
-    `<div class="desc"><div class="title"><div>${label}</div><!----></div>${count ? `<strong>${count}</strong> ${label} <!---->` : ''}</div>` :
-    `<span class="desc"><span class="title">${label}</span>${count ? `<br><b>${count}</b> ${label}` : ''}</span>`;
-  const tools = `<ul class="topnav${modern ? ' user-nav' : ''}">
-    <li><a ${modern ? 'class="root-nav-item search-item"' : ''} href="/app/student?svcid=edu#searchresults">${modern ? '<span class="search"><sky-icon iconname="search"></sky-icon></span><span class="expand"><sky-icon iconname="caret-down"></sky-icon></span>' : '<i class="topnav-icon p3icon-search"></i><span class="caret for-search"></span>'}</a></li>
-    <li><a ${modern ? 'id="official-notes"' : ''} href="/app/student?svcid=edu#message/officialnotes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>&nbsp;${description('Official Notes')}</a></li>
-    <li><a id="inbox-link" href="/app/student?svcid=edu#message/inbox"><span class="site-badge site-badge-message">0</span>&nbsp;${description('Messages')}</a></li>
-    <li><a id="account-nav" href="#"><div class="bb-avatar-wrapper-nav"><img class="bb-avatar-image-nav" src="/fixture-avatar.svg" alt="Example account avatar"></div>${modern ? '<div class="desc"><div class="title"><div>Alex</div><div>Student</div></div></div><span class="expand"><sky-icon iconname="caret-down"></sky-icon></span>' : '<span class="desc"><span class="title">Alex<br>Student</span></span><span class="caret"></span>'}</a></li>
-  </ul>`;
-  const header = `<header id="site-header" class="${modern ? 'sky-container' : 'container'}"><div class="row"><div class="col-md-12">
-    <button id="site-mobile-btn" class="app-mobile-menu-btn" type="button">Native menu</button>
-    <div id="site-logo" class="logoimg"><a href="http://school.example"><img src="/fixture-school-logo.svg" alt="Example School"></a></div>
-    ${modern ? `<div id="site-user-container"><div id="site-user-nav"><edu-user-nav>${tools}</edu-user-nav></div></div>` : `<div id="site-user-container" hidden>Native persona switcher</div><nav id="site-user-nav" class="site-header-nav"><div>${tools}</div></nav>`}
-  </div></div></header>`;
-  const day = `<li><a id="my-day" class="${modern ? 'root-nav-item' : ''}" href="/app/student?svcid=edu#studentmyday"><div class="dayicon"><span class="month">Oct</span><span class="day">9</span></div>${description('My Day')}</a></li>`;
-  const navigation = `<nav id="site-nav-container"><ul class="topnav">${day}${primary.map(([id, label, file, href, count]) => `<li><a id="${id}" class="${modern ? 'root-nav-item' : ''}" href="${modern && id === 'group-header-Groups' ? '#' : href}"><img src="//libs-w2.myschoolapp.com/p3-cache/img/48x48/${file}">${description(label!, count)}${modern ? '<sky-icon iconname="caret-down"></sky-icon>' : '<span class="caret"></span>'}</a></li>`).join('')}</ul></nav>`;
-  const tabs = `<nav id="site-nav-lower"><ul>${lower.map(([id, icon, href]) => `<li><a ${modern ? '' : `id="${id}"`} href="${href}"><i class="${icon}"></i>Native page</a></li>`).join('')}</ul></nav>`;
-  const content = header + navigation + tabs + '<main id="site-main"></main>';
-  const dom = new JSDOM((modern ? `<app-root>${content}</app-root>` : content) + `<div id="site-top-spacer" class="${modern ? 'white-bg site-top-spacer-lower-nav' : 'site-top-spacer'}"></div>`, { url: origin + path });
+  const dom = new JSDOM(nativeHeaderFixtureHtml(modern), { url: origin + path });
   return { dom, page: dom.window.document, url: new URL(dom.window.location.href) };
 }
 
@@ -319,7 +287,7 @@ for (const modern of [false, true]) {
       assert.deepEqual(targets.filter(({ part }) => part === 'primary-count').map(({ element }) => element.textContent), ['14', '4', '5']);
       assert.equal(targets.find(({ part, current }) => part === 'primary-item' && current)?.element.id, 'my-day');
       const selected = targets.find(({ part, current }) => part === 'tab-item' && current)?.element;
-      assert.equal(selected?.getAttribute('href'), lower[modern ? 2 : 0]![2]);
+      assert.equal(selected?.getAttribute('href'), lower[modern ? 2 : 0]![3]);
       assert.equal(page.querySelector('#site-user-container')!.hasAttribute('hidden'), !modern);
       assert.equal(page.querySelectorAll(`[${HEADER_APPEARANCE_PART_ATTRIBUTE}]`).length, 0, 'adapter is read-only');
     } finally { dom.window.close(); }
@@ -563,7 +531,7 @@ test('Calendar infers My Day and Schedule in the modern app and the Calendar des
   try {
     let targets = nativeHeaderAppearanceTargets(modern.page, modern.url);
     assert.equal(targets.find(({ part, current }) => part === 'primary-item' && current)?.element.id, 'my-day');
-    assert.equal(targets.find(({ part, current }) => part === 'tab-item' && current)?.element.getAttribute('href'), lower[1]![2]);
+    assert.equal(targets.find(({ part, current }) => part === 'tab-item' && current)?.element.getAttribute('href'), lower[1]![3]);
     targets = nativeHeaderAppearanceTargets(legacy.page, legacy.url);
     assert.equal(targets.find(({ part, current }) => part === 'primary-item' && current)?.element.id, 'calendar-subnav');
     assert.equal(targets.some(({ part, current }) => part === 'tab-item' && current), false);

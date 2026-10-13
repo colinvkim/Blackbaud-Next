@@ -328,3 +328,29 @@ test('rerendered links get one current preview button and feature teardown abort
   assert.equal(win.document.querySelector('[role="dialog"]'), null);
   assert.equal(win.document.querySelectorAll('a').length, 1);
 });
+
+test('preview discovery ignores unrelated changes and follows in-place native titles and URLs', async (t) => {
+  const win = fixture(nativeLink(123) + '<nav><span>Native navigation</span></nav>');
+  mount();
+  await flush();
+  const root = win.document.querySelector<HTMLElement>('app-assignment-title-link')!;
+  const query = root.querySelectorAll.bind(root);
+  let reads = 0;
+  t.mock.method(root, 'querySelectorAll', (selector: string) => { reads += 1; return query(selector); });
+  win.document.querySelector('nav')!.classList.add('open');
+  win.document.querySelector('nav span')!.textContent = 'Updated native navigation';
+  win.document.body.insertAdjacentHTML('beforeend', '<aside>Unrelated status</aside>');
+  await flush();
+  assert.equal(reads, 0);
+  const anchor = root.querySelector('a')!;
+  anchor.firstChild!.nodeValue = 'Changed assignment';
+  await flush();
+  assert.ok(reads > 0);
+  assert.equal(root.querySelector('button')!.getAttribute('aria-label'), 'Preview Changed assignment');
+  anchor.href = '/lms-assignment/assignment/assignment-student-view/456';
+  await flush();
+  assert.equal(root.querySelectorAll('button').length, 1);
+  anchor.href = '/unrelated-native-page';
+  await flush();
+  assert.equal(root.querySelector('button'), null);
+});

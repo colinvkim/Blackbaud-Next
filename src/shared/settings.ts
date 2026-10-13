@@ -1,4 +1,5 @@
 import { extensionApi } from './extension.ts';
+import { requestCoordinator } from './coordinator.ts';
 import type { Cleanup } from './types.ts';
 
 export const FEATURE_DEFINITIONS = [
@@ -58,7 +59,7 @@ export async function getSettings(): Promise<Settings> {
   return normalizeSettings(await storage.get(null));
 }
 
-export async function updateSettings(update: Partial<Omit<Settings, 'schemaVersion'>>): Promise<void> {
+export function settingsPatch(update: Partial<Omit<Settings, 'schemaVersion'>>): Record<string, unknown> {
   // Store a patch so updates from two tabs cannot overwrite each other's switches.
   const validated: Record<string, unknown> = { schemaVersion: 2 };
   if (typeof update.enabled === 'boolean') validated.enabled = update.enabled;
@@ -70,7 +71,13 @@ export async function updateSettings(update: Partial<Omit<Settings, 'schemaVersi
   for (const { key } of FEATURE_DEFINITIONS) {
     if (typeof update[key] === 'boolean') validated[key] = update[key];
   }
-  await extensionApi().storage.sync.set(validated);
+  return validated;
+}
+
+export async function updateSettings(update: Partial<Omit<Settings, 'schemaVersion'>>): Promise<void> {
+  // Validate before dispatch, then hand persistence to the worker immediately.
+  settingsPatch(update);
+  await requestCoordinator({ channel: 'blackbaud-next-coordinator-v1', kind: 'settings', update });
 }
 
 export function subscribeSettings(callback: () => void): Cleanup {

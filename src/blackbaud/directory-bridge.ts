@@ -1,7 +1,7 @@
-import { directoryTargetFromUrl, fetchDirectoryPreparedSnapshot, finalizeDirectorySnapshot } from './directory.ts';
+import { directoryTargetFromUrl, finalizeDirectorySnapshot } from './directory.ts';
 import type { DirectorySnapshot, DirectoryTarget } from './directory.ts';
 import { acquireIndependentDirectory, independentDirectoryRequested } from './directory-independent.ts';
-import { claimDirectoryPreparedSnapshot } from './directory-loading.ts';
+import { startDirectoryPreparedRead } from './directory-loading.ts';
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_OWNER_ATTRIBUTE, DIRECTORY_REQUEST_EVENT, DIRECTORY_RESPONSE_EVENT, DIRECTORY_UI_ATTRIBUTE } from './directory-protocol.ts';
 
 export class DirectoryUnsupportedError extends Error {
@@ -45,7 +45,7 @@ export async function acquireDirectory(target: DirectoryTarget, signal: AbortSig
   let acceptPending: ((value: Record<string, unknown>) => void) | null = null;
   let expectedStatus: 'ready' | 'active' = 'ready';
   const send = (action: 'acquire' | 'activate' | 'heartbeat' | 'release') => document.dispatchEvent(new CustomEvent(DIRECTORY_REQUEST_EVENT, {
-    detail: JSON.stringify({ action, token, directoryId: target.directoryId, ...(action === 'acquire' ? { mode: 'metadata' } : {}) }),
+    detail: JSON.stringify({ action, token, directoryId: target.directoryId }),
   }));
   const release = () => {
     if (released) return;
@@ -70,7 +70,7 @@ export async function acquireDirectory(target: DirectoryTarget, signal: AbortSig
   };
   const receive = (event: Event) => {
     const detail: unknown = (event as CustomEvent).detail;
-    if (typeof detail !== 'string' || detail.length > 8_000_000) return;
+    if (typeof detail !== 'string' || detail.length > 4000) return;
     let value: Record<string, unknown>;
     try { value = JSON.parse(detail) as Record<string, unknown>; } catch { return; }
     if (!value || typeof value !== 'object' || value.token !== token || released) return;
@@ -96,7 +96,7 @@ export async function acquireDirectory(target: DirectoryTarget, signal: AbortSig
   try {
     // The intent-captured read can already be in flight. Deep links and Back
     // start a direct read here, in parallel with native metadata readiness.
-    const prepared = claimDirectoryPreparedSnapshot(target, readSignal) ?? fetchDirectoryPreparedSnapshot(target, readSignal);
+    const prepared = startDirectoryPreparedRead(target, readSignal);
     const metadata = new Promise<Record<string, unknown>>((resolve, reject) => {
       acceptPending = resolve;
       rejectPending = reject;
@@ -113,12 +113,14 @@ export async function acquireDirectory(target: DirectoryTarget, signal: AbortSig
       heartbeat = window.setInterval(() => send('heartbeat'), 5_000);
       return { response, leasedRoot };
     });
-    const [{ response, leasedRoot }, data] = await Promise.all([metadata, prepared]);
+    const { response, leasedRoot } = await metadata;
     signal.throwIfAborted();
     const photoBaseUrl = typeof response.photoBaseUrl === 'string' ? response.photoBaseUrl : '';
-    const finalized = finalizeDirectorySnapshot(data, target.origin, photoBaseUrl);
     const searchOnly = response.searchOnly === true;
-    const snapshot = searchOnly ? { ...finalized, complete: false } : finalized;
+    if (searchOnly) prepared.cancel();
+    const snapshot: DirectorySnapshot = searchOnly
+      ? { entries: [], totalCount: 0, reportedTotalCount: 0, complete: false }
+      : finalizeDirectorySnapshot(await prepared.result, target.origin, photoBaseUrl);
     if (released || readSignal.aborted || !leasedRoot.isConnected || window.location.href !== href) throw new Error('The directory changed.');
     await new Promise<Record<string, unknown>>((resolve, reject) => {
       expectedStatus = 'active';

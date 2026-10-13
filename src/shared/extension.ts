@@ -4,11 +4,19 @@ export interface StorageChange {
   newValue?: unknown;
 }
 
-interface StorageArea {
+export interface StorageArea {
   get: (keys?: string | string[] | null) => Promise<Record<string, unknown>>;
   set: (items: Record<string, unknown>) => Promise<void>;
   remove: (keys: string | string[]) => Promise<void>;
 }
+
+export interface MessageSender {
+  id?: string;
+  url?: string;
+  documentId?: string;
+}
+
+export type MessageListener = (message: unknown, sender: MessageSender, respond: (response: unknown) => void) => boolean | void;
 
 export interface ExtensionApi {
   storage: {
@@ -19,7 +27,15 @@ export interface ExtensionApi {
       removeListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void;
     };
   };
-  runtime: { getURL: (path: string) => string };
+  runtime: {
+    id: string;
+    getURL: (path: string) => string;
+    sendMessage: (message: unknown) => Promise<unknown>;
+    onMessage: {
+      addListener: (listener: MessageListener) => void;
+      removeListener: (listener: MessageListener) => void;
+    };
+  };
 }
 
 export function extensionApi(): ExtensionApi {

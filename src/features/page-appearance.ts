@@ -1,6 +1,7 @@
 import { isSchoolPage } from '../blackbaud/routes.ts';
 import { addStyle } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
+import { PROGRESS_STYLES } from './progress-styles.ts';
 
 const TOOL_STYLES = `
 html {
@@ -68,31 +69,6 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page] .table > thead > t
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .table > tbody > tr > td { padding: 14px 12px; vertical-align: middle; border-color: var(--bn-border); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .table-striped > tbody > tr:nth-of-type(odd) { background: #fafbfc; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] .well-sm { padding: 12px 16px; font-size: 13px; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] .well-sm:has(> label[for="gradeSelect"]:first-child + select#gradeSelect:last-child) { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 12px; margin-bottom: 20px; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] .well-sm > label[for="gradeSelect"] { margin: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] #gradeSelect { min-height: 36px; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 20px; margin: 0 0 20px; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"]::before,
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"]::after { display: none; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"] > div > .ch.col-md-4 { float: none; width: 100%; min-width: 0; padding: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"] .bb-tile { margin-bottom: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] { display: grid; grid-template-columns: minmax(230px, 1.8fr) minmax(20px, .25fr) minmax(165px, 1fr) minmax(65px, .45fr) minmax(190px, 1.15fr); gap: 20px; margin: 0; padding: 20px 0; border-bottom: 1px solid var(--bn-border); background: var(--bn-surface) !important; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"]::before,
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"]::after { display: none; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :is(.col-md-2, .col-md-3) { float: none; width: auto; min-width: 0; padding: 0; overflow-wrap: anywhere; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :first-child h3 { font-size: 17px; font-weight: 600; margin-top: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] :is(h4, .group-owner-name) { font-size: 14px; font-weight: 600; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] h5 { font-size: 12px; color: var(--bn-muted); font-weight: 400; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] .showGrade { font-size: 22px; line-height: 1.4; white-space: nowrap; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] .bb-avatar-image-medium { width: 40px; height: 40px; object-fit: cover; }
-/* Compact contacts only when the complete native photo/name/email/message structure matches. */
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 12px; align-content: start; align-items: start; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) > .bb-avatar-wrapper-medium { grid-column: 1; grid-row: 1 / 4; float: none !important; width: 40px; height: 40px; margin: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) > .clearfix:empty { display: none; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) > :is(h4.group-owner-name, p, button.sendmessage) { grid-column: 2; min-width: 0; margin: 0; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) > p { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :last-child:has(> div.bb-avatar-wrapper-medium.pull-left:first-child + div.clearfix:empty + h4.group-owner-name + p + button.sendmessage:last-child):has(> p > a[href^="mailto:"]) > button.sendmessage { justify-self: start; max-width: 100%; width: auto; margin-top: 4px; padding: 5px 9px; font-size: 13px; white-space: normal; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #schedule-header :is(h2, .chCal-header-title) { font-size: 23px; font-weight: 600; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #schedule-header > .container-fluid:has(> .row > .col-md-12 > .pull-right:first-child + div > div > .chCal-button-prev + .chCal-button-next) { padding-inline: 0; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] .bb-tile-title > div:only-child > h2.bb-tile-header:only-child { padding: 0; }
@@ -114,14 +90,6 @@ html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] :is(sky-to
 html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] sky-toolbar { border-color: var(--bn-border); background: var(--bn-surface); }
 html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] sky-repeater-item.assignment-repeater-item { border-color: var(--bn-border); background: var(--bn-surface); }
 html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] app-assignment-title-link a { color: var(--bn-accent); }
-@media (max-width: 1050px) {
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] { display: flex; flex-wrap: wrap; gap: 16px 24px; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :first-child { flex-basis: 100%; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :not(:first-child) { flex: 1 1 150px; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :is(:nth-child(2), :nth-child(4)) { display: contents; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :nth-child(4) > .showGrade { flex: 0 0 auto; min-width: 70px; margin: 0; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-course-row="true"] > :nth-child(4) > .showGrade:is([style*="visibility:hidden"], [style*="visibility: hidden"]) { display: none; }
-}
 @media (max-width: 700px) {
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title { padding: 16px; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-content { padding: 16px; }
@@ -129,7 +97,6 @@ html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] app-assign
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #schedule-header .container-fluid > .row > .col-md-12 > .pull-right:first-child + div > div:has(> .chCal-button-prev + .chCal-button-next) > h2 { display: block !important; clear: both; margin: 12px 0 0; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .table > :is(thead, tbody) > tr > :is(td, th) { padding: 10px 8px; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="directory"] .bn-directory { padding: 16px; }
-  html[data-blackbaud-next-appearance] #site-main[data-bn-page="progress"] [data-bn-progress-summary="true"] { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 16px; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic { max-width: calc(100% - 10px); }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic > .containerFull { max-width: 100%; }
 }
@@ -137,6 +104,7 @@ html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] app-assign
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(.bb-tile, .well) { border-color: CanvasText; box-shadow: none; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(a, button, input, select, textarea):focus-visible { outline-color: Highlight; }
 }
+${PROGRESS_STYLES}
 `;
 
 export const toolStylesFeature: Feature = {

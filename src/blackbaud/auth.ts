@@ -88,7 +88,9 @@ export function selectProviderAuthContext(
 }
 
 export function schoolFromSigninUrl(url: URL): string | null {
-  const redirect = url.searchParams.get('redirectUrl');
+  const redirects = [...url.searchParams].filter(([key]) => key === 'redirectUrl' || key === 'redirecturl').map(([, value]) => value);
+  if (new Set(redirects).size !== 1) return null;
+  const redirect = redirects[0];
   if (!redirect) return null;
   try {
     const destination = new URL(redirect);
@@ -96,6 +98,10 @@ export function schoolFromSigninUrl(url: URL): string | null {
   } catch {
     return null;
   }
+}
+
+export function hasSigninRedirect(url: URL): boolean {
+  return url.searchParams.has('redirectUrl') || url.searchParams.has('redirecturl');
 }
 
 export function canAttempt(context: AuthContext, step: 'blackbaud' | 'google' | 'recovery', now = Date.now()): boolean {

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { nativeAppearancePage, nativeAppearancePageKind, nativeCourseRows, nativeLegacyAppearanceShell, nativeModernAppearanceRoute, nativeModernAppearanceShell, nativeProgressSummaryRow } from '../src/blackbaud/appearance.ts';
-import { appearanceLayoutFeature, APPEARANCE_COURSE_ROW_ATTRIBUTE, APPEARANCE_PAGE_ATTRIBUTE, APPEARANCE_SHELL_ATTRIBUTE, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE } from '../src/features/appearance-layout.ts';
+import { nativeAppearancePage, nativeAppearancePageKind, nativeCourseRows, nativeLegacyAppearanceShell, nativeModernAppearanceRoute, nativeModernAppearanceShell, nativeProgressCourseList, nativeProgressSummaryRow } from '../src/blackbaud/appearance.ts';
+import { appearanceLayoutFeature, APPEARANCE_COURSE_ROW_ATTRIBUTE, APPEARANCE_PAGE_ATTRIBUTE, APPEARANCE_SHELL_ATTRIBUTE, APPEARANCE_PROGRESS_COURSES_ATTRIBUTE, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE } from '../src/features/appearance-layout.ts';
 import { FeatureController } from '../src/runtime/controller.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import { ASSIGNMENT_ROW_SELECTOR } from '../src/blackbaud/assignment-list.ts';
 import type { Cleanup } from '../src/shared/types.ts';
+import { nativeHeaderFixtureHtml } from './fixtures/header.ts';
 
 const origin = 'https://example.myschoolapp.com';
 const progress = '/app/student?svcid=edu#studentmyday/progress';
@@ -136,6 +137,161 @@ test('missing or additional row content falls back without modifying native cont
   assert.equal(link.getAttribute('href'), href);
   button.click();
   assert.equal(clicks, 1);
+});
+
+test('Cards list recognition requires only complete native course rows and no direct text content', () => {
+  const variations: Array<(main: HTMLElement, list: HTMLElement) => void> = [
+    (_main, list) => { list.replaceChildren(); },
+    (_main, list) => { list.append(list.ownerDocument.createElement('button')); },
+    (_main, list) => { list.firstElementChild!.lastElementChild!.remove(); },
+    (_main, list) => { list.querySelector('a')!.setAttribute('href', '#unknown'); },
+    (_main, list) => { list.firstElementChild!.prepend('Native status outside the five columns'); },
+    (_main, list) => { list.append('Native loading status'); },
+    (main) => { main.insertAdjacentHTML('beforeend', '<div id="coursesContainer"></div>'); },
+  ];
+  for (const modify of variations) {
+    const view = new JSDOM(progressMain(courseRow('one') + courseRow('two')), { url: `${origin}${progress}` });
+    try {
+      const main = view.window.document.getElementById('site-main')!;
+      const list = view.window.document.getElementById('coursesContainer')!;
+      const url = new URL(view.window.location.href);
+      list.prepend('\n  ');
+      list.append(view.window.document.createComment('Native renderer boundary'));
+      assert.equal(nativeProgressCourseList(main, url), list);
+      assert.equal(nativeProgressCourseList(main, new URL(`${origin}/app/student#studentmyday/schedule`)), null);
+      modify(main, list);
+      assert.equal(nativeProgressCourseList(main, url), null);
+    } finally { view.window.close(); }
+  }
+});
+
+test('Cards list marker follows late rows, mixed native content, and restored row structures', async () => {
+  fixture(shell + progressMain(''));
+  const list = document.getElementById('coursesContainer')!;
+  mount();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  list.insertAdjacentHTML('beforeend', courseRow('one') + courseRow('two'));
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  const nativeAction = document.querySelector<HTMLButtonElement>('#one button')!;
+  let clicks = 0;
+  nativeAction.addEventListener('click', () => { clicks++; });
+  const unknown = document.createElement('p');
+  unknown.textContent = 'Native loading status';
+  list.append(unknown);
+  await flush();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(document.getElementById('one')!.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(document.querySelector('#one button'), nativeAction);
+  nativeAction.click();
+  assert.equal(clicks, 1);
+  unknown.remove();
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  const two = document.getElementById('two')!;
+  const last = two.lastElementChild!;
+  last.remove();
+  await flush();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(two.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  two.append(last);
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  const text = document.createTextNode('\n  ');
+  list.append(text);
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  text.data = 'Native status outside a row';
+  await flush();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  text.data = '\n  ';
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  text.remove();
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+});
+
+test('Cards list replacement restores detached containers and follows the current native root', async () => {
+  fixture(shell + progressMain(courseRow('one')));
+  mount();
+  const oldList = document.getElementById('coursesContainer')!;
+  const oldRow = document.getElementById('one')!;
+  oldList.outerHTML = `<div id="coursesContainer">${courseRow('two')}</div>`;
+  await flush();
+  assert.equal(oldList.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(oldRow.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  const replacement = document.getElementById('coursesContainer')!;
+  assert.equal(replacement.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  document.getElementById('site-main')!.outerHTML = progressMain(courseRow('three'));
+  await flush();
+  assert.equal(replacement.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(document.getElementById('coursesContainer')!.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+});
+
+test('meaningful direct row text restores native layout while text inside native columns remains untouched', async () => {
+  fixture(shell + progressMain(courseRow('one') + courseRow('two')));
+  const list = document.getElementById('coursesContainer')!;
+  const row = document.getElementById('one')!;
+  const nativeAction = row.querySelector<HTMLButtonElement>('button')!;
+  const directText = document.createTextNode('\n  ');
+  row.prepend(directText);
+  mount();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  directText.data = 'Native status outside the five columns';
+  await flush();
+  assert.equal(row.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(document.getElementById('two')!.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(row.querySelector('button'), nativeAction);
+  directText.data = '\n  ';
+  await flush();
+  assert.equal(row.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  nativeAction.firstChild!.nodeValue = 'Native grade content updated';
+  await flush();
+  assert.equal(nativeAction.textContent, 'Native grade content updated');
+  assert.equal(row.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+});
+
+test('Cards list cleanup restores previous marker values and does not enhance rows after abort', async () => {
+  fixture(shell + progressMain());
+  const list = document.getElementById('coursesContainer')!;
+  list.setAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE, 'previous-courses');
+  const abort = mount();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  abort.abort();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'previous-courses');
+  list.insertAdjacentHTML('beforeend', courseRow('late'));
+  await flush();
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'previous-courses');
+  assert.equal(document.getElementById('late')!.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+});
+
+test('Cards list markers clear on feature switches and route departure and recover using current rows', async () => {
+  const view = fixture(shell + progressMain());
+  const controller = new FeatureController([appearanceLayoutFeature]);
+  cleanups.push(() => controller.dispose());
+  const url = new URL(window.location.href);
+  const list = document.getElementById('coursesContainer')!;
+  controller.update(url, DEFAULT_SETTINGS);
+  assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  for (const disabled of [{ ...DEFAULT_SETTINGS, pageAppearance: false }, { ...DEFAULT_SETTINGS, enabled: false }]) {
+    controller.update(url, disabled);
+    assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+    assert.equal(document.querySelector(`[${APPEARANCE_COURSE_ROW_ATTRIBUTE}]`), null);
+    controller.update(url, DEFAULT_SETTINGS);
+    assert.equal(list.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  }
+  view.history.pushState(null, '', '#studentmyday/schedule');
+  view.dispatchEvent(new view.PopStateEvent('popstate'));
+  await flush();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  controller.update(new URL(window.location.href), DEFAULT_SETTINGS);
+  list.insertAdjacentHTML('beforeend', courseRow('late'));
+  await flush();
+  assert.equal(list.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
 });
 
 test('a delayed native root is enhanced once it arrives and unchanged markup stays intact', async () => {
@@ -792,4 +948,55 @@ test('explicit icon feature cleanup restores originals and disconnects observers
   document.getElementById('site-nav-lower')!.outerHTML = lowerIconNavigation('site-nav-bottom');
   await flush();
   assert.equal(document.querySelector('[data-bn-navigation-icon], [data-bn-native-icon]'), null);
+});
+
+test('header selection follows native aria-current changes on routes without inferred selection', async () => {
+  fixture(nativeHeaderFixtureHtml(), '/app/student?svcid=edu#news');
+  const controller = mount();
+  await flush();
+  const news = document.getElementById('group-header-News')!;
+  const classes = document.getElementById('group-header-Classes')!;
+  news.setAttribute('aria-current', 'page');
+  await flush();
+  assert.equal(news.getAttribute('data-bn-header-current'), 'true');
+  news.removeAttribute('aria-current');
+  classes.setAttribute('aria-current', 'page');
+  await flush();
+  assert.equal(news.hasAttribute('data-bn-header-current'), false);
+  assert.equal(classes.getAttribute('data-bn-header-current'), 'true');
+  controller.abort();
+  assert.equal(classes.getAttribute('aria-current'), 'page');
+  assert.equal(classes.hasAttribute('data-bn-header-current'), false);
+});
+
+test('native spacer text updates withdraw fixed header styling and recover when empty', async () => {
+  fixture(nativeHeaderFixtureHtml());
+  const spacer = document.getElementById('site-top-spacer')!;
+  const text = document.createTextNode(' ');
+  spacer.append(text);
+  mount();
+  await flush();
+  assert.equal(spacer.getAttribute('data-bn-header-part'), 'spacer');
+  text.data = 'New native spacer content';
+  await flush();
+  assert.equal(spacer.hasAttribute('data-bn-header-part'), false);
+  assert.equal(document.querySelector('[data-bn-header-part="masthead-column"]'), null);
+  text.data = ' ';
+  await flush();
+  assert.equal(spacer.getAttribute('data-bn-header-part'), 'spacer');
+});
+
+test('native aria-labelledby names restore replaced navigation originals', async () => {
+  fixture(iconNavigation() + progressMain());
+  mount();
+  const control = document.getElementById('group-header-Classes')!;
+  const original = control.querySelector('img')!;
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+  original.setAttribute('aria-labelledby', 'native-description');
+  await flush();
+  assert.equal(control.querySelector('svg'), null);
+  assert.equal(original.hasAttribute('data-bn-native-icon'), false);
+  original.removeAttribute('aria-labelledby');
+  await flush();
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
 });

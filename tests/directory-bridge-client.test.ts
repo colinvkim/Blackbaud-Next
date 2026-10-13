@@ -148,6 +148,30 @@ test('an empty search-first directory signals server search without an initial n
   assert.equal(native.root.hasAttribute(DIRECTORY_OWNER_ATTRIBUTE), false);
 });
 
+for (const blankRead of ['failed', 'pending'] as const) {
+  test(`native search-first metadata acquires without depending on a ${blankRead} blank results read`, async (t) => {
+    const native = fixture();
+    native.modelData.DefaultResults = false;
+    Reflect.deleteProperty(native.view, 'results');
+    let readSignal: AbortSignal | undefined;
+    t.mock.method(globalThis, 'fetch', (_input: RequestInfo | URL, options?: RequestInit) => {
+      readSignal = options!.signal as AbortSignal;
+      if (blankRead === 'failed') return Promise.resolve(new Response('Unavailable', { status: 503 }));
+      return new Promise<Response>((_resolve, reject) => readSignal!.addEventListener('abort', () => reject(readSignal!.reason), { once: true }));
+    });
+    const lease = await acquireDirectory(target, new AbortController().signal);
+    cleanups.push(lease.release);
+    assert.equal(lease.searchOnly, true);
+    assert.deepEqual(lease.snapshot, { entries: [], totalCount: 0, reportedTotalCount: 0, complete: false });
+    assert.equal(readSignal?.aborted, true);
+    assert.equal(native.root.getAttribute(DIRECTORY_OWNER_ATTRIBUTE) !== null, true);
+    assert.equal(native.view.getResults(), undefined);
+    lease.release();
+    assert.equal(native.view.getResults, native.getResults);
+    assert.equal(native.calls(), 0);
+  });
+}
+
 test('a malformed search-first flag fails closed without pausing the original view', async (t) => {
   const native = fixture([], false);
   native.modelData.DefaultResults = 'false';

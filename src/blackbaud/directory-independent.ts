@@ -1,6 +1,6 @@
-import { claimDirectoryPreparedSnapshot } from './directory-loading.ts';
-import { directoryTargetFromUrl, fetchDirectoryPreparedSnapshot, finalizeDirectorySnapshot } from './directory.ts';
-import type { DirectoryTarget } from './directory.ts';
+import { startDirectoryPreparedRead } from './directory-loading.ts';
+import { directoryTargetFromUrl, finalizeDirectorySnapshot } from './directory.ts';
+import type { DirectorySnapshot, DirectoryTarget } from './directory.ts';
 import { fetchDirectoryConfiguration } from './directory-configuration.ts';
 import { DIRECTORY_OWNER_ATTRIBUTE } from './directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT } from './directory-independent-protocol.ts';
@@ -179,18 +179,21 @@ export async function acquireIndependentDirectory(target: DirectoryTarget, signa
   try {
     // Both reads are independent of native directory view construction. The
     // click-captured people request can already be transferring at this point.
-    const prepared = claimDirectoryPreparedSnapshot(target, readSignal) ?? fetchDirectoryPreparedSnapshot(target, readSignal);
-    const [configuration, records] = await Promise.all([fetchDirectoryConfiguration(target, readSignal), prepared]);
+    const prepared = startDirectoryPreparedRead(target, readSignal);
+    const configuration = await fetchDirectoryConfiguration(target, readSignal);
+    if (configuration.searchOnly) prepared.cancel();
+    const photoBaseUrl = typeof ready.photoBaseUrl === 'string' ? ready.photoBaseUrl : '';
+    const snapshot: DirectorySnapshot = configuration.searchOnly
+      ? { entries: [], totalCount: 0, reportedTotalCount: 0, complete: false }
+      : finalizeDirectorySnapshot(await prepared.result, target.origin, photoBaseUrl);
     readSignal.throwIfAborted();
     if (released || window.location.href !== href || !root.isConnected || root.getAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE) !== target.directoryId || root.getAttribute(DIRECTORY_OWNER_ATTRIBUTE) !== leaseToken) throw new Error('The directory changed.');
-    const photoBaseUrl = typeof ready.photoBaseUrl === 'string' ? ready.photoBaseUrl : '';
-    const snapshot = finalizeDirectorySnapshot(records, target.origin, photoBaseUrl);
     const heading = root.querySelector<HTMLElement>(':scope > #overview h1');
     if (heading) heading.textContent = configuration.name;
     root.querySelector(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}]`)?.remove();
     clearTimeout(deadline);
     return { root, name: configuration.name, searchOnly: configuration.searchOnly, photoBaseUrl,
-      snapshot: configuration.searchOnly ? { ...snapshot, complete: false } : snapshot, signal: leaseAbort.signal, release };
+      snapshot, signal: leaseAbort.signal, release };
   } catch (error) {
     release();
     throw error;

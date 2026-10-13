@@ -96,9 +96,11 @@ export function rosterValues(entries: RosterEntry[], type: 'name' | 'email'): st
   return entries.flatMap((entry) => {
     const value = entry[type].trim();
     if (!value || (type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) return [];
-    const key = value.toLocaleLowerCase();
-    if (seen.has(key)) return [];
-    seen.add(key);
+    if (type === 'email') {
+      const key = value.toLocaleLowerCase();
+      if (seen.has(key)) return [];
+      seen.add(key);
+    }
     return [value];
   });
 }

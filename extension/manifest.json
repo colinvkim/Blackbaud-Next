@@ -6,6 +6,7 @@
   "manifest_version": 3,
   "minimum_chrome_version": "120",
   "permissions": ["storage"],
+  "background": { "service_worker": "dist/background.js" },
   "action": { "default_popup": "popup.html" },
   "content_scripts": [
     { "css": ["dist/appearance.css"], "js": ["dist/appearance.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start" },

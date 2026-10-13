@@ -11,7 +11,6 @@ export interface DirectoryRequest {
   action: 'acquire' | 'activate' | 'heartbeat' | 'release';
   token: string;
   directoryId: string;
-  mode?: 'metadata';
 }
 
 export function directoryRequest(value: unknown): DirectoryRequest | null {
@@ -20,8 +19,7 @@ export function directoryRequest(value: unknown): DirectoryRequest | null {
     const request = JSON.parse(value) as Record<string, unknown>;
     if (!['acquire', 'activate', 'heartbeat', 'release'].includes(String(request.action)) ||
       typeof request.token !== 'string' || !/^[a-z0-9-]{16,80}$/i.test(request.token) ||
-      typeof request.directoryId !== 'string' || !/^[1-9]\d{0,14}$/.test(request.directoryId) ||
-      (request.mode !== undefined && request.mode !== 'metadata')) return null;
-    return request as unknown as DirectoryRequest;
+      typeof request.directoryId !== 'string' || !/^[1-9]\d{0,14}$/.test(request.directoryId)) return null;
+    return { action: request.action as DirectoryRequest['action'], token: request.token, directoryId: request.directoryId };
   } catch { return null; }
 }

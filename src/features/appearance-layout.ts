@@ -1,6 +1,7 @@
-import { appearanceObservationSelector, nativeAppearancePage, nativeAppearancePageKind, nativeCourseRows, nativeLegacyAppearanceShell, nativeModernAppearanceRoute, nativeModernAppearanceShell, nativeProgressSummaryRow } from '../blackbaud/appearance.ts';
+import { appearanceObservationSelector, nativeAppearancePage, nativeAppearancePageKind, nativeModernAppearanceRoute, nativeProgressAppearance } from '../blackbaud/appearance.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { nativeNavigationIconTargets } from '../blackbaud/appearance-icons.ts';
+import { nativeAppearanceNavigation } from '../blackbaud/appearance-icons.ts';
+import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { observeDom, watchAddedElements } from '../shared/dom.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 import { createNavigationIcons } from './navigation-icons.ts';
@@ -11,6 +12,7 @@ export const APPEARANCE_PAGE_ATTRIBUTE = 'data-bn-page';
 export const APPEARANCE_COURSE_ROW_ATTRIBUTE = 'data-bn-course-row';
 export const APPEARANCE_SHELL_ATTRIBUTE = 'data-bn-portal-shell';
 export const APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE = 'data-bn-progress-summary';
+export const APPEARANCE_PROGRESS_COURSES_ATTRIBUTE = 'data-bn-progress-courses';
 
 export const appearanceLayoutFeature: Feature = {
   id: 'appearance-layout',
@@ -25,28 +27,11 @@ export const appearanceLayoutFeature: Feature = {
     const discovered = new Set<HTMLElement>();
     const observations = new Map<HTMLElement, Cleanup>();
     const labels = new Map<HTMLElement, MutationObserver>();
-    const navigationSemantics = new Map<HTMLElement, MutationObserver>();
-    const markers = new Map<HTMLElement, Map<string, string | null>>();
+    const courseText = new Map<HTMLElement, MutationObserver>();
+    const shellSemantics = new Map<HTMLElement, MutationObserver>();
+    const markers = createAttributeOwnership();
     const navigationIcons = createNavigationIcons();
     const headerAppearance = createHeaderAppearance();
-    const restore = (element: HTMLElement, attribute: string) => {
-      const attributes = markers.get(element);
-      if (!attributes?.has(attribute)) return;
-      const previous = attributes.get(attribute)!;
-      if (previous === null) element.removeAttribute(attribute);
-      else element.setAttribute(attribute, previous);
-      attributes.delete(attribute);
-      if (!attributes.size) markers.delete(element);
-    };
-    const mark = (element: HTMLElement, attribute: string, value: string) => {
-      let attributes = markers.get(element);
-      if (!attributes) {
-        attributes = new Map();
-        markers.set(element, attributes);
-      }
-      if (!attributes.has(attribute)) attributes.set(attribute, element.getAttribute(attribute));
-      if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
-    };
     const queueUpdate = () => {
       if (disposed || signal.aborted || queued) return;
       queued = true;
@@ -80,20 +65,20 @@ export const appearanceLayoutFeature: Feature = {
         labels.set(element, observer);
       }
       const navigation = [...discovered].filter((element) => element.isConnected &&
-        ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom'].includes(element.id));
+        ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom', 'site-top-spacer'].includes(element.id));
       const navigationRoots = new Set(navigation.filter((element) =>
         !navigation.some((other) => other !== element && other.contains(element))));
-      for (const [element, observer] of navigationSemantics) {
-        if (!navigationRoots.has(element)) { observer.disconnect(); navigationSemantics.delete(element); }
+      for (const [element, observer] of shellSemantics) {
+        if (!navigationRoots.has(element)) { observer.disconnect(); shellSemantics.delete(element); }
       }
       for (const element of navigationRoots) {
-        if (navigationSemantics.has(element)) continue;
+        if (shellSemantics.has(element)) continue;
         // An original graphic can acquire an accessible name or interaction.
-        // Revalidate only navigation, including direct native text updates.
+        // Revalidate navigation and its spacer, including native text updates.
         const observer = new MutationObserver(queueUpdate);
         observer.observe(element, { subtree: true, characterData: true, attributes: true,
-          attributeFilter: ['alt', 'role', 'aria-label', 'aria-controls', 'aria-haspopup', 'onclick', 'tabindex', 'iconname'] });
-        navigationSemantics.set(element, observer);
+          attributeFilter: ['alt', 'role', 'aria-label', 'aria-labelledby', 'aria-current', 'aria-controls', 'aria-haspopup', 'onclick', 'tabindex', 'iconname', 'contenteditable', 'type'] });
+        shellSemantics.set(element, observer);
       }
       for (const [element, cleanup] of observations) {
         if (!roots.has(element)) { cleanup(); observations.delete(element); }
@@ -103,30 +88,50 @@ export const appearanceLayoutFeature: Feature = {
         const stop = observeDom(queueUpdate, signal, root);
         observations.set(root, stop);
       }
+      const courseContainers = new Set(nativeAppearancePageKind(url) === 'progress'
+        ? [...discovered].filter((element) => element.isConnected && element.id === 'site-main')
+          .flatMap((main) => [...main.querySelectorAll<HTMLElement>('#coursesContainer')]) : []);
+      for (const [container, observer] of courseText) {
+        if (!courseContainers.has(container)) { observer.disconnect(); courseText.delete(container); }
+      }
+      for (const container of courseContainers) {
+        if (courseText.has(container)) continue;
+        // A native loading message can replace whitespace without adding a node.
+        // Only direct list/row text affects grid identity; grade text does not.
+        const observer = new MutationObserver((records) => {
+          if (records.some(({ target }) => target.parentNode === container ||
+            (target.parentElement?.parentElement === container && target.parentElement.classList.contains('row')))) queueUpdate();
+        });
+        observer.observe(container, { subtree: true, characterData: true });
+        courseText.set(container, observer);
+      }
     };
     const update = () => {
       if (disposed || signal.aborted) return;
       refreshObservations();
       const current = window.location.href === url.href;
       const context = current ? nativeAppearancePage(url) : null;
-      const legacyShell = current ? nativeLegacyAppearanceShell(url) : null;
-      const modernShell = current ? nativeModernAppearanceShell(url) : null;
-      const shell = legacyShell ?? modernShell;
-      const rows = context?.kind === 'progress' ? nativeCourseRows(context.element, url) : [];
-      const summary = context?.kind === 'progress' ? nativeProgressSummaryRow(context.element, url) : null;
+      const navigation = current ? nativeAppearanceNavigation(document, url) : { shell: null, icons: [] };
+      const shell = navigation.shell ? document.documentElement : null;
+      const { rows, summary, courses } = nativeProgressAppearance(context, url);
       const currentRows = new Set(rows);
-      for (const [element, attributes] of markers) {
-        if (attributes.has(APPEARANCE_PAGE_ATTRIBUTE) && context?.element !== element) restore(element, APPEARANCE_PAGE_ATTRIBUTE);
-        if (attributes.has(APPEARANCE_COURSE_ROW_ATTRIBUTE) && !currentRows.has(element)) restore(element, APPEARANCE_COURSE_ROW_ATTRIBUTE);
-        if (attributes.has(APPEARANCE_SHELL_ATTRIBUTE) && shell !== element) restore(element, APPEARANCE_SHELL_ATTRIBUTE);
-        if (attributes.has(APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE) && summary !== element) restore(element, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE);
-      }
-      if (context) mark(context.element, APPEARANCE_PAGE_ATTRIBUTE, context.kind);
-      for (const row of rows) mark(row, APPEARANCE_COURSE_ROW_ATTRIBUTE, 'true');
-      if (summary) mark(summary, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE, 'true');
-      if (shell) mark(shell, APPEARANCE_SHELL_ATTRIBUTE, legacyShell ? 'legacy' : 'modern');
-      navigationIcons.update(shell ? nativeNavigationIconTargets(document, url) : []);
-      const headerTargets = shell ? nativeHeaderAppearanceTargets(document, url) : [];
+      markers.retain((element, attribute) => {
+        switch (attribute) {
+          case APPEARANCE_PAGE_ATTRIBUTE: return context?.element === element;
+          case APPEARANCE_COURSE_ROW_ATTRIBUTE: return currentRows.has(element);
+          case APPEARANCE_SHELL_ATTRIBUTE: return shell === element;
+          case APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE: return summary === element;
+          case APPEARANCE_PROGRESS_COURSES_ATTRIBUTE: return courses === element;
+          default: return false;
+        }
+      });
+      if (context) markers.mark(context.element, APPEARANCE_PAGE_ATTRIBUTE, context.kind);
+      for (const row of rows) markers.mark(row, APPEARANCE_COURSE_ROW_ATTRIBUTE, 'true');
+      if (summary) markers.mark(summary, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE, 'true');
+      if (courses) markers.mark(courses, APPEARANCE_PROGRESS_COURSES_ATTRIBUTE, 'cards');
+      if (shell) markers.mark(shell, APPEARANCE_SHELL_ATTRIBUTE, navigation.shell!);
+      navigationIcons.update(navigation.icons);
+      const headerTargets = nativeHeaderAppearanceTargets(document, url, navigation);
       // The fixed stack changes as one unit: its verified spacer must reserve
       // room for every resized row. Otherwise retain the earlier native layout.
       headerAppearance.update(headerTargets.some(({ part }) => part === 'spacer') ? headerTargets : []);
@@ -147,17 +152,17 @@ export const appearanceLayoutFeature: Feature = {
       observations.clear();
       for (const observer of labels.values()) observer.disconnect();
       labels.clear();
-      for (const observer of navigationSemantics.values()) observer.disconnect();
-      navigationSemantics.clear();
+      for (const observer of courseText.values()) observer.disconnect();
+      courseText.clear();
+      for (const observer of shellSemantics.values()) observer.disconnect();
+      shellSemantics.clear();
       discovered.clear();
       window.removeEventListener('hashchange', update);
       window.removeEventListener('popstate', update);
       signal.removeEventListener('abort', cleanup);
       navigationIcons.clear();
       headerAppearance.clear();
-      for (const [element, attributes] of markers) {
-        for (const attribute of [...attributes.keys()]) restore(element, attribute);
-      }
+      markers.clear();
     };
     signal.addEventListener('abort', cleanup, { once: true });
     return cleanup;

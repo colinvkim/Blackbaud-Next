@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DEFAULT_SETTINGS, getSettings, normalizeAccountPreference, normalizeSettings, updateSettings } from '../src/shared/settings.ts';
+import { createCoordinator } from '../src/background/coordinator.ts';
+import type { ExtensionApi } from '../src/shared/extension.ts';
+
+function coordinate(api: ExtensionApi): ExtensionApi {
+  api.runtime = { id: 'settings-fixture', getURL: (path) => `chrome-extension://settings-fixture/${path}` } as ExtensionApi['runtime'];
+  const handle = createCoordinator(api);
+  api.runtime.sendMessage = async (message) => {
+    try { return { ok: true, value: await handle(message, { id: api.runtime.id, url: api.runtime.getURL('popup.html') }) }; }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Failed' }; }
+  };
+  return api;
+}
 
 test('old modes migrate while preserving individual switches and aliases', () => {
   assert.equal(normalizeSettings({ uiMode: 'original' }).enabled, false);
@@ -29,7 +41,7 @@ test('saving one switch writes a patch and rejects invalid account preferences',
   let saved: Record<string, unknown> | null = null;
   const scope = globalThis as typeof globalThis & { chrome?: unknown };
   const previous = scope.chrome;
-  scope.chrome = { storage: { sync: { set: async (value: Record<string, unknown>) => { saved = value; } } } };
+  scope.chrome = coordinate({ storage: { sync: { set: async (value: Record<string, unknown>) => { saved = value; } } } } as unknown as ExtensionApi);
   try {
     await updateSettings({ rosterTools: false });
     assert.deepEqual(saved, { schemaVersion: 2, rosterTools: false });
@@ -43,7 +55,7 @@ test('legacy reads cannot overwrite a newer preference saved by another tab', as
   let raw: Record<string, unknown> = { uiMode: 'enhanced', copyRosterTools: false };
   const pendingReads: (() => void)[] = [];
   const writes: Record<string, unknown>[] = [];
-  scope.chrome = {
+  scope.chrome = coordinate({
     storage: {
       sync: {
         get: async () => {
@@ -57,7 +69,7 @@ test('legacy reads cannot overwrite a newer preference saved by another tab', as
         },
       },
     },
-  };
+  } as unknown as ExtensionApi);
   try {
     const first = getSettings();
     const second = getSettings();

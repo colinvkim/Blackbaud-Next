@@ -1,6 +1,6 @@
-import { nativeAppearancePageKind, nativeLegacyAppearanceShell, nativeModernAppearanceRoute, nativeModernAppearanceShell } from './appearance.ts';
-import { nativeNavigationIconTargets } from './appearance-icons.ts';
-import type { NativeNavigationIconTarget } from './appearance-icons.ts';
+import { nativeAppearancePageKind, nativeModernAppearanceRoute } from './appearance.ts';
+import { nativeAppearanceNavigation } from './appearance-icons.ts';
+import type { NativeAppearanceNavigation, NativeNavigationIconTarget } from './appearance-icons.ts';
 
 export type NativeHeaderAppearancePart = 'masthead-column' | 'brand' | 'tools' | 'tools-list' |
   'tool-search' | 'tool-notes' | 'tool-messages' | 'tool-account' | 'tool-icon' | 'tool-count' | 'tool-label' |
@@ -36,7 +36,7 @@ function studentDestination(control: HTMLAnchorElement, url: URL, hash: string):
 }
 
 function decorative(element: HTMLElement): boolean {
-  return !element.matches('[aria-controls], [aria-haspopup], [onclick], [tabindex], [aria-label]') &&
+  return !element.matches('[aria-controls], [aria-haspopup], [onclick], [tabindex], [aria-label], [aria-labelledby]') &&
     (!element.hasAttribute('role') || ['none', 'presentation'].includes(element.getAttribute('role')!));
 }
 
@@ -316,11 +316,10 @@ function dropdownParts(targets: NativeHeaderAppearanceTarget[]): NativeHeaderApp
 }
 
 /** Cosmetic targets preserve native nodes, text, destinations and actions. */
-export function nativeHeaderAppearanceTargets(page: Document, url: URL): NativeHeaderAppearanceTarget[] {
-  const legacy = nativeLegacyAppearanceShell(url, page) !== null;
-  const modern = !legacy && nativeModernAppearanceShell(url, page) !== null;
-  if (!legacy && !modern) return [];
-  const icons = nativeNavigationIconTargets(page, url);
+export function nativeHeaderAppearanceTargets(page: Document, url: URL, navigation: NativeAppearanceNavigation = nativeAppearanceNavigation(page, url)): NativeHeaderAppearanceTarget[] {
+  if (!navigation.shell) return [];
+  const modern = navigation.shell === 'modern';
+  const icons = navigation.icons;
   const targets = [...utilityParts(page, url, modern), ...primaryParts(page, url, modern, icons), ...lowerParts(url, icons)];
   targets.push(...dropdownParts(targets));
   const spacer = one(page, '#site-top-spacer');

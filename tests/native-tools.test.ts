@@ -71,7 +71,7 @@ test('roster identifiers require a semantic route or same-origin endpoint', () =
   assert.deepEqual(rosterTargetFromRequest('/api/datadirect/athleticrosterget/?teamId=456', route('').origin), { kind: 'team', id: '456' });
 });
 
-test('roster validation drops malformed fields and deduplicates safe copy values', () => {
+test('roster validation drops malformed fields and deduplicates safe email addresses', () => {
   assert.throws(() => normalizeRoster({ data: [] }), /unsupported format/);
   const entries = normalizeRoster([
     { firstName: 'Ada', lastName: 'Example', email: 'ADA@example.org' },
@@ -79,9 +79,19 @@ test('roster validation drops malformed fields and deduplicates safe copy values
     { formatted_name: 'Grace Example', email: 'not an address' },
     { name: {}, email: 123 }, null, 'bad',
   ]);
-  assert.deepEqual(rosterValues(entries, 'name'), ['Ada Example', 'Grace Example']);
+  assert.deepEqual(rosterValues(entries, 'name'), ['Ada Example', 'Ada Example', 'Grace Example']);
   assert.deepEqual(rosterValues(entries, 'email'), ['ADA@example.org']);
   assert.equal('raw' in (entries[0] ?? {}), false);
+});
+
+test('copying roster names preserves distinct students who share a display name', () => {
+  const entries = normalizeRoster([
+    { name: 'Alex Smith', email: 'alex.one@example.org' },
+    { name: 'Alex Smith', email: 'alex.two@example.org' },
+    { name: 'ALEX SMITH', email: 'alex.three@example.org' },
+  ]);
+  assert.deepEqual(rosterValues(entries, 'name'), ['Alex Smith', 'Alex Smith', 'ALEX SMITH']);
+  assert.equal(rosterValues(entries, 'email').length, 3);
 });
 
 test('roster fetch validates identifiers and forwards cancellation', async (t) => {

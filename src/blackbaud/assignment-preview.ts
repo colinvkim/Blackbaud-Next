@@ -21,6 +21,7 @@ export interface AssignmentPreviewTarget {
 }
 
 export const ASSIGNMENT_PREVIEW_LINK_SELECTOR = ASSIGNMENT_LINK_SELECTOR;
+export const ASSIGNMENT_PREVIEW_ROOT_SELECTOR = 'app-assignment-title-link';
 
 function validIndexId(value: string): boolean {
   return /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value));

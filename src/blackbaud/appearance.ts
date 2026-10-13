@@ -11,6 +11,8 @@ export interface NativeAppearancePage {
   kind: NativeAppearancePageKind;
 }
 
+export type NativeAppearanceShellKind = 'legacy' | 'modern';
+
 export function nativeModernAppearanceRoute(url: URL): 'assignments' | 'calendar' | 'assignment' | null {
   if (!isLmsPage(url) || url.username || url.password || url.hash) return null;
   if (/^\/lms-assignment\/assignment-center(?:\/student)?\/?$/i.test(url.pathname)) return 'assignments';
@@ -94,6 +96,11 @@ export function nativeModernAppearanceShell(url: URL, page: Document = document)
   return lowerNavigation.length === 1 ? page.documentElement : null;
 }
 
+export function nativeAppearanceShellKind(url: URL, page: Document = document): NativeAppearanceShellKind | null {
+  if (nativeLegacyAppearanceShell(url, page)) return 'legacy';
+  return nativeModernAppearanceShell(url, page) ? 'modern' : null;
+}
+
 function nativeClassLink(link: HTMLAnchorElement, url: URL): boolean {
   try {
     const destination = new URL(link.getAttribute('href') ?? '', url);
@@ -113,13 +120,35 @@ export function nativeCourseRows(main: HTMLElement, url: URL): HTMLElement[] {
     const children = [...row.children];
     if (children.length !== columns.length || children.some((child, index) => child.tagName !== 'DIV' ||
       !child.classList.contains(columns[index]!) || [...child.classList].some((name) => /^col-md-\d+$/.test(name) && name !== columns[index]))) return false;
+    if ([...row.childNodes].some((node) => node.nodeType === 3 && node.textContent?.trim())) return false;
     return [...children[0]!.querySelectorAll<HTMLAnchorElement>('a[href]')].some((link) => nativeClassLink(link, url));
   });
+}
+
+// Turning the entire list into a grid also changes the space available to its
+// siblings. Apply it only when every native item is a verified course row.
+export function nativeProgressCourseList(main: HTMLElement, url: URL): HTMLElement | null {
+  const context = nativeAppearancePage(url, main.ownerDocument);
+  if (context?.kind !== 'progress' || context.element !== main) return null;
+  return courseListFromRows(main, nativeCourseRows(main, url));
+}
+
+function courseListFromRows(main: HTMLElement, rows: HTMLElement[]): HTMLElement | null {
+  if (!rows.length) return null;
+  const container = main.querySelector<HTMLElement>('#coursesContainer')!;
+  const recognized = new Set(rows);
+  if ([...container.children].some((child) => !recognized.has(child as HTMLElement)) ||
+    [...container.childNodes].some((node) => node.nodeType === 3 && node.textContent?.trim())) return null;
+  return container;
 }
 
 export function nativeProgressSummaryRow(main: HTMLElement, url: URL): HTMLElement | null {
   const context = nativeAppearancePage(url, main.ownerDocument);
   if (context?.kind !== 'progress' || context.element !== main) return null;
+  return progressSummaryRow(main);
+}
+
+function progressSummaryRow(main: HTMLElement): HTMLElement | null {
   const matches = [...main.querySelectorAll<HTMLElement>('.row')].filter((row) => {
     const wrappers = [...row.children];
     if (wrappers.length !== 2 || wrappers.some((wrapper) => wrapper.tagName !== 'DIV') ||
@@ -137,4 +166,14 @@ export function nativeProgressSummaryRow(main: HTMLElement, url: URL): HTMLEleme
     });
   });
   return matches.length === 1 ? matches[0]! : null;
+}
+
+/** Read the Progress layout once from an already validated native page. */
+export function nativeProgressAppearance(context: NativeAppearancePage | null, url: URL) {
+  const rows = context?.kind === 'progress' ? nativeCourseRows(context.element, url) : [];
+  return {
+    rows,
+    courses: context?.kind === 'progress' ? courseListFromRows(context.element, rows) : null,
+    summary: context?.kind === 'progress' ? progressSummaryRow(context.element) : null,
+  };
 }

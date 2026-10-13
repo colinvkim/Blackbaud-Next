@@ -118,9 +118,16 @@ export const resourceSearchFeature: Feature = {
         originalLayouts.delete(element);
       };
       const textObserver = new MutationObserver(() => update());
+      const visibilityObserver = new MutationObserver((records) => {
+        // Loading views and tabs can hide ancestors without changing the board.
+        // Moving the existing board also changes which native styles apply.
+        if (records.some((record) => record.type === 'attributes'
+          ? record.target !== board && record.target.contains(board)
+          : [...record.addedNodes].some((node) => node.contains(board)))) update();
+      });
       const update = () => {
-        if (disposed || signal.aborted) return;
-        if (!toolbar.isConnected && board.isConnected) board.before(toolbar);
+        if (disposed || signal.aborted || !board.isConnected) return;
+        if (toolbar.nextSibling !== board) board.before(toolbar);
         const nextLayout = resourceBoardLayout(board);
         if (nextLayout !== layout) {
           textObserver.disconnect();
@@ -135,16 +142,19 @@ export const resourceSearchFeature: Feature = {
         let total = 0;
         let matches = 0;
         let columnWidth: number | null = null;
-        for (const card of cards) {
-          // Remove only our filter marker while checking native visibility.
-          // Native hidden/style/class changes remain authoritative.
-          if (markedCards.has(card)) card.removeAttribute(resourceHiddenAttribute);
+        // Clear our filters together before measuring native visibility. Native
+        // hidden/style/class changes remain authoritative; all reads precede writes.
+        for (const card of cards) if (markedCards.has(card)) card.removeAttribute(resourceHiddenAttribute);
+        const results = cards.map((card) => {
           const available = isNativeResourceVisible(card);
           if (available && columnWidth === null) columnWidth = nativeResourceOuterWidth(card);
           const text = normalizeResourceText(card.textContent ?? '');
           const match = available && terms.every((term) => text.includes(term));
           if (available) total += 1;
           if (match) matches += 1;
+          return { card, match };
+        });
+        for (const { card, match } of results) {
           if (terms.length && !match) {
             if (!markedCards.has(card)) markedCards.set(card, card.getAttribute(resourceHiddenAttribute));
             card.setAttribute(resourceHiddenAttribute, '');
@@ -175,11 +185,14 @@ export const resourceSearchFeature: Feature = {
       input.addEventListener('keydown', preventSubmit);
       clear.addEventListener('click', clearSearch);
       window.addEventListener('resize', update);
+      visibilityObserver.observe(board.ownerDocument, { subtree: true, childList: true, attributes: true,
+        attributeFilter: ['class', 'hidden', 'style', 'aria-hidden'] });
       const stop = observeDom(update, signal, board);
       return () => {
         disposed = true;
         stop();
         textObserver.disconnect();
+        visibilityObserver.disconnect();
         input.removeEventListener('input', update);
         input.removeEventListener('keydown', preventSubmit);
         clear.removeEventListener('click', clearSearch);

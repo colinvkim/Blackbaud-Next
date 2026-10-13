@@ -1,4 +1,5 @@
 import type { NativeHeaderAppearanceTarget } from '../blackbaud/header-appearance.ts';
+import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { createNavigationIcons } from './navigation-icons.ts';
 
 export const HEADER_APPEARANCE_PART_ATTRIBUTE = 'data-bn-header-part';
@@ -59,31 +60,14 @@ function createTabFocusScrolling(list: HTMLElement) {
 }
 
 export function createHeaderAppearance() {
-  const markers = new Map<HTMLElement, Map<string, string | null>>();
+  const markers = createAttributeOwnership();
   const spaces = new Map<HTMLElement, Text>();
   const searchLabels = new Map<HTMLElement, HTMLSpanElement>();
   const tabFocus = new Map<HTMLElement, ReturnType<typeof createTabFocusScrolling>>();
   const utilityIcons = createNavigationIcons();
-  const restore = (element: HTMLElement, attribute: string) => {
-    const attributes = markers.get(element);
-    if (!attributes?.has(attribute)) return;
-    const previous = attributes.get(attribute)!;
-    if (previous === null) element.removeAttribute(attribute);
-    else element.setAttribute(attribute, previous);
-    attributes.delete(attribute);
-    if (!attributes.size) markers.delete(element);
-  };
-  const mark = (element: HTMLElement, attribute: string, value: string) => {
-    let attributes = markers.get(element);
-    if (!attributes) { attributes = new Map(); markers.set(element, attributes); }
-    if (!attributes.has(attribute)) attributes.set(attribute, element.getAttribute(attribute));
-    if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
-  };
   const update = (targets: NativeHeaderAppearanceTarget[]) => {
     const active = new Set(targets.map(({ element }) => element));
-    for (const [element, attributes] of markers) {
-      if (!active.has(element)) for (const attribute of [...attributes.keys()]) restore(element, attribute);
-    }
+    markers.retain((element) => active.has(element));
     const separators = new Set(targets.map(({ spaceAfter }) => spaceAfter).filter((element): element is HTMLElement => element !== undefined));
     for (const [element, space] of spaces) {
       if (!separators.has(element)) { space.remove(); spaces.delete(element); }
@@ -93,12 +77,12 @@ export function createHeaderAppearance() {
       if (!searches.has(element)) { label.remove(); searchLabels.delete(element); }
     }
     for (const target of targets) {
-      mark(target.element, HEADER_APPEARANCE_PART_ATTRIBUTE, target.part);
-      if (target.current) mark(target.element, HEADER_APPEARANCE_CURRENT_ATTRIBUTE, 'true');
-      else restore(target.element, HEADER_APPEARANCE_CURRENT_ATTRIBUTE);
+      markers.mark(target.element, HEADER_APPEARANCE_PART_ATTRIBUTE, target.part);
+      if (target.current) markers.mark(target.element, HEADER_APPEARANCE_CURRENT_ATTRIBUTE, 'true');
+      else markers.restore(target.element, HEADER_APPEARANCE_CURRENT_ATTRIBUTE);
       if (target.part === 'tool-count') {
-        mark(target.element, HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE, /^0+$/.test(target.element.textContent?.trim() ?? '') ? 'true' : 'false');
-      } else restore(target.element, HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE);
+        markers.mark(target.element, HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE, /^0+$/.test(target.element.textContent?.trim() ?? '') ? 'true' : 'false');
+      } else markers.restore(target.element, HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE);
     }
     const tabLists = new Set(targets.filter(({ part }) => part === 'tabs-navigation').map(({ element }) => element));
     for (const [list, scrolling] of tabFocus) {
@@ -144,9 +128,7 @@ export function createHeaderAppearance() {
     spaces.clear();
     for (const label of searchLabels.values()) label.remove();
     searchLabels.clear();
-    for (const [element, attributes] of markers) {
-      for (const attribute of [...attributes.keys()]) restore(element, attribute);
-    }
+    markers.clear();
   };
   return { update, clear };
 }

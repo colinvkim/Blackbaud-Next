@@ -183,8 +183,7 @@ export function normalizeDirectorySnapshot(payload: unknown, baseUrl: string, ph
 export function prepareDirectorySnapshot(payload: unknown, baseUrl: string): DirectoryPreparedSnapshot {
   const photoFiles: { userId: number; fileName: string }[] = [];
   const snapshot = readDirectorySnapshot(payload, baseUrl, undefined, photoFiles);
-  // Prepare the initial last-name order while page metadata is still loading.
-  return { snapshot: { ...snapshot, entries: sortDirectoryEntries(snapshot.entries, 'last') }, photoFiles };
+  return { snapshot, photoFiles };
 }
 
 export function finalizeDirectorySnapshot(prepared: DirectoryPreparedSnapshot, baseUrl: string, photoBaseUrl?: string): DirectorySnapshot {
@@ -250,6 +249,7 @@ export function filterDirectoryEntries(entries: readonly DirectoryEntry[], filte
   const tokens = searchable(filter.query ?? '').split(/\s+/u).filter(Boolean);
   return entries.filter((entry) => {
     if (filter.grade && !directoryEntryGrades(entry).includes(filter.grade)) return false;
+    if (!tokens.length) return true;
     const name = searchable([entry.firstName, entry.lastName, entry.nickname, entry.displayName].join(' '));
     return tokens.every((token) => name.includes(token));
   });

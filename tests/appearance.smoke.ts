@@ -11,6 +11,7 @@ import {
 } from '../scripts/browser-development.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
 import { FEATURE_DEFINITIONS } from '../src/shared/settings.ts';
+import { HEADER_LOWER_ITEMS as lowerNavigation, HEADER_PRIMARY_ITEMS as topNavigation, nativePrimaryDescription } from './fixtures/header.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const origin = 'https://appearance-fixture.myschoolapp.com';
@@ -28,21 +29,6 @@ type NativeSchoolLogo = {
   image: ElementHandle<HTMLImageElement>;
   link: ElementHandle<HTMLAnchorElement>;
 };
-const topNavigation = [
-  ['group-header-Classes', 'Classes', 'classes_48.png', '#', 'book-open'],
-  ['group-header-Groups', 'Groups', 'groups.png', '/app/SignOut', 'users-round'],
-  ['group-header-Resources', 'Resources', 'resources.png', '/app/student?svcid=edu#resourceboard', 'folder-closed'],
-  ['group-header-News', 'News', 'news.png', '#', 'newspaper'],
-  ['calendar-subnav', 'Calendar', 'calendar.png', '/app/student?svcid=edu#calendar', 'calendar-outline'],
-  ['directory-subnav', 'Directories', 'directory.png', '#', 'book-user'],
-] as const;
-const lowerNavigation = [
-  ['progress-btn', 'Progress', 'p3icon-progress', '/app/student?svcid=edu#studentmyday/progress', 'chart-column'],
-  ['schedule-btn', 'Schedule', 'p3icon-schedule', '/app/student?svcid=edu#studentmyday/schedule', 'clock-3'],
-  ['assignment-center-btn', 'Assignment Center', 'p3icon-assignments', '/lms-assignment/assignment-center/student/?svcid=edu', 'clipboard-check'],
-  ['course-requests-btn', 'Course Requests', 'p3icon-courseRequest', '/edu-self-registration/student-course-requests?svcid=edu', 'graduation-cap'],
-] as const;
-
 function nativeMenu(id: string, modern: boolean): string {
   const item = (label: string, href: string) => `<li><a href="${href}">${label}</a></li>`;
   const menu = (items: string) => `<div class="subnavtop"></div><div class="subnav sec-75-bordercolor white-bgc sky-nav" data-native-menu="${id}"><ul>${items}</ul></div>`;
@@ -70,6 +56,29 @@ function tile(id: string, title: string): string {
   </section></div></div>`;
 }
 
+function progressCourse(id: string, title: string, grade: string, options: { hidden?: boolean; hiddenColumn?: boolean; disabled?: boolean } = {}): string {
+  return `<div id="${id}" class="row" data-native-course${options.hidden ? ' hidden' : ''}>
+    <div class="col-md-3" data-native-course-column><h3><a id="${id}-course" href="/app/student?svcid=edu#academicclass/123/0/bulletinboard" data-native-course-action="course">${title}</a></h3><h5>Native section and reporting information</h5></div>
+    <div class="col-md-2" data-native-course-column${options.hiddenColumn ? ' hidden' : ''}><button id="${id}-grade" class="btn btn-default" type="button" data-native-course-action="grade">View grade details</button></div>
+    <div class="col-md-2" data-native-course-column><h5>Reporting term</h5><select id="${id}-term" class="form-control" aria-label="${title} reporting term" data-native-course-action="term"><option value="fall">Fall semester</option><option value="spring">Spring semester</option></select></div>
+    <div class="col-md-2" data-native-course-column><div class="showGrade">${grade}</div><h5>Native grade description</h5></div>
+    <div class="col-md-3" data-native-course-column><div class="bb-avatar-wrapper-medium pull-left"><img class="bb-avatar-image-medium" src="${origin}/fixture-avatar.svg" alt="Example teacher"></div><div class="clearfix"></div><h4 class="group-owner-name">Example teacher with a long family name</h4><p><a id="${id}-email" href="mailto:teacher.with.a.long.address@example.edu" data-native-course-action="email">teacher.with.a.long.address@example.edu</a></p><button id="${id}-message" class="btn btn-default sendmessage" type="button" data-native-course-action="message"${options.disabled ? ' disabled' : ''}>Send message</button></div>
+  </div>`;
+}
+
+function progressCourses(): string {
+  return progressCourse('course-one', 'Interdisciplinary Studies: Reading, Research, and Community Practice', 'A− (92.8%)') +
+    progressCourse('course-two', 'Studio Practice', 'Not yet published for this reporting term', { hiddenColumn: true }) +
+    progressCourse('course-three', 'Independent Research', 'Satisfactory — Credit only', { disabled: true }) +
+    progressCourse('course-hidden', 'Native hidden course', 'B+', { hidden: true });
+}
+
+type NativeProgressContent = {
+  list: HTMLElement;
+  rows: Array<{ row: HTMLElement; columns: Element[]; text: string }>;
+  controls: Array<{ element: HTMLElement; href: string | null; disabled: boolean; hidden: boolean }>;
+};
+
 function utilityHeader(modern: boolean): string {
   const studentPage = modern ? '/app/student?svcid=edu' : '?svcid=edu';
   const description = (text: string) => modern
@@ -89,12 +98,7 @@ function utilityHeader(modern: boolean): string {
 }
 
 function nativeFixture(modern: boolean): string {
-  const primaryDescription = (label: string) => {
-    const count = ({ Classes: 14, Groups: 4, Directories: 5 } as Record<string, number>)[label];
-    return modern
-      ? `<div class="desc"><div class="title"><div>${label}</div></div>${count ? `<strong>${count}</strong> ${label}` : ''}</div>`
-      : `<span class="desc"><span class="title">${label}</span>${count ? `<br><b>${count}</b> ${label}` : ''}</span>`;
-  };
+  const primaryDescription = (label: string) => nativePrimaryDescription(modern, label);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Appearance fixture</title><style>
     * { box-sizing: border-box; } body { margin: 0; font: 14px Arial,sans-serif; }
     #site-header, .container, #site-main { width: 1100px; max-width: calc(100% - 32px); margin: auto; }
@@ -140,7 +144,13 @@ function nativeFixture(modern: boolean): string {
     .bb-tile-header { font-size: 18px; margin: 0; } .bb-tile-tools { float: right; }
     .bb-tile-chevron { width: 28px; height: 28px; cursor: pointer; } .bb-tile-content { padding: 16px; }
     .bb-tile-content-section { padding: 15px; } .bb-tile-content-section p { margin: 0; }
-    [hidden] { display: none !important; } app-root, sky-toolbar, sky-repeater, sky-repeater-item { display: block; }
+    #coursesContainer > .row { margin: 0 0 18px; padding: 18px 0; border-bottom: 1px solid #ccc; }
+    #coursesContainer > .row > div { padding: 0 15px; } #coursesContainer h3 { font-size: 20px; }
+    #coursesContainer .btn { padding: 6px 10px; } #coursesContainer .form-control { max-width: 100%; padding: 6px; }
+    .bb-avatar-wrapper-medium { width: 48px; height: 48px; } .bb-avatar-image-medium { width: 48px; height: 48px; }
+    .pull-left { float: left; } .clearfix { clear: both; }
+    [hidden]:not([data-native-course]):not([data-native-course-column]) { display: none !important; } app-root, sky-toolbar, sky-repeater, sky-repeater-item { display: block; }
+    @media (min-width: 992px) { #coursesContainer > .row > .col-md-3 { float: left; width: 25%; } #coursesContainer > .row > .col-md-2 { float: left; width: 16.666667%; } }
     @media (max-width: 700px) { #site-nav-container { display: none; } .ch.col-md-4 { width: 100%; } }
     @media (max-width: 991px) { #site-mobile-btn { display: block; } #site-user-nav, #site-nav-container, #site-nav-lower { display: none; } #site-top-spacer { height: 73px; } }
   </style></head><body>${modern ? '<app-root>' : ''}
@@ -154,7 +164,7 @@ function nativeFixture(modern: boolean): string {
     <div id="site-top-spacer" class="${modern ? 'white-bg site-top-spacer-lower-nav' : 'site-top-spacer'}"></div>
     ${modern ? `<sky-toolbar><input aria-label="Search items"></sky-toolbar><sky-repeater><sky-repeater-item class="assignment-repeater-item">
       <app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/123">Native assignment</a></app-assignment-title-link>
-      </sky-repeater-item></sky-repeater></app-root>` : `<main id="site-main"><div id="summary" class="row">${tile('performance', 'Performance')}${tile('attendance', 'Attendance')}</div><div id="coursesContainer"></div></main>`}
+      </sky-repeater-item></sky-repeater></app-root>` : `<main id="site-main"><div id="summary" class="row">${tile('performance', 'Performance')}${tile('attendance', 'Attendance')}</div><div id="coursesContainer">${progressCourses()}</div></main>`}
     <script>const mobileButton = document.querySelector('#site-mobile-btn button'); const drawer = document.getElementById('fixture-native-drawer');
     mobileButton.addEventListener('click', () => { drawer.hidden = !drawer.hidden; mobileButton.setAttribute('aria-expanded', String(!drawer.hidden)); document.body.dataset.drawerActions = String(Number(document.body.dataset.drawerActions || 0) + 1); });
     drawer.querySelector('button').addEventListener('click', () => { drawer.hidden = true; mobileButton.setAttribute('aria-expanded', 'false'); });
@@ -189,7 +199,18 @@ function nativeFixture(modern: boolean): string {
       const content = button.closest('section').querySelector('.bb-tile-content'); content.hidden = !content.hidden;
       button.setAttribute('aria-expanded', String(!content.hidden));
       document.body.dataset.nativeActions = String(Number(document.body.dataset.nativeActions || 0) + 1);
-    }));</script>
+    }));
+    const progressList = document.getElementById('coursesContainer');
+    if (progressList) {
+      window.nativeProgressContent = { list: progressList,
+        rows: [...progressList.children].map(row => ({ row, columns: [...row.children], text: row.textContent })),
+        controls: [...progressList.querySelectorAll('a,button,select')].map(element => ({ element, href: element.getAttribute('href'), disabled: element.disabled === true, hidden: element.hidden })) };
+      progressList.querySelectorAll('[data-native-course-action]').forEach(control => control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'click', event => {
+        if (control.tagName === 'A') event.preventDefault();
+        const actions = JSON.parse(document.body.dataset.progressActions || '{}'); const action = control.dataset.nativeCourseAction;
+        actions[action] = (actions[action] || 0) + 1; document.body.dataset.progressActions = JSON.stringify(actions);
+      }));
+    }</script>
   </body></html>`;
 }
 
@@ -1174,6 +1195,103 @@ async function classSearchMenu(page: Page): Promise<void> {
   await page.setViewport({ width: 1280, height: 900 });
 }
 
+async function preservedNativeProgressContent(page: Page): Promise<void> {
+  const preserved = await page.evaluate(() => {
+    const expected = (window as Window & { nativeProgressContent?: NativeProgressContent }).nativeProgressContent;
+    if (!expected) throw new Error('The fixture must capture its native Progress content before styling.');
+    return {
+      list: document.getElementById('coursesContainer') === expected.list,
+      rows: expected.rows.every(({ row, columns, text }) => row.isConnected && row.children.length === 5 &&
+        [...row.children].every((column, index) => column === columns[index]) && row.textContent === text),
+      controls: expected.controls.every(({ element, href, disabled, hidden }) => element.isConnected &&
+        document.getElementById(element.id) === element && element.getAttribute('href') === href &&
+        ('disabled' in element && element.disabled === true) === disabled && element.hidden === hidden),
+      count: expected.list.querySelectorAll('a,button,select').length === expected.controls.length,
+    };
+  });
+  assert.deepEqual(preserved, { list: true, rows: true, controls: true, count: true }, 'Cards preserve native content, column order, and control nodes');
+}
+
+async function nativeProgressCourseActions(page: Page): Promise<void> {
+  await page.bringToFront();
+  const counts = () => page.evaluate(() => JSON.parse(document.body.dataset.progressActions || '{}') as Record<string, number>);
+  const before = await counts();
+  for (const action of ['course', 'grade', 'email', 'message']) await page.click(`#course-one-${action}`);
+  const current = await page.$eval('#course-one-term', (select) => (select as HTMLSelectElement).value);
+  await page.select('#course-one-term', current === 'fall' ? 'spring' : 'fall');
+  const after = await counts();
+  for (const action of ['course', 'grade', 'email', 'message', 'term']) assert.equal(after[action], (before[action] ?? 0) + 1, `Native ${action} handler remains attached`);
+  await page.click('#course-three-message');
+  assert.deepEqual(await counts(), after, 'The native disabled message control stays disabled');
+  await preservedNativeProgressContent(page);
+}
+
+async function progressCourseGeometry(page: Page, columns: number): Promise<void> {
+  const layout = await page.evaluate(() => {
+    const list = document.getElementById('coursesContainer')!;
+    const bounds = (element: Element) => {
+      const { left, right, top, bottom, width, height } = element.getBoundingClientRect(); return { left, right, top, bottom, width, height };
+    };
+    const rows = [...list.querySelectorAll<HTMLElement>(':scope > .row')].filter((row) => !row.hidden);
+    const overflow: string[] = [];
+    const outside: string[] = [];
+    for (const row of rows) {
+      const card = bounds(row);
+      for (const element of [row, ...row.querySelectorAll<HTMLElement>('div,h3,h4,h5,p,a,button,select,img')]) {
+        if (element.closest('[hidden]') || getComputedStyle(element).visibility === 'hidden') continue;
+        const box = bounds(element);
+        if (!box.width || !box.height) continue;
+        if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 2) overflow.push(element.id || element.className);
+        if (box.left < card.left - 1 || box.right > card.right + 1 || box.top < card.top - 1 || box.bottom > card.bottom + 1) outside.push(element.id || element.className);
+      }
+    }
+    const style = getComputedStyle(list);
+    return {
+      display: style.display, columns: style.gridTemplateColumns.split(' ').length, cards: rows.map(bounds),
+      hiddenRow: bounds(document.getElementById('course-hidden')!).height,
+      hiddenColumn: bounds(document.querySelector('#course-two > [hidden]')!).height,
+      disabled: (document.getElementById('course-three-message') as HTMLButtonElement).disabled,
+      overflow, outside, viewport: innerWidth, documentWidth: document.documentElement.scrollWidth,
+    };
+  });
+  assert.equal(layout.display, 'grid');
+  assert.equal(layout.columns, columns, JSON.stringify(layout));
+  assert.equal(layout.cards.length, 3);
+  assert.equal(layout.hiddenRow, 0, 'Native hidden rows must stay hidden');
+  assert.equal(layout.hiddenColumn, 0, 'Native hidden columns must stay hidden');
+  assert.equal(layout.disabled, true);
+  assert.deepEqual(layout.overflow, [], `Native course contents must wrap without clipping: ${JSON.stringify(layout)}`);
+  assert.deepEqual(layout.outside, [], `All native controls and labels must fit inside their card: ${JSON.stringify(layout)}`);
+  assert.ok(layout.documentWidth <= layout.viewport + 1, JSON.stringify(layout));
+  if (columns === 2) {
+    assert.ok(Math.abs(layout.cards[0]!.top - layout.cards[1]!.top) < 1, JSON.stringify(layout));
+    assert.ok(layout.cards[1]!.left >= layout.cards[0]!.right, JSON.stringify(layout));
+  } else assert.ok(layout.cards[1]!.top >= layout.cards[0]!.bottom, JSON.stringify(layout));
+  await preservedNativeProgressContent(page);
+}
+
+async function nativeProgressCards(page: Page): Promise<void> {
+  await page.waitForSelector('#coursesContainer[data-bn-progress-courses="cards"]');
+  for (const width of [1280, 1100, 1099, 850, 390, 320]) {
+    await page.setViewport({ width, height: 900 });
+    await progressCourseGeometry(page, width >= 1100 ? 2 : 1);
+  }
+  await nativeProgressCourseActions(page);
+  await page.evaluate(() => {
+    const status = document.createElement('p'); status.id = 'unexpected-course-content'; status.textContent = 'Native loading status';
+    document.getElementById('coursesContainer')!.append(status);
+  });
+  await page.waitForFunction(() => !document.getElementById('coursesContainer')!.hasAttribute('data-bn-progress-courses'), { polling: 50 });
+  assert.notEqual(await page.$eval('#coursesContainer', (list) => getComputedStyle(list).display), 'grid', 'Unknown direct native content returns to the native list layout');
+  assert.equal(await page.$$eval('#coursesContainer > [data-bn-course-row="true"]', (rows) => rows.length), 4, 'Known rows retain their individual markers during list fallback');
+  await preservedNativeProgressContent(page);
+  await page.evaluate(() => document.getElementById('unexpected-course-content')!.remove());
+  await page.waitForSelector('#coursesContainer[data-bn-progress-courses="cards"]');
+  await progressCourseGeometry(page, 1);
+  await page.setViewport({ width: 1280, height: 900 });
+  await progressCourseGeometry(page, 2);
+}
+
 async function summaryBounds(page: Page) {
   return page.evaluate(() => {
     const bounds = (element: Element) => {
@@ -1219,6 +1337,7 @@ async function viewportGutters(page: Page, gutter: number): Promise<void> {
 async function nativeCollapse(page: Page): Promise<void> {
   // Native clicks need a foreground tab for Chrome's scroll/intersection work.
   await page.bringToFront();
+  await page.evaluate(() => window.scrollTo(0, 0));
   const before = await page.evaluate(() => Number(document.body.dataset.nativeActions || 0));
   await page.click('#summary #performance section button');
   await page.waitForFunction(() => document.querySelector<HTMLElement>('#summary #performance section .bb-tile-content')!.hidden, { polling: 50 });
@@ -1302,11 +1421,12 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     await modern.goto(modernUrl, { waitUntil: 'domcontentloaded' });
     const mounted = async () => {
       await legacy.waitForSelector('html[data-bn-portal-shell="legacy"] #summary[data-bn-progress-summary="true"]');
+      await legacy.waitForSelector('#coursesContainer[data-bn-progress-courses="cards"]');
       await modern.waitForSelector('html[data-bn-portal-shell="modern"] body[data-bn-page="assignments"]');
       for (const page of [legacy, modern]) await page.waitForFunction(() => document.querySelectorAll('[data-bn-navigation-icon]').length === 14, { polling: 50 });
     };
     const unmounted = async () => {
-      for (const page of [legacy, modern]) await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-appearance], [data-bn-portal-shell], [data-bn-page], [data-bn-progress-summary], [data-bn-navigation-icon], [data-bn-native-icon], [data-bn-header-part], [data-bn-header-current], [data-bn-header-count-empty]'), { polling: 50 });
+      for (const page of [legacy, modern]) await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-appearance], [data-bn-portal-shell], [data-bn-page], [data-bn-progress-summary], [data-bn-progress-courses], [data-bn-course-row], [data-bn-navigation-icon], [data-bn-native-icon], [data-bn-header-part], [data-bn-header-current], [data-bn-header-count-empty]'), { polling: 50 });
     };
     const setAppearance = async (enabled: boolean) => {
       await setPreferences({ pageAppearance: enabled });
@@ -1363,12 +1483,13 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       await page.waitForFunction(() => !document.querySelector('.bn-class-search, [data-blackbaud-next-class-hidden], [data-blackbaud-next-class-menu]'), { polling: 50 });
       assert.deepEqual(await menuLabels(page), menus.get(page), 'Class search cleanup restores native rows and destinations');
     }
+    await nativeProgressCards(legacy);
     const desktop = await summaryBounds(legacy);
     assert.equal(desktop.cards.length, 2);
     assert.ok(Math.abs(desktop.cards[0]!.width - desktop.cards[1]!.width) < 2, JSON.stringify(desktop));
     assert.ok(Math.abs(desktop.cards[0]!.top - desktop.cards[1]!.top) < 2, JSON.stringify(desktop));
     assert.ok(desktop.cards.reduce((sum, card) => sum + card.width, 0) > desktop.row.width * .85, 'Summary cards use both halves of the row');
-    await consistentCardContent(legacy, 20);
+    await consistentCardContent(legacy, 16);
     for (const page of [legacy, modern]) await viewportGutters(page, 48);
     await nativeCollapse(legacy);
 
@@ -1395,7 +1516,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     const unfamiliarContent = (await cardContentBounds(legacy))[0]!;
     assert.ok(unfamiliarContent.body - unfamiliarContent.heading >= 14, 'Multiple native sections keep their original indentation');
     await legacy.evaluate(() => document.querySelector('#unexpected-content')!.remove());
-    await consistentCardContent(legacy, 20);
+    await consistentCardContent(legacy, 16);
 
     // A new native widget structure falls back instead of being forced into two columns.
     await legacy.evaluate(() => { const extra = document.createElement('div'); extra.id = 'unexpected-widget'; document.querySelector('#summary')!.append(extra); });
@@ -1410,6 +1531,8 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     for (const preferences of disabledPreferences) {
       await setPreferences(preferences);
       await unmounted();
+      await preservedNativeProgressContent(legacy);
+      await nativeProgressCourseActions(legacy);
       const native = await summaryBounds(legacy);
       assert.ok(native.cards.reduce((sum, card) => sum + card.width, 0) < native.row.width * .75, 'Disabling restores native summary geometry');
       for (const card of await cardContentBounds(legacy)) assert.ok(card.body - card.heading > 15, 'Cleanup restores the native nested content indentation');
@@ -1432,9 +1555,10 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       await nativeCollapse(legacy);
       await setPreferences({ enabled: true, pageAppearance: true });
       await mounted();
+      await progressCourseGeometry(legacy, 2);
       const restored = await summaryBounds(legacy);
       assert.ok(Math.abs(restored.cards[0]!.width - desktop.cards[0]!.width) < 2, 'Reenabling restores the enhanced summary layout');
-      await consistentCardContent(legacy, 20);
+      await consistentCardContent(legacy, 16);
       await horizontalNavigation(modern);
       for (const page of [legacy, modern]) {
         await navigationIcons(page, true);
