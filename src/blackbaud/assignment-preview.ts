@@ -22,6 +22,7 @@ export interface AssignmentPreviewTarget {
 
 export const ASSIGNMENT_PREVIEW_LINK_SELECTOR = ASSIGNMENT_LINK_SELECTOR;
 export const ASSIGNMENT_PREVIEW_ROOT_SELECTOR = 'app-assignment-title-link';
+export const ASSIGNMENT_PREVIEW_IDENTITY_LIFETIME = 15_000;
 
 function validIndexId(value: string): boolean {
   return /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value));
@@ -113,16 +114,44 @@ async function assignmentJson(path: string, signal: AbortSignal): Promise<unknow
   return payload;
 }
 
-export async function fetchAssignmentPreview(target: AssignmentPreviewTarget, signal: AbortSignal): Promise<AssignmentPreview> {
+function validateAssignmentPreviewTarget(target: AssignmentPreviewTarget): void {
   const details = new URL(target.detailsUrl);
   if (!validIndexId(target.assignmentIndexId) || details.origin !== window.location.origin || details.protocol !== 'https:' || details.username || details.password ||
     (details.pathname !== `/lms-assignment/assignment/assignment-student-view/${target.assignmentIndexId}` &&
       details.pathname !== `/lms-assignment/assignment/assignment-student-view/${target.assignmentIndexId}/`)) {
     throw new Error('The assignment identifier is invalid.');
   }
-  const studentUserId = currentStudentUserId(await assignmentJson('/api/webapp/context', signal));
-  const path = `/api/assignment2/UserAssignmentDetailsGetAllStudentData?assignmentIndexId=${target.assignmentIndexId}&studentUserId=${studentUserId}&personaId=2`;
-  return normalizeAssignmentPreview(await assignmentJson(path, signal), target);
+}
+
+/** One mounted feature reuses a validated identity while every detail read stays fresh. */
+export function createAssignmentPreviewReader(now = () => performance.now()) {
+  let identity: { userId: number; expiresAt: number } | null = null;
+  let activeRead: object | null = null;
+  const clear = () => { identity = null; activeRead = null; };
+  const read = async (target: AssignmentPreviewTarget, signal: AbortSignal): Promise<AssignmentPreview> => {
+    const ticket = {};
+    activeRead = ticket;
+    try {
+      signal.throwIfAborted();
+      validateAssignmentPreviewTarget(target);
+      let studentUserId = identity && identity.expiresAt > now() ? identity.userId : null;
+      if (studentUserId === null) {
+        studentUserId = currentStudentUserId(await assignmentJson('/api/webapp/context', signal));
+        if (activeRead === ticket) identity = { userId: studentUserId, expiresAt: now() + ASSIGNMENT_PREVIEW_IDENTITY_LIFETIME };
+      }
+      const path = `/api/assignment2/UserAssignmentDetailsGetAllStudentData?assignmentIndexId=${target.assignmentIndexId}&studentUserId=${studentUserId}&personaId=2`;
+      return normalizeAssignmentPreview(await assignmentJson(path, signal), target);
+    } catch (error) {
+      // An older cancellation must not discard a newer successful identity.
+      if (activeRead === ticket) identity = null;
+      throw error;
+    }
+  };
+  return { read, clear };
+}
+
+export async function fetchAssignmentPreview(target: AssignmentPreviewTarget, signal: AbortSignal): Promise<AssignmentPreview> {
+  return createAssignmentPreviewReader().read(target, signal);
 }
 
 // Build fresh nodes rather than inserting LMS HTML into the live document. The

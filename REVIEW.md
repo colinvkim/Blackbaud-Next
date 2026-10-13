@@ -32,12 +32,12 @@ F1 reproduces by holding the first save, accepting two toggles, and closing the 
 
 ## Additional hardening to evaluate
 
-- Athletic term re-enable compatibility remains unverified. No speculative native-picker interpretation was added without observed school markup; authoritative picker/request identity still needs a live check.
+- Athletic picker identity was subsequently verified in Chrome for Testing: native option values identify teams, while `data-term-id` identifies seasons. The adapter now recovers the selected team after re-enable. Multi-season behavior has synthetic coverage because the live account exposed one season; see [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
 - Fixed same-root directory notice reattachment, with rerender and cleanup regression coverage.
 - Fixed spacer text revalidation, with a regression for a reused text node gaining meaningful content.
 - Fixed decorative-icon recognition and observation of `aria-labelledby`, preserving natively named graphics.
 
-These concerns were not classified as confirmed live LMS defects. The three bounded DOM hardening changes were beneficial and are covered; the athletic compatibility question remains an evidence requirement.
+These concerns were not classified as confirmed live LMS defects during the initial review. The three bounded DOM hardening changes are covered; athletic picker interpretation was deferred until the subsequent live investigation provided native markup and handler evidence.
 
 ## Implementation notes
 
@@ -65,5 +65,5 @@ Combined verification exposed an additional watch startup race. Readiness now fo
 - Directory and coordinator changes received independent peer review after implementation.
 - Original uncommitted Cards/progress appearance changes were preserved and included in validation.
 - Live authenticated LMS smoke testing remains unverified: browser URL policy denied opening `chrome://extensions/`, so the rebuilt extension could not be reloaded into the everyday Chrome session through UI automation. Synthetic tests used disposable profiles and intercepted requests.
-- Athletic picker semantics remain a documented compatibility question, not a confirmed defect with a speculative fix.
-- No commits or external publication were performed.
+- These validation results describe the review checkpoint before the subsequent live investigation. Athletic picker semantics and authenticated workflows were inspected afterward, as recorded in [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
+- The completed review checkpoint was committed as `b361078`; no external publication was performed.

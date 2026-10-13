@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { installIndependentDirectoryPageBridge } from '../src/blackbaud/directory-independent-page.ts';
+import { startNativeDirectory } from '../src/blackbaud/directory-native-startup.ts';
 import { DIRECTORY_OWNER_ATTRIBUTE } from '../src/blackbaud/directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_GATE_LIFETIME, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT, independentDirectoryRequest } from '../src/blackbaud/directory-independent-protocol.ts';
 
@@ -28,6 +29,25 @@ function fixture() {
     remove() { lifecycle.push('remove'); this.el.remove(); }
     off() { lifecycle.push('off'); }
   }
+  interface FetchOptions {
+    data: { directoryId: unknown };
+    success: (...args: unknown[]) => unknown;
+    error: (...args: unknown[]) => unknown;
+  }
+  let deferMetadata = false;
+  const metadata: Array<{ options: FetchOptions; aborted: boolean }> = [];
+  class Model {
+    private readonly attributes: Record<string, unknown>;
+    constructor(attributes: Record<string, unknown>) { this.attributes = attributes; }
+    get(key: string) { return this.attributes[key]; }
+    fetch(options: FetchOptions) {
+      const read = { options, aborted: false };
+      metadata.push(read);
+      if (!deferMetadata) options.success();
+      return { abort() { read.aborted = true; options.error(); } };
+    }
+  }
+  class DirectoryModel extends Model {}
   const previous = new View();
   previous.el = main.firstElementChild as HTMLElement;
   previous.Page = { name: 'native-progress', dispose: () => lifecycle.push('previous-page-dispose') };
@@ -40,17 +60,24 @@ function fixture() {
       module.Data.directoryId = args[0];
       module.Data.viewType = -1;
     }
-    const native = new View();
-    native.template = 'directory/directory.template.html';
-    native.model = { get: (key: string) => key === 'DirectoryId' ? args[0] : undefined };
-    native.Page = { name: 'native-directory', dispose() {} };
-    native.el.textContent = 'Native directory';
-    app.renderMainPage(native);
+    const model = new module.Ms.Directory({ DirectoryId: args[0] });
+    model.fetch({
+      data: { directoryId: args[0] },
+      success: () => {
+        const native = new View();
+        native.template = 'directory/directory.template.html';
+        native.model = model;
+        native.Page = { name: 'native-directory', dispose() {} };
+        native.el.textContent = 'Native directory';
+        app.renderMainPage(native);
+      },
+      error: () => lifecycle.push('native-directory-error'),
+    });
     return 'native-result';
   };
   const owner = { renderDirectory: original };
   const module = { Data: { directoryId: null as unknown, searchVal: '' as unknown, searchFacets: [] as unknown, searchRun: false as unknown, viewType: -1 as unknown },
-    Us: owner, Ms: { Directory: function () {} }, Vs: { Directory: function () {} } };
+    Us: owner, Ms: { Directory: DirectoryModel }, Vs: { Directory: function () {} } };
   const app = {
     _currentMainView: previous,
     _modules: { 'shared/directory': module },
@@ -85,7 +112,8 @@ function fixture() {
   };
   const lease = () => String(responses.filter((value) => value.status === 'shell').at(-1)?.token);
   const root = () => main.firstElementChild as HTMLElement;
-  return { page, dom, app, main, owner, module, directories, calls, lifecycle, responses, send, navigate, lease, root, bridge, View,
+  return { page, dom, app, main, owner, module, directories, calls, lifecycle, responses, send, navigate, lease, root, bridge, View, DirectoryModel, metadata,
+    deferMetadata: () => { deferMetadata = true; },
     original, close() { bridge(); dom.window.close(); } };
 }
 
@@ -447,6 +475,213 @@ test('native fallback leaves a status message while native initialization is pen
   assert.ok(pendingNative);
   render.call(frame.app, pendingNative);
   assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+});
+
+test('a delayed native fallback completes normally and restores the inherited fetch method immediately', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  const fetch = frame.DirectoryModel.prototype.fetch;
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  assert.equal(frame.metadata.length, 1);
+  assert.equal(frame.DirectoryModel.prototype.fetch, fetch);
+  assert.equal(Object.hasOwn(frame.DirectoryModel.prototype, 'fetch'), false);
+  assert.equal(frame.app._currentMainView.template, 'blackbaud-next/directory');
+  frame.metadata[0]!.options.success();
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+  assert.equal(frame.metadata[0]!.aborted, false);
+  assert.equal(frame.calls.length, 1);
+});
+
+for (const [name, flags] of [
+  ['writable nonconfigurable', { writable: true, configurable: false, enumerable: true }],
+  ['configurable readonly', { writable: false, configurable: true, enumerable: false }],
+] as const) {
+  test(`native fallback guards a ${name} fetch method and restores every descriptor flag`, (t) => {
+    const frame = fixture();
+    t.after(() => frame.close());
+    frame.deferMetadata();
+    const prototype = frame.DirectoryModel.prototype;
+    Object.defineProperty(prototype, 'fetch', { ...flags, value: prototype.fetch });
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'fetch');
+    frame.send('enable');
+    assert.equal(frame.responses.at(-1)!.status, 'enabled');
+    frame.navigate();
+    frame.send('original', frame.lease(), '438');
+    assert.equal(frame.metadata.length, 1);
+    assert.deepEqual(Object.getOwnPropertyDescriptor(prototype, 'fetch'), descriptor);
+    frame.metadata[0]!.options.success();
+    assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+    assert.equal(frame.metadata[0]!.aborted, false);
+    assert.deepEqual(Object.getOwnPropertyDescriptor(prototype, 'fetch'), descriptor);
+  });
+}
+
+test('feature disable preserves an already requested native fallback until it finishes', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  frame.send('disable');
+  assert.equal(frame.metadata[0]!.aborted, false);
+  assert.equal(frame.owner.renderDirectory, frame.original);
+  frame.metadata[0]!.options.success();
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+});
+
+test('adapter teardown cancels a prior pending native fallback and ignores its later callbacks', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  const view = frame.app._currentMainView;
+  frame.bridge();
+  assert.equal(frame.metadata[0]!.aborted, true);
+  frame.metadata[0]!.options.success();
+  frame.metadata[0]!.options.error();
+  assert.equal(frame.app._currentMainView, view);
+  assert.equal(frame.lifecycle.includes('native-directory-error'), false);
+});
+
+test('adapter teardown still starts native recovery for its current independent shell', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.bridge();
+  assert.equal(frame.metadata.length, 1);
+  frame.bridge();
+  assert.equal(frame.metadata[0]!.aborted, false);
+  frame.metadata[0]!.options.success();
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+});
+
+test('the temporary fetch guard captures only a matching model and directory query', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.page.history.replaceState({}, '', '#directory/438');
+  const fetch = frame.DirectoryModel.prototype.fetch;
+  let unrelated = 0;
+  let captured = 0;
+  const cancel = startNativeDirectory(frame.page, frame.DirectoryModel, '438', () => true, () => {
+    new frame.DirectoryModel({ DirectoryId: '912' }).fetch({ data: { directoryId: '438' }, success: () => unrelated++, error() {} });
+    new frame.DirectoryModel({ DirectoryId: '438' }).fetch({ data: { directoryId: '912' }, success: () => unrelated++, error() {} });
+    new frame.DirectoryModel({ DirectoryId: '438' }).fetch({ data: { directoryId: '438' }, success: () => captured++, error() {} });
+  });
+  assert.equal(frame.DirectoryModel.prototype.fetch, fetch);
+  assert.equal(Object.hasOwn(frame.DirectoryModel.prototype, 'fetch'), false);
+  cancel();
+  assert.deepEqual(frame.metadata.map((read) => read.aborted), [false, false, true]);
+  for (const read of frame.metadata) read.options.success();
+  assert.equal(unrelated, 2);
+  assert.equal(captured, 0);
+});
+
+test('a frozen uncaptured fetch shadow forwards later native startup after its guard settles', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.page.history.replaceState({}, '', '#directory/438');
+  const prototype = frame.DirectoryModel.prototype;
+  const fetch = prototype.fetch;
+  startNativeDirectory(frame.page, frame.DirectoryModel, '438', () => true, () => {
+    // A later native/third-party descriptor change can prevent restoration
+    // even when our synchronous startup did not make a matching request.
+    Object.defineProperty(prototype, 'fetch', { configurable: false, writable: false });
+  });
+  assert.notEqual(prototype.fetch, fetch);
+  assert.equal(frame.metadata.length, 0);
+  frame.navigate();
+  assert.equal(frame.metadata.length, 1);
+  assert.equal(frame.metadata[0]!.aborted, false);
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+  assert.equal(frame.calls.length, 1);
+});
+
+test('departure after native fallback starts aborts its metadata and cannot replace Resources or show an obsolete error', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  const href = frame.page.location.href;
+  frame.page.history.replaceState({}, '', '#resourceboard');
+  frame.page.dispatchEvent(new frame.page.HashChangeEvent('hashchange', { oldURL: href, newURL: frame.page.location.href }));
+  const resources = new frame.View();
+  resources.template = 'resourceboard/resourceboard.template.html';
+  resources.el.textContent = 'Native Resources';
+  frame.app.renderMainPage(resources);
+  assert.equal(frame.metadata[0]!.aborted, true);
+  frame.metadata[0]!.options.success();
+  frame.metadata[0]!.options.error();
+  assert.equal(frame.app._currentMainView, resources);
+  assert.equal(frame.root(), resources.el);
+  assert.equal(frame.page.location.hash, '#resourceboard');
+  assert.equal(frame.lifecycle.includes('native-directory-error'), false);
+});
+
+test('leaving and returning to the same directory cannot revive a previous native fallback', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  const href = frame.page.location.href;
+  const departed = new URL('#resourceboard', href).href;
+  // Both transitions can precede their queued events. Retain transition
+  // evidence even though the live URL already returned to the original ID.
+  frame.page.history.replaceState({}, '', departed);
+  frame.page.history.replaceState({}, '', href);
+  frame.page.dispatchEvent(new frame.page.HashChangeEvent('hashchange', { oldURL: href, newURL: departed }));
+  frame.owner.renderDirectory('438');
+  const replacement = frame.app._currentMainView;
+  assert.equal(frame.metadata[0]!.aborted, true);
+  frame.metadata[0]!.options.success();
+  frame.metadata[0]!.options.error();
+  assert.equal(frame.app._currentMainView, replacement);
+  assert.equal(replacement.template, 'blackbaud-next/directory');
+  assert.equal(frame.root().getAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE), '438');
+  assert.equal(frame.lifecycle.includes('native-directory-error'), false);
+});
+
+test('a replacement view on the same URL invalidates a pending native fallback', (t) => {
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.deferMetadata();
+  frame.send('enable');
+  frame.navigate();
+  frame.send('original', frame.lease(), '438');
+  const replacement = new frame.View();
+  replacement.template = 'resourceboard/resourceboard.template.html';
+  frame.app.renderMainPage(replacement);
+  frame.metadata[0]!.options.success();
+  assert.equal(frame.metadata[0]!.aborted, true);
+  assert.equal(frame.app._currentMainView, replacement);
+});
+
+test('a native model prototype that cannot be guarded keeps normal startup available without independent interception', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 100_000 });
+  const frame = fixture();
+  t.after(() => frame.close());
+  const fetch = frame.DirectoryModel.prototype.fetch;
+  Object.preventExtensions(frame.DirectoryModel.prototype);
+  frame.send('enable');
+  t.mock.timers.tick(12_100);
+  assert.equal(frame.responses.at(-1)!.status, 'unsupported');
+  assert.equal(frame.owner.renderDirectory, frame.original);
+  assert.equal(frame.DirectoryModel.prototype.fetch, fetch);
+  frame.navigate();
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+  assert.equal(frame.calls.length, 1);
 });
 
 test('disabling or teardown resumes a current shell and restores the original property descriptor', () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { assignmentInstructions, assignmentPreviewTarget, currentStudentUserId, fetchAssignmentPreview, normalizeAssignmentPreview, safeAssignmentUrl } from '../src/blackbaud/assignment-preview.ts';
+import { ASSIGNMENT_PREVIEW_IDENTITY_LIFETIME, assignmentInstructions, assignmentPreviewTarget, createAssignmentPreviewReader, currentStudentUserId, fetchAssignmentPreview, normalizeAssignmentPreview, safeAssignmentUrl } from '../src/blackbaud/assignment-preview.ts';
 import type { AssignmentPreviewTarget } from '../src/blackbaud/assignment-preview.ts';
 import { assignmentPreviewFeature } from '../src/features/assignment-preview.ts';
 import { assignmentShortcutsFeature } from '../src/features/assignment-shortcuts.ts';
@@ -353,4 +353,141 @@ test('preview discovery ignores unrelated changes and follows in-place native ti
   anchor.href = '/unrelated-native-page';
   await flush();
   assert.equal(root.querySelector('button'), null);
+});
+
+test('preview readers briefly reuse validated identity and always fetch fresh assignment details', async (t) => {
+  fixture('');
+  let time = 0;
+  let contexts = 0;
+  let details = 0;
+  const studentIds: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    if (String(path) === '/api/webapp/context') {
+      contexts += 1;
+      return new Response(JSON.stringify({ UserInfo: { UserId: 40 + contexts, DefaultPersonaId: 2 } }));
+    }
+    studentIds.push(new URL(String(path), window.location.href).searchParams.get('studentUserId')!);
+    return new Response(JSON.stringify(assignment(123, `Fresh version ${++details}`)));
+  });
+  const reader = createAssignmentPreviewReader(() => time);
+  const signal = new AbortController().signal;
+  assert.equal((await reader.read(target(), signal)).title, 'Fresh version 1');
+  time = ASSIGNMENT_PREVIEW_IDENTITY_LIFETIME - 1;
+  assert.equal((await reader.read(target(), signal)).title, 'Fresh version 2');
+  assert.equal(contexts, 1);
+  time = ASSIGNMENT_PREVIEW_IDENTITY_LIFETIME;
+  assert.equal((await reader.read(target(), signal)).title, 'Fresh version 3');
+  assert.equal(contexts, 2);
+  assert.deepEqual(studentIds, ['41', '41', '42']);
+  reader.clear();
+  await reader.read(target(), signal);
+  assert.equal(contexts, 3);
+  assert.equal(details, 4);
+});
+
+test('failed identity, detail and target validation invalidate identity before a retry', async (t) => {
+  fixture('');
+  let contexts = 0;
+  let details = 0;
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    requests += 1;
+    if (String(path) === '/api/webapp/context') {
+      contexts += 1;
+      return new Response(JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: contexts === 1 ? 1 : 2 } }));
+    }
+    return ++details === 1 ? new Response('Unavailable', { status: 503 }) : new Response(JSON.stringify(assignment()));
+  });
+  const reader = createAssignmentPreviewReader();
+  const signal = new AbortController().signal;
+  await assert.rejects(reader.read(target(), signal), /current student/);
+  assert.equal(details, 0);
+  await assert.rejects(reader.read(target(), signal), /503/);
+  await reader.read(target(), signal);
+  assert.equal(contexts, 3);
+  const beforeInvalidTarget = requests;
+  await assert.rejects(reader.read({ ...target(), detailsUrl: 'https://foreign.example/lms-assignment/assignment/assignment-student-view/123' }, signal), /invalid/);
+  assert.equal(requests, beforeInvalidTarget);
+  await reader.read(target(), signal);
+  assert.equal(contexts, 4);
+});
+
+test('a canceled context read is not cached and cannot start an assignment read', async (t) => {
+  fixture('');
+  let contexts = 0;
+  let details = 0;
+  let resolveContext: ((response: Response) => void) | undefined;
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    if (String(path) === '/api/webapp/context') {
+      if (++contexts === 1) return new Promise<Response>((resolve) => { resolveContext = resolve; });
+      return new Response(JSON.stringify({ UserInfo: { UserId: 77, DefaultPersonaId: 2 } }));
+    }
+    details += 1;
+    assert.equal(new URL(String(path), window.location.href).searchParams.get('studentUserId'), '77');
+    return new Response(JSON.stringify(assignment()));
+  });
+  const reader = createAssignmentPreviewReader();
+  const controller = new AbortController();
+  const pending = reader.read(target(), controller.signal);
+  const canceled = assert.rejects(pending, { name: 'AbortError' });
+  controller.abort();
+  resolveContext?.(new Response(JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } })));
+  await canceled;
+  assert.equal(details, 0);
+  await reader.read(target(), new AbortController().signal);
+  assert.equal(contexts, 2);
+  assert.equal(details, 1);
+});
+
+test('a late canceled read cannot discard the replacement read’s validated identity', async (t) => {
+  fixture('');
+  let contexts = 0;
+  let resolveOld: ((response: Response) => void) | undefined;
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    if (String(path) === '/api/webapp/context') {
+      if (++contexts === 1) return new Promise<Response>((resolve) => { resolveOld = resolve; });
+      return new Response(JSON.stringify({ UserInfo: { UserId: 77, DefaultPersonaId: 2 } }));
+    }
+    assert.equal(new URL(String(path), window.location.href).searchParams.get('studentUserId'), '77');
+    return new Response(JSON.stringify(assignment()));
+  });
+  const reader = createAssignmentPreviewReader();
+  const old = new AbortController();
+  const canceled = assert.rejects(reader.read(target(), old.signal), { name: 'AbortError' });
+  old.abort();
+  await reader.read(target(), new AbortController().signal);
+  resolveOld?.(new Response(JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } })));
+  await canceled;
+  await reader.read(target(), new AbortController().signal);
+  assert.equal(contexts, 2);
+});
+
+test('preview reopening reuses identity while remounting obtains the current student again', async (t) => {
+  const win = fixture(nativeLink(123));
+  let contexts = 0;
+  let details = 0;
+  const studentIds: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    if (String(path) === '/api/webapp/context') {
+      contexts += 1;
+      return new Response(JSON.stringify({ UserInfo: { UserId: contexts === 1 ? 42 : 77, DefaultPersonaId: 2 } }));
+    }
+    studentIds.push(new URL(String(path), win.location.href).searchParams.get('studentUserId')!);
+    return new Response(JSON.stringify(assignment(123, `Fresh version ${++details}`)));
+  });
+  const firstMount = mount();
+  win.document.querySelector<HTMLButtonElement>('[data-blackbaud-next-preview]')!.click();
+  await flush();
+  win.document.querySelector<HTMLButtonElement>('[role="dialog"] button')!.click();
+  win.document.querySelector<HTMLButtonElement>('[data-blackbaud-next-preview]')!.click();
+  await flush();
+  assert.equal(contexts, 1);
+  assert.equal(win.document.querySelector('[role="dialog"] h2')!.textContent, 'Fresh version 2');
+  firstMount.abort();
+  mount();
+  win.document.querySelector<HTMLButtonElement>('[data-blackbaud-next-preview]')!.click();
+  await flush();
+  assert.equal(contexts, 2);
+  assert.equal(win.document.querySelector('[role="dialog"] h2')!.textContent, 'Fresh version 3');
+  assert.deepEqual(studentIds, ['42', '42', '77']);
 });

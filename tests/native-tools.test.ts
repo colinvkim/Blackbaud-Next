@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { fullSizePhotoUrl, profilePhotoForOptions } from '../src/blackbaud/avatar.ts';
-import { ROSTER_CACHE_LIFETIME, createRosterReader, fetchRoster, normalizeRoster, rosterTargetFromRequest, rosterTargetFromUrl, rosterValues } from '../src/blackbaud/roster.ts';
+import { ROSTER_CACHE_LIFETIME, createRosterReader, fetchRoster, normalizeRoster, rosterTargetFromPicker, rosterTargetFromRequest, rosterTargetFromUrl, rosterValues } from '../src/blackbaud/roster.ts';
 import { ASSIGNMENT_STALL_DELAY, assignmentRecoveryFeature, oldAssignmentCenterFeature, recoveryRemaining } from '../src/features/assignment-center.ts';
 import { avatarDownloadFeature } from '../src/features/avatar-download.ts';
 import { faviconFeature } from '../src/features/favicon.ts';
@@ -307,6 +307,84 @@ test('native academic roster section values remain authoritative after changing 
   await flush();
   assert.deepEqual(requested, ['/api/datadirect/sectionrosterget/123/?format=json', '/api/datadirect/sectionrosterget/456/?format=json']);
   assert.deepEqual(copied, ['Spring Person']);
+});
+
+test('native athletic picker values identify teams while term attributes remain separate', () => {
+  const win = fixture('<select id="roster-term-picker"><option value="123" data-term-id="10">Fall</option><option value="456" data-term-id="20">Spring</option><option value="spring" data-term-id="30">Unknown team</option></select>', '/app/student?svcid=edu#athleticteam/123/roster');
+  const picker = win.document.querySelector<HTMLSelectElement>('#roster-term-picker')!;
+  const url = new URL(win.location.href);
+  assert.deepEqual(rosterTargetFromPicker(picker, url), { kind: 'team', id: '123' });
+  picker.value = '456';
+  assert.deepEqual(rosterTargetFromPicker(picker, url), { kind: 'team', id: '456' });
+  assert.equal(picker.selectedOptions[0]!.dataset.termId, '20');
+  picker.value = 'spring';
+  assert.equal(rosterTargetFromPicker(picker, url), null);
+  picker.value = '456';
+  picker.id = 'unrelated-picker';
+  assert.equal(rosterTargetFromPicker(picker, url), null);
+  picker.id = 'roster-term-picker';
+  assert.equal(rosterTargetFromPicker(picker, new URL(url.href.replace('#athleticteam/123/roster', '#directory/123'))), null);
+});
+
+test('athletic season changes cancel old copies and use the selected team despite an unchanged route', async (t) => {
+  const win = fixture('<select id="roster-term-picker"><option value="123" data-term-id="10">Fall</option><option value="456" data-term-id="20">Spring</option></select>', '/app/student?svcid=edu#athleticteam/123/roster');
+  const requested: string[] = [];
+  let firstSignal: AbortSignal | null | undefined;
+  let resolveFirst: ((response: Response) => void) | undefined;
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL, options?: RequestInit) => {
+    requested.push(String(path));
+    if (requested.length === 1) {
+      firstSignal = options?.signal;
+      return new Promise<Response>((resolve) => { resolveFirst = resolve; });
+    }
+    return new Response(JSON.stringify([{ name: 'Spring Athlete' }]));
+  });
+  const copied: string[] = [];
+  Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text); } } });
+  const controller = new AbortController();
+  cleanups.push(() => controller.abort());
+  const cleanup = rosterToolsFeature.mount({ url: new URL(win.location.href), signal: controller.signal, settings: DEFAULT_SETTINGS });
+  if (cleanup) cleanups.push(cleanup);
+  const picker = win.document.querySelector<HTMLSelectElement>('#roster-term-picker')!;
+  const button = win.document.querySelector<HTMLButtonElement>('.bn-tools button')!;
+  button.click();
+  picker.value = '456';
+  picker.dispatchEvent(new win.Event('change', { bubbles: true }));
+  assert.equal(firstSignal?.aborted, true);
+  button.click();
+  resolveFirst?.(new Response(JSON.stringify([{ name: 'Fall Athlete' }])));
+  await flush();
+  assert.equal(win.location.hash, '#athleticteam/123/roster');
+  assert.deepEqual(requested, ['/api/datadirect/athleticrosterget/?format=json&teamId=123', '/api/datadirect/athleticrosterget/?format=json&teamId=456']);
+  assert.deepEqual(copied, ['Spring Athlete']);
+});
+
+test('re-enabled athletic roster tools use the selected team without observing another native request', async (t) => {
+  const win = fixture('<select id="roster-term-picker"><option value="123" data-term-id="10">Fall</option><option value="456" data-term-id="20">Spring</option></select>', '/app/student?svcid=edu#athleticteam/123/roster');
+  const requested: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => {
+    requested.push(String(path));
+    return new Response(JSON.stringify([{ name: 'Selected Athlete' }]));
+  });
+  Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } });
+  const first = new AbortController();
+  const stopFirst = rosterToolsFeature.mount({ url: new URL(win.location.href), signal: first.signal, settings: DEFAULT_SETTINGS });
+  const picker = win.document.querySelector<HTMLSelectElement>('#roster-term-picker')!;
+  picker.value = '456';
+  picker.dispatchEvent(new win.Event('change', { bubbles: true }));
+  first.abort();
+  stopFirst?.();
+  assert.equal(win.document.querySelector('.bn-tools'), null);
+  assert.equal(requested.length, 0);
+  const second = new AbortController();
+  cleanups.push(() => second.abort());
+  const stopSecond = rosterToolsFeature.mount({ url: new URL(win.location.href), signal: second.signal, settings: DEFAULT_SETTINGS });
+  if (stopSecond) cleanups.push(stopSecond);
+  win.document.querySelector<HTMLButtonElement>('.bn-tools button')!.click();
+  await flush();
+  assert.equal(win.location.hash, '#athleticteam/123/roster');
+  assert.deepEqual(requested, ['/api/datadirect/athleticrosterget/?format=json&teamId=456']);
+  assert.match(win.document.querySelector('.bn-tool-status')!.textContent ?? '', /Names copied/);
 });
 
 test('roster tools are cleaned up when the native picker is replaced', async () => {

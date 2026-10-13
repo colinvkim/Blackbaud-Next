@@ -1,4 +1,5 @@
 import { DIRECTORY_OWNER_ATTRIBUTE } from './directory-protocol.ts';
+import { canGuardDirectoryStartup, startNativeDirectory } from './directory-native-startup.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_GATE_LIFETIME, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT, independentDirectoryRequest } from './directory-independent-protocol.ts';
 import { createIcon } from '../shared/icons.ts';
 import type { Cleanup } from '../shared/types.ts';
@@ -45,6 +46,7 @@ interface Lease {
   callback: NativeMethod;
   receiver: unknown;
   args: unknown[];
+  model: unknown;
 }
 
 const discoveryDeadline = 12_000;
@@ -64,6 +66,8 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
   let disposalCheck: number | undefined;
   let recovering = false;
   let nativeNextDirectory: string | null = null;
+  let cancelNativeStartup: Cleanup = () => {};
+  let disposed = false;
   const routeId = () => directoryRoute.exec(page.location.hash)?.[1] ?? null;
   const respond = (token: string, payload: Record<string, unknown>) => {
     page.document.dispatchEvent(new page.CustomEvent(INDEPENDENT_DIRECTORY_RESPONSE_EVENT, { detail: JSON.stringify({ token, ...payload }) }));
@@ -94,6 +98,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     lease.root.parentElement === mainRoot(lease.app) && lease.view.template === 'blackbaud-next/directory' &&
     !lease.root.hasAttribute(DIRECTORY_OWNER_ATTRIBUTE) && !lease.root.hasAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE);
   const resumeNative = (owned: Lease) => {
+    cancelNativeStartup();
     if (owned.root.isConnected && owned.root.parentElement === mainRoot(owned.app)) {
       let pendingUi = owned.root.querySelector<HTMLElement>(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}]`);
       if (!pendingUi) {
@@ -105,7 +110,13 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
       pendingUi.textContent = 'Loading original directory…';
     }
     recovering = true;
-    try { owned.callback.apply(owned.receiver, owned.args); }
+    const view = owned.app._currentMainView;
+    const container = mainRoot(owned.app);
+    try {
+      cancelNativeStartup = startNativeDirectory(page, owned.model, owned.directoryId,
+        () => page.p3 === owned.app && owned.app._currentMainView === view && mainRoot(owned.app) === container,
+        () => { owned.callback.apply(owned.receiver, owned.args); });
+    }
     catch { /* The native route owns its normal error handling. */ }
     finally { recovering = false; }
   };
@@ -208,12 +219,13 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     const container = mainRoot(owned.app);
     const data = owned.module.Data;
     if (!View || !container || !owned.app.renderMainPage || !data || typeof data !== 'object') return false;
+    cancelNativeStartup();
     release(false);
     const view = new View();
     const root = view.el;
     if (!(root instanceof page.HTMLElement)) return false;
     const token = page.crypto.randomUUID();
-    const lease: Lease = { token, directoryId: id, name, root, view, app: owned.app, callback: owned.original, receiver, args: [...args] };
+    const lease: Lease = { token, directoryId: id, name, root, view, app: owned.app, callback: owned.original, receiver, args: [...args], model: owned.module.Ms?.Directory };
     root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, id);
     root.setAttribute(DIRECTORY_OWNER_ATTRIBUTE, token);
     const overview = page.document.createElement('header');
@@ -278,7 +290,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     const owner = module?.Us;
     const original = owner?.renderDirectory;
     if (app && module && owner && typeof original === 'function' && module.Data && typeof module.Data === 'object' &&
-      typeof module.Ms?.Directory === 'function' && typeof module.Vs?.Directory === 'function' &&
+      canGuardDirectoryStartup(module.Ms?.Directory) && typeof module.Vs?.Directory === 'function' &&
       typeof app.renderMainPage === 'function' && typeof app.Data?.Context?.get === 'function' &&
       typeof page.Bb?.View === 'function' && app._currentMainView && mainRoot(app)) {
       const descriptor = Object.getOwnPropertyDescriptor(owner, 'renderDirectory');
@@ -392,7 +404,13 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
   page.addEventListener('pagehide', pagehide);
   page.addEventListener('pageshow', pageshow);
   return () => {
+    if (disposed) return;
+    disposed = true;
     suspended = null;
+    // Adapter teardown ends any earlier owned startup. A current independent
+    // shell can still start its intentional native recovery in disable below;
+    // ordinary feature disable leaves that current recovery alone.
+    cancelNativeStartup();
     disable(true);
     page.document.removeEventListener(INDEPENDENT_DIRECTORY_REQUEST_EVENT, receive);
     page.document.removeEventListener('visibilitychange', check);

@@ -1,4 +1,4 @@
-import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, ASSIGNMENT_PREVIEW_ROOT_SELECTOR, assignmentInstructions, assignmentPreviewReturnFocus, assignmentPreviewTarget, fetchAssignmentPreview } from '../blackbaud/assignment-preview.ts';
+import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, ASSIGNMENT_PREVIEW_ROOT_SELECTOR, assignmentInstructions, assignmentPreviewReturnFocus, assignmentPreviewTarget, createAssignmentPreviewReader } from '../blackbaud/assignment-preview.ts';
 import type { AssignmentPreviewTarget } from '../blackbaud/assignment-preview.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
 import { addStyle, createButton, isActionable, observeDom, watchAddedElements } from '../shared/dom.ts';
@@ -47,6 +47,7 @@ export const assignmentPreviewFeature: Feature = {
   mount: ({ url, signal }) => {
     if (signal.aborted) return;
     const removeStyle = addStyle('assignment-previews', styles);
+    const reader = createAssignmentPreviewReader();
     const controls = new Map<HTMLAnchorElement, { root: HTMLElement; button: HTMLButtonElement; dispose: () => void }>();
     let panel: HTMLDivElement | null = null;
     let opener: HTMLButtonElement | null = null;
@@ -124,7 +125,7 @@ export const assignmentPreviewFeature: Feature = {
         const isCurrent = () => !disposed && !signal.aborted && !currentRequest.signal.aborted &&
           panel === currentPanel && request === currentRequest && window.location.href === url.href;
         try {
-          const preview = await fetchAssignmentPreview(target, currentRequest.signal);
+          const preview = await reader.read(target, currentRequest.signal);
           if (!isCurrent()) return;
           title.textContent = preview.title;
           const metadata = document.createElement('p');
@@ -220,6 +221,7 @@ export const assignmentPreviewFeature: Feature = {
       disposed = true;
       stop();
       close(false);
+      reader.clear();
       for (const control of controls.values()) control.dispose();
       controls.clear();
       removeStyle();

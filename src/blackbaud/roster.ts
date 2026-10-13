@@ -25,11 +25,13 @@ export function rosterPickerIdentity(picker: Element): string {
 
 export function rosterTargetFromPicker(picker: Element, url: URL): RosterTarget | null {
   const selected = picker instanceof HTMLSelectElement ? picker.selectedOptions[0] : null;
-  // Native academic options identify the selected term's section, which can
-  // differ from the section that originally opened this class page.
+  // These native pickers use section/team IDs as option values. data-term-id
+  // identifies the season separately, and the selected roster can differ from
+  // the ID that originally opened the route, including after re-enabling tools.
+  const nativeRoute = /^#(academicclass|athleticteam)\/[1-9]\d*(?:\/|\?|$)/i.exec(url.hash)?.[1]?.toLowerCase();
   if (picker instanceof HTMLSelectElement && picker.matches(ROSTER_PICKER_SELECTOR) &&
-    /^#academicclass\/[1-9]\d*(?:\/|\?|$)/i.test(url.hash) && /^[1-9]\d*$/.test(picker.value)) {
-    return { kind: 'section', id: picker.value };
+    nativeRoute && /^[1-9]\d*$/.test(picker.value)) {
+    return { kind: nativeRoute === 'academicclass' ? 'section' : 'team', id: picker.value };
   }
   const sectionId = selected?.dataset.sectionId ?? picker.getAttribute('data-section-id');
   const teamId = selected?.dataset.teamId ?? picker.getAttribute('data-team-id');
