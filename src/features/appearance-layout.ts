@@ -24,7 +24,10 @@ export const appearanceLayoutFeature: Feature = {
     if (signal.aborted) return;
     let disposed = false;
     let queued = false;
+    let contentDirty = true;
+    let shellDirty = true;
     const discovered = new Set<HTMLElement>();
+    const rootScopes = new Map<HTMLElement, { content: boolean; shell: boolean }>();
     const observations = new Map<HTMLElement, Cleanup>();
     const labels = new Map<HTMLElement, MutationObserver>();
     const courseText = new Map<HTMLElement, MutationObserver>();
@@ -32,13 +35,37 @@ export const appearanceLayoutFeature: Feature = {
     const markers = createAttributeOwnership();
     const navigationIcons = createNavigationIcons();
     const headerAppearance = createHeaderAppearance();
-    const queueUpdate = () => {
-      if (disposed || signal.aborted || queued) return;
+    const shellRoot = (element: HTMLElement) => element.tagName === 'APP-ROOT' ||
+      ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom', 'site-top-spacer'].includes(element.id);
+    const contentRoot = (element: HTMLElement) => element.id === 'site-main' ||
+      ['SKY-TOOLBAR', 'SKY-REPEATER', 'SKY-REPEATER-ITEM'].includes(element.tagName);
+    const queueUpdate = (content: boolean, shell: boolean) => {
+      if (disposed || signal.aborted) return;
+      contentDirty ||= content;
+      shellDirty ||= shell;
+      if (queued) return;
       queued = true;
       queueMicrotask(() => {
         queued = false;
         update();
       });
+    };
+    const updateRoot = (root: HTMLElement) => {
+      // A verified root may contain another observed scope. Keep that mixed
+      // native hierarchy conservative without coupling ordinary sibling roots.
+      let content = false;
+      let shell = false;
+      for (const element of discovered) {
+        if (!root.contains(element)) continue;
+        const previous = rootScopes.get(element);
+        const current = { content: contentRoot(element), shell: shellRoot(element) };
+        rootScopes.set(element, current);
+        // Reused roots can change roles while still matching discovery. Clear
+        // markers from their earlier role as well as validating the new one.
+        content ||= current.content || previous?.content === true;
+        shell ||= current.shell || previous?.shell === true;
+      }
+      queueUpdate(content, shell);
     };
     const refreshObservations = () => {
       // APP-ROOT establishes the modern app's identity/uniqueness; its page
@@ -60,7 +87,7 @@ export const appearanceLayoutFeature: Feature = {
         if (!element.isConnected || element.tagName !== 'SKY-TOOLBAR' || labels.has(element)) continue;
         // The native search input's label identifies the assignment toolbar.
         // Watch that semantic attribute only within its small known scope.
-        const observer = new MutationObserver(queueUpdate);
+        const observer = new MutationObserver(() => queueUpdate(true, false));
         observer.observe(element, { subtree: true, attributes: true, attributeFilter: ['aria-label'] });
         labels.set(element, observer);
       }
@@ -75,7 +102,7 @@ export const appearanceLayoutFeature: Feature = {
         if (shellSemantics.has(element)) continue;
         // An original graphic can acquire an accessible name or interaction.
         // Revalidate navigation and its spacer, including native text updates.
-        const observer = new MutationObserver(queueUpdate);
+        const observer = new MutationObserver(() => queueUpdate(false, true));
         observer.observe(element, { subtree: true, characterData: true, attributes: true,
           attributeFilter: ['alt', 'role', 'aria-label', 'aria-labelledby', 'aria-current', 'aria-controls', 'aria-haspopup', 'onclick', 'tabindex', 'iconname', 'contenteditable', 'type'] });
         shellSemantics.set(element, observer);
@@ -85,9 +112,10 @@ export const appearanceLayoutFeature: Feature = {
       }
       for (const root of roots) {
         if (observations.has(root)) continue;
-        const stop = observeDom(queueUpdate, signal, root);
+        const stop = observeDom(() => updateRoot(root), signal, root);
         observations.set(root, stop);
       }
+      if (!contentDirty) return;
       const courseContainers = new Set(nativeAppearancePageKind(url) === 'progress'
         ? [...discovered].filter((element) => element.isConnected && element.id === 'site-main')
           .flatMap((main) => [...main.querySelectorAll<HTMLElement>('#coursesContainer')]) : []);
@@ -100,26 +128,21 @@ export const appearanceLayoutFeature: Feature = {
         // Only direct list/row text affects grid identity; grade text does not.
         const observer = new MutationObserver((records) => {
           if (records.some(({ target }) => target.parentNode === container ||
-            (target.parentElement?.parentElement === container && target.parentElement.classList.contains('row')))) queueUpdate();
+            (target.parentElement?.parentElement === container && target.parentElement.classList.contains('row')))) queueUpdate(true, false);
         });
         observer.observe(container, { subtree: true, characterData: true });
         courseText.set(container, observer);
       }
     };
-    const update = () => {
-      if (disposed || signal.aborted) return;
-      refreshObservations();
-      const current = window.location.href === url.href;
+    const updateContent = (current: boolean) => {
       const context = current ? nativeAppearancePage(url) : null;
-      const navigation = current ? nativeAppearanceNavigation(document, url) : { shell: null, icons: [] };
-      const shell = navigation.shell ? document.documentElement : null;
       const { rows, summary, courses } = nativeProgressAppearance(context, url);
       const currentRows = new Set(rows);
       markers.retain((element, attribute) => {
         switch (attribute) {
           case APPEARANCE_PAGE_ATTRIBUTE: return context?.element === element;
           case APPEARANCE_COURSE_ROW_ATTRIBUTE: return currentRows.has(element);
-          case APPEARANCE_SHELL_ATTRIBUTE: return shell === element;
+          case APPEARANCE_SHELL_ATTRIBUTE: return true;
           case APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE: return summary === element;
           case APPEARANCE_PROGRESS_COURSES_ATTRIBUTE: return courses === element;
           default: return false;
@@ -129,6 +152,11 @@ export const appearanceLayoutFeature: Feature = {
       for (const row of rows) markers.mark(row, APPEARANCE_COURSE_ROW_ATTRIBUTE, 'true');
       if (summary) markers.mark(summary, APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE, 'true');
       if (courses) markers.mark(courses, APPEARANCE_PROGRESS_COURSES_ATTRIBUTE, 'cards');
+    };
+    const updateShell = (current: boolean) => {
+      const navigation = current ? nativeAppearanceNavigation(document, url) : { shell: null, icons: [] };
+      const shell = navigation.shell ? document.documentElement : null;
+      markers.retain((element, attribute) => attribute !== APPEARANCE_SHELL_ATTRIBUTE || element === shell);
       if (shell) markers.mark(shell, APPEARANCE_SHELL_ATTRIBUTE, navigation.shell!);
       navigationIcons.update(navigation.icons);
       const headerTargets = nativeHeaderAppearanceTargets(document, url, navigation);
@@ -136,14 +164,41 @@ export const appearanceLayoutFeature: Feature = {
       // room for every resized row. Otherwise retain the earlier native layout.
       headerAppearance.update(headerTargets.some(({ part }) => part === 'spacer') ? headerTargets : []);
     };
+    const update = () => {
+      if (disposed || signal.aborted || (!contentDirty && !shellDirty)) return;
+      const current = window.location.href === url.href;
+      if (!current) { contentDirty = true; shellDirty = true; }
+      refreshObservations();
+      const content = contentDirty;
+      const shell = shellDirty;
+      contentDirty = false;
+      shellDirty = false;
+      if (content) updateContent(current);
+      if (shell) updateShell(current);
+    };
+    const navigationChanged = () => {
+      contentDirty = true;
+      shellDirty = true;
+      update();
+    };
     const stopRoots = watchAddedElements<HTMLElement>(appearanceObservationSelector(url), (root) => {
+      const content = contentRoot(root);
+      // Legacy shell identity depends on the unique #site-main as well as its
+      // header/nav. Cache these scopes before a native ID change removes it.
+      const shell = shellRoot(root) || root.id === 'site-main';
       discovered.add(root);
-      queueUpdate();
-      return () => { discovered.delete(root); queueUpdate(); };
+      rootScopes.set(root, { content, shell: shellRoot(root) });
+      queueUpdate(content, shell);
+      return () => {
+        const previous = rootScopes.get(root);
+        discovered.delete(root);
+        rootScopes.delete(root);
+        queueUpdate(content || previous?.content === true, shell || previous?.shell === true);
+      };
     }, signal, document, ['id', 'class']);
     update();
-    window.addEventListener('hashchange', update);
-    window.addEventListener('popstate', update);
+    window.addEventListener('hashchange', navigationChanged);
+    window.addEventListener('popstate', navigationChanged);
     const cleanup: Cleanup = () => {
       if (disposed) return;
       disposed = true;
@@ -157,8 +212,9 @@ export const appearanceLayoutFeature: Feature = {
       for (const observer of shellSemantics.values()) observer.disconnect();
       shellSemantics.clear();
       discovered.clear();
-      window.removeEventListener('hashchange', update);
-      window.removeEventListener('popstate', update);
+      rootScopes.clear();
+      window.removeEventListener('hashchange', navigationChanged);
+      window.removeEventListener('popstate', navigationChanged);
       signal.removeEventListener('abort', cleanup);
       navigationIcons.clear();
       headerAppearance.clear();

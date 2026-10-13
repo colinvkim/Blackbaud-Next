@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { assignmentWarmupDestination, canPrepareAssignmentCenter, isAssignmentWarmupSource } from '../src/blackbaud/assignment-warmup.ts';
+import { assignmentWarmupDestination, canPrepareAssignmentCenter, isAssignmentWarmupPage, isAssignmentWarmupSource } from '../src/blackbaud/assignment-warmup.ts';
 import { ASSIGNMENT_WARMUP_LIFETIME, ASSIGNMENT_WARMUP_SETTLE_DELAY, assignmentWarmupFeature } from '../src/features/assignment-warmup.ts';
 import { FeatureController } from '../src/runtime/controller.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
@@ -9,18 +9,19 @@ import type { Cleanup } from '../src/shared/types.ts';
 
 const nativeHref = '/lms-assignment/assignment-center/student/?svcid=edu';
 const sourceUrl = 'https://example.myschoolapp.com/app/student?svcid=edu#studentmyday/schedule';
+const progressUrl = sourceUrl.replace('/schedule', '/progress');
 const sourceHtml = `<nav><a id="assignment-center-btn" href="${nativeHref}">Assignment Center</a></nav><main id="site-main"><div id="accordionSchedules">Native schedule</div></main>`;
 let dom: JSDOM | undefined;
 let restore: Cleanup = () => {};
 const cleanups: Cleanup[] = [];
 
-function fixture(html = sourceHtml, options: { supported?: boolean; hidden?: boolean; prerendering?: boolean; saveData?: boolean } = {}) {
-  dom = new JSDOM(html, { url: sourceUrl, pretendToBeVisual: true });
+function fixture(html = sourceHtml, options: { url?: string; supported?: boolean; hidden?: boolean; prerendering?: boolean; saveData?: boolean } = {}) {
+  dom = new JSDOM(html, { url: options.url ?? sourceUrl, pretendToBeVisual: true });
   const win = dom.window;
   Object.defineProperty(win.HTMLScriptElement, 'supports', { configurable: true, value: () => options.supported !== false });
   Object.defineProperty(win.document, 'visibilityState', { configurable: true, value: options.hidden ? 'hidden' : 'visible' });
   Object.defineProperty(win.document, 'prerendering', { configurable: true, value: options.prerendering ?? false });
-  Object.defineProperty(win.navigator, 'connection', { configurable: true, value: { saveData: options.saveData ?? false } });
+  Object.defineProperty(win.navigator, 'connection', { configurable: true, value: Object.assign(new win.EventTarget(), { saveData: options.saveData ?? false }) });
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
   for (const [key, value] of Object.entries({ window: win, document: win.document, MutationObserver: win.MutationObserver })) {
     descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -56,6 +57,12 @@ async function flush() {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
 }
 
+function intent(element: Element, type = 'pointerover') {
+  const event = new dom!.window.Event(type, { bubbles: true, cancelable: true });
+  assert.equal(element.dispatchEvent(event), true);
+  assert.equal(event.defaultPrevented, false);
+}
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   dom?.window.close();
@@ -73,6 +80,290 @@ test('warmup matches only native secure student Schedule routes', () => {
     sourceUrl.replace('/app/student?', '/app/teacher?'), sourceUrl.replace('/schedule', '/progress'),
     sourceUrl.replace('/schedule', '/schedule-extra'), sourceUrl.replace('/schedule', '/schedule/details'),
   ]) assert.equal(isAssignmentWarmupSource(new URL(url)), false);
+});
+
+test('intent preparation supports other secure LMS pages and excludes login and either Assignment Center', () => {
+  for (const url of [progressUrl, sourceUrl.replace('/schedule', '/resources'), sourceUrl.replace('/schedule', '/directory/123'),
+    'https://example.myschoolapp.com/app?svcid=edu', 'https://example.myschoolapp.com/lms-assignment/assignment/assignment-student-view/123?svcid=edu']) {
+    assert.equal(isAssignmentWarmupPage(new URL(url)), true, url);
+    assert.equal(assignmentWarmupFeature.matches(new URL(url)), true, url);
+  }
+  for (const url of [
+    sourceUrl.replace('https:', 'http:'), sourceUrl.replace('example.myschoolapp.com', 'foreign.example'),
+    'https://example.myschoolapp.com/app/login?svcid=edu', 'https://example.myschoolapp.com/app?svcid=edu#login',
+    `https://example.myschoolapp.com${nativeHref}`, sourceUrl.replace('/schedule', '/assignment-center'),
+    sourceUrl.replace('/schedule', '/assignment-center/?date=2026-10-08'), sourceUrl.replace('https://', 'https://user:secret@'),
+  ]) assert.equal(isAssignmentWarmupPage(new URL(url)), false, url);
+});
+
+test('other LMS pages prepare only on delegated link intent, without link scans or identity reads', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav><a href="${nativeHref}"><span>Assignment Center</span></a><a href="#unrelated">Other</a></nav><main></main>`, { url: progressUrl });
+  let documentScans = 0;
+  let identityReads = 0;
+  const query = document.querySelectorAll.bind(document);
+  t.mock.method(document, 'querySelectorAll', (selector: string) => { documentScans += 1; return query(selector); });
+  t.mock.method(globalThis, 'fetch', () => { identityReads += 1; throw new Error('Intent must not read identity.'); });
+  mount();
+  t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY + ASSIGNMENT_WARMUP_LIFETIME);
+  assert.equal(ownRule(), null);
+  intent(document.querySelector('a[href="#unrelated"]')!);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  document.querySelector('main')!.innerHTML = '<section><p>Native content rerender</p></section>';
+  intent(document.querySelector('span')!);
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+  assert.equal(identityReads, 0);
+  assert.equal(documentScans, 0);
+  assert.equal(document.querySelector('a')!.getAttribute('href'), nativeHref);
+});
+
+test('keyboard focus prepares late or rerendered native links on another LMS page', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture('<nav></nav>', { url: 'https://example.myschoolapp.com/app/student?svcid=edu#directory/123' });
+  mount();
+  document.querySelector('nav')!.innerHTML = `<a href="${nativeHref}"><svg><title>Assignment Center</title></svg></a>`;
+  intent(document.querySelector('svg')!, 'pointerover');
+  document.querySelector('nav')!.innerHTML = `<a href="${nativeHref}">Replacement Assignment Center</a>`;
+  // The old pending source is gone; focus on the replacement selects its real href.
+  intent(document.querySelector('a')!, 'focusin');
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+});
+
+test('Schedule link intent prepares before its automatic settling delay', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture();
+  mount();
+  t.mock.timers.tick(300);
+  assert.equal(ownRule(), null);
+  intent(document.querySelector('#assignment-center-btn')!, 'focusin');
+  t.mock.timers.tick(0);
+  const rule = ownRule();
+  assert.ok(rule);
+  t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+  assert.equal(ownRule(), rule);
+});
+
+test('generic intent preserves one rule across native URL aliases and anchor handoffs without extending its lifetime', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav><a href="${nativeHref}">First</a><a href="https://example.myschoolapp.com/lms-assignment/assignment-center/student?svcid=edu">Second</a></nav>`, { url: progressUrl });
+  mount();
+  const first = document.querySelector('a')!;
+  const second = first.nextElementSibling!;
+  intent(first);
+  t.mock.timers.tick(0);
+  const rule = ownRule();
+  assert.ok(rule);
+  t.mock.timers.tick(ASSIGNMENT_WARMUP_LIFETIME - 1);
+  intent(second, 'focusin');
+  first.remove();
+  second.setAttribute('href', nativeHref);
+  await flush();
+  assert.equal(ownRule(), rule);
+  t.mock.timers.tick(1);
+  assert.equal(ownRule(), null);
+  intent(second);
+  t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+  assert.equal(ownRule(), null);
+});
+
+test('generic intent validates href and ancestor visibility again before observer delivery at start', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav><a href="${nativeHref}">Assignment Center</a></nav>`, { url: progressUrl });
+  mount();
+  const link = document.querySelector('a')!;
+  const nav = document.querySelector<HTMLElement>('nav')!;
+  intent(link);
+  link.setAttribute('href', `${nativeHref}&action=delete`);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  await flush();
+  link.setAttribute('href', nativeHref);
+  intent(link);
+  nav.hidden = true;
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  await flush();
+  nav.hidden = false;
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+  link.setAttribute('href', `${nativeHref}#details`);
+  await flush();
+  assert.equal(ownRule(), null);
+  link.setAttribute('href', nativeHref);
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+});
+
+test('hidden or disabled ancestors and invalid destinations cannot trigger generic preparation', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav hidden><a href="${nativeHref}">Assignment Center</a></nav>`, { url: progressUrl });
+  mount();
+  const link = document.querySelector('a')!;
+  const nav = document.querySelector<HTMLElement>('nav')!;
+  intent(link, 'focusin');
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  nav.hidden = false;
+  for (const href of [progressUrl, 'https://foreign.example/lms-assignment/assignment-center/student/?svcid=edu', `${nativeHref}&action=delete`, `${nativeHref}#details`]) {
+    link.setAttribute('href', href);
+    intent(link);
+    t.mock.timers.tick(0);
+    assert.equal(ownRule(), null, href);
+  }
+  link.setAttribute('href', nativeHref);
+  nav.setAttribute('inert', '');
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  nav.removeAttribute('inert');
+  nav.setAttribute('aria-disabled', 'true');
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  nav.removeAttribute('aria-disabled');
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+});
+
+test('generic intent stays inactive in unsupported, hidden or prerendered documents', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const options of [{ supported: false }, { prerendering: true }, { hidden: true }]) {
+    fixture(`<a href="${nativeHref}">Assignment Center</a>`, { url: progressUrl, ...options });
+    const { controller, cleanup } = mount();
+    intent(document.querySelector('a')!, 'focusin');
+    t.mock.timers.tick(0);
+    assert.equal(ownRule(), null);
+    controller.abort();
+    cleanup?.();
+    cleanups.length = 0;
+    dom!.window.close();
+    restore();
+  }
+});
+
+test('moved generic sources acquire current ancestor visibility guards and removals cancel the attempt', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav><a href="${nativeHref}">Assignment Center</a></nav><section></section>`, { url: progressUrl });
+  mount();
+  const link = document.querySelector('a')!;
+  const section = document.querySelector<HTMLElement>('section')!;
+  intent(link);
+  t.mock.timers.tick(0);
+  const rule = ownRule();
+  section.append(link);
+  await flush();
+  assert.equal(ownRule(), rule);
+  section.style.display = 'none';
+  await flush();
+  assert.equal(ownRule(), null);
+  section.style.removeProperty('display');
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+});
+
+test('generic source removal cancels preparation and never starts a second rule', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<nav><a href="${nativeHref}">Assignment Center</a></nav>`, { url: progressUrl });
+  mount();
+  intent(document.querySelector('a')!);
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+  document.querySelector('nav')!.remove();
+  await flush();
+  assert.equal(ownRule(), null);
+  document.body.innerHTML = `<a href="${nativeHref}">Replacement</a>`;
+  intent(document.querySelector('a')!);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+});
+
+test('data-saving changes cancel active generic preparation and blocked intent does not consume its attempt', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<a href="${nativeHref}">Assignment Center</a>`, { url: progressUrl, saveData: true });
+  mount();
+  const connection = (dom!.window.navigator as Navigator & { connection: EventTarget & { saveData: boolean } }).connection;
+  const link = document.querySelector('a')!;
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  connection.saveData = false;
+  connection.dispatchEvent(new dom!.window.Event('change'));
+  assert.equal(ownRule(), null);
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+  connection.saveData = true;
+  connection.dispatchEvent(new dom!.window.Event('change'));
+  assert.equal(ownRule(), null);
+  connection.saveData = false;
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+});
+
+test('generic pointer intent preserves native actions and abort removes pending and active preparation', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<a href="${nativeHref}">Assignment Center</a>`, { url: progressUrl });
+  const link = document.querySelector('a')!;
+  let nativePointerDown = 0;
+  link.addEventListener('pointerdown', () => { nativePointerDown += 1; });
+  const pending = mount();
+  intent(link, 'pointerdown');
+  pending.controller.abort();
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  const active = mount();
+  intent(link, 'pointerdown');
+  t.mock.timers.tick(0);
+  assert.ok(ownRule());
+  visibility('hidden');
+  assert.equal(ownRule(), null);
+  visibility('visible');
+  intent(link);
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  active.controller.abort();
+  assert.equal(nativePointerDown, 2);
+  assert.equal(link.getAttribute('href'), nativeHref);
+  assert.equal(window.location.href, progressUrl);
+});
+
+test('generic intent revalidates route changes before starting and settings changes clean up active preparation', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(`<a href="${nativeHref}">Assignment Center</a>`, { url: progressUrl });
+  const pending = mount();
+  const link = document.querySelector('a')!;
+  intent(link);
+  dom!.reconfigure({ url: sourceUrl.replace('/schedule', '/resources') });
+  t.mock.timers.tick(0);
+  assert.equal(ownRule(), null);
+  pending.controller.abort();
+  dom!.reconfigure({ url: progressUrl });
+  const controller = new FeatureController([assignmentWarmupFeature]);
+  cleanups.push(() => controller.dispose());
+  const url = new URL(progressUrl);
+  const settings = { ...DEFAULT_SETTINGS, enabled: true, prepareAssignmentCenter: true, oldAssignmentCenter: false };
+  for (const changes of [{ prepareAssignmentCenter: false }, { oldAssignmentCenter: true }, { enabled: false }]) {
+    controller.update(url, settings);
+    intent(link, 'focusin');
+    t.mock.timers.tick(0);
+    assert.ok(ownRule());
+    controller.update(url, { ...settings, ...changes });
+    assert.equal(ownRule(), null);
+    intent(link);
+    t.mock.timers.tick(0);
+    assert.equal(ownRule(), null);
+  }
 });
 
 test('warmup preserves only exact native same-origin assignment destinations with svcid=edu', () => {

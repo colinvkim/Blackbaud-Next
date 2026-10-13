@@ -1,8 +1,8 @@
-import { classDestinationForSection, classSearchTerms, NATIVE_CLASSES_MENU_SELECTOR, nativeClassMenuItems, nativeClassRowVisible, nativeClassSearchReference, normalizeClassSearch } from '../blackbaud/class-navigation.ts';
+import { classDestinationForSection, classSearchTerms, NATIVE_CLASS_CONTROL_SELECTOR, NATIVE_CLASS_NAVIGATION_SELECTOR, NATIVE_CLASSES_MENU_SELECTOR, nativeClassMenuItems, nativeClassRowVisible, nativeClassSearchReference, normalizeClassSearch } from '../blackbaud/class-navigation.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { addStyle, createButton, observeDom, watchElements } from '../shared/dom.ts';
+import { addStyle, createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
-import type { Feature } from '../shared/types.ts';
+import type { Cleanup, Feature } from '../shared/types.ts';
 
 const hiddenAttribute = 'data-blackbaud-next-class-hidden';
 const menuAttribute = 'data-blackbaud-next-class-menu';
@@ -33,7 +33,8 @@ export const classNavigationFeature: Feature = {
     const removeStyle = addStyle('class-navigation', styles);
     let query = '';
     const searches = new Set<() => void>();
-    const stopMenus = watchElements<HTMLElement>(NATIVE_CLASSES_MENU_SELECTOR, (menu) => {
+    const updateSearches = () => { for (const updateSearch of searches) updateSearch(); };
+    const mountMenu = (menu: HTMLElement): Cleanup => {
       const previousMenuAttribute = menu.getAttribute(menuAttribute);
       menu.setAttribute(menuAttribute, '');
       const toolbar = document.createElement('div');
@@ -122,7 +123,6 @@ export const classNavigationFeature: Feature = {
       };
       const textObserver = new MutationObserver(update);
       textObserver.observe(menu, { subtree: true, characterData: true });
-      const updateSearches = () => { for (const updateSearch of searches) updateSearch(); };
       const searchInput = () => { query = input.value; updateSearches(); };
       const clearSearch = () => { query = ''; updateSearches(); input.focus(); };
       const stopNativeMenuClose = (event: Event) => { event.stopPropagation(); };
@@ -135,10 +135,9 @@ export const classNavigationFeature: Feature = {
       clear.addEventListener('click', clearSearch);
       toolbar.addEventListener('click', stopNativeMenuClose);
       searches.add(update);
-      const stop = observeDom(update, signal, menu);
+      update();
       return () => {
         disposed = true;
-        stop();
         textObserver.disconnect();
         searches.delete(update);
         input.removeEventListener('input', searchInput);
@@ -152,12 +151,46 @@ export const classNavigationFeature: Feature = {
         if (previousMenuAttribute === null) menu.removeAttribute(menuAttribute);
         else menu.setAttribute(menuAttribute, previousMenuAttribute);
       };
-    }, signal);
+    };
+    // Native desktop and mobile shells are separate. Share ownership if an
+    // unexpected nested shell exposes the same menu to both scoped watchers.
+    const menus = new Map<HTMLElement, { references: number; cleanup: Cleanup }>();
+    const retainMenu = (menu: HTMLElement): Cleanup => {
+      let state = menus.get(menu);
+      if (!state) {
+        state = { references: 0, cleanup: mountMenu(menu) };
+        menus.set(menu, state);
+      }
+      state.references++;
+      return () => {
+        if (--state.references) return;
+        state.cleanup();
+        menus.delete(menu);
+      };
+    };
+    const stopNavigation = watchAddedElements<HTMLElement>(NATIVE_CLASS_NAVIGATION_SELECTOR, (navigation) => {
+      const controller = new AbortController();
+      watchElements(NATIVE_CLASSES_MENU_SELECTOR, retainMenu, controller.signal, navigation);
+      // Validation also depends on the controlling anchor and its ancestors,
+      // outside the menu itself. These small shells capture their mutations.
+      observeDom(updateSearches, controller.signal, navigation);
+      return () => {
+        controller.abort();
+        updateSearches();
+      };
+    }, signal, document, ['id']);
+    // Modern rows require one unambiguous desktop control. A duplicate added
+    // outside navigation must invalidate existing rows without a page scan.
+    const stopControls = watchAddedElements(NATIVE_CLASS_CONTROL_SELECTOR, () => {
+      updateSearches();
+      return updateSearches;
+    }, signal, document, ['id']);
     let disposed = false;
     const cleanup = () => {
       if (disposed) return;
       disposed = true;
-      stopMenus();
+      stopControls();
+      stopNavigation();
       removeStyle();
       signal.removeEventListener('abort', cleanup);
     };

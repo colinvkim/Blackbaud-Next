@@ -53,6 +53,21 @@ async function flush() {
   for (let index = 0; index < 16; index += 1) await Promise.resolve();
 }
 
+function countAppearanceReads(main: HTMLElement) {
+  const reads = { shell: 0, content: 0 };
+  const pageQuery = document.querySelectorAll.bind(document);
+  document.querySelectorAll = ((selector: string) => {
+    if (selector === '#site-header' || selector === '#site-nav-container') reads.shell++;
+    return pageQuery(selector);
+  }) as Document['querySelectorAll'];
+  const contentQuery = main.querySelectorAll.bind(main);
+  main.querySelectorAll = ((selector: string) => {
+    if (selector === '#coursesContainer' || selector === '.row') reads.content++;
+    return contentQuery(selector);
+  }) as HTMLElement['querySelectorAll'];
+  return { reads, reset() { reads.shell = 0; reads.content = 0; } };
+}
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   dom?.window.close();
@@ -999,4 +1014,202 @@ test('native aria-labelledby names restore replaced navigation originals', async
   original.removeAttribute('aria-labelledby');
   await flush();
   assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+});
+
+test('repeated native Progress loading batches update content without revalidating the shell', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const courses = document.getElementById('coursesContainer')!;
+  const { reads } = countAppearanceReads(main);
+  for (let batch = 0; batch < 20; batch++) {
+    const comment = document.createComment('Native loading batch');
+    courses.append(comment);
+    await flush();
+    comment.remove();
+    await flush();
+  }
+  courses.insertAdjacentHTML('beforeend', courseRow('late-native-course'));
+  await flush();
+  assert.ok(reads.content > 0);
+  assert.equal(reads.shell, 0);
+  assert.equal(document.getElementById('late-native-course')!.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(courses.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(document.getElementById('site-top-spacer')!.getAttribute('data-bn-header-part'), 'spacer');
+});
+
+test('shell count, menu, and accessibility updates reuse unchanged Progress content', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const { reads } = countAppearanceReads(main);
+  const count = document.querySelector('#inbox-link .site-badge')!;
+  count.firstChild!.nodeValue = '3';
+  await flush();
+  assert.equal(count.getAttribute('data-bn-header-count-empty'), 'false');
+  const classes = document.getElementById('group-header-Classes')!;
+  classes.parentElement!.insertAdjacentHTML('beforeend', '<div class="subnav"><ul><li><a href="#academicclass/456/0/bulletinboard">New native class</a></li></ul></div>');
+  await flush();
+  assert.equal(classes.parentElement!.querySelector('.subnav')!.getAttribute('data-bn-header-part'), 'dropdown');
+  const original = classes.querySelector('img')!;
+  original.setAttribute('aria-label', 'Named native class graphic');
+  await flush();
+  assert.equal(classes.querySelector('svg'), null);
+  assert.equal(document.getElementById('site-top-spacer')!.hasAttribute('data-bn-header-part'), false);
+  original.removeAttribute('aria-label');
+  await flush();
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+  assert.equal(document.getElementById('site-top-spacer')!.getAttribute('data-bn-header-part'), 'spacer');
+  assert.ok(reads.shell > 0);
+  assert.equal(reads.content, 0);
+  assert.equal(document.getElementById('course')!.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+});
+
+test('unrelated native body updates do not validate either appearance branch', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()) + '<aside id="unrelated"></aside>');
+  mount();
+  await flush();
+  const { reads } = countAppearanceReads(document.getElementById('site-main')!);
+  const other = document.getElementById('unrelated')!;
+  other.className = 'native-loading';
+  other.style.height = '100px';
+  other.insertAdjacentHTML('beforeend', '<p>Native status</p>');
+  await flush();
+  other.replaceChildren();
+  await flush();
+  assert.deepEqual(reads, { shell: 0, content: 0 });
+});
+
+test('content fallback and native hidden rows recover independently from stable header styling', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const courses = document.getElementById('coursesContainer')!;
+  const row = document.getElementById('course')!;
+  const { reads } = countAppearanceReads(main);
+  row.hidden = true;
+  row.children[1]!.classList.add('col-md-6');
+  await flush();
+  assert.equal(row.hidden, true);
+  assert.equal(row.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  assert.equal(courses.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  row.children[1]!.classList.remove('col-md-6');
+  row.hidden = false;
+  await flush();
+  assert.equal(row.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(courses.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  assert.ok(reads.content > 0);
+  assert.equal(reads.shell, 0);
+  assert.equal(document.getElementById('site-top-spacer')!.getAttribute('data-bn-header-part'), 'spacer');
+});
+
+test('native root identity changes and ambiguous replacements still invalidate both appearance branches', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const { reads, reset } = countAppearanceReads(main);
+  document.body.insertAdjacentHTML('beforeend', '<main id="site-main"></main>');
+  await flush();
+  assert.equal(document.documentElement.hasAttribute(APPEARANCE_SHELL_ATTRIBUTE), false);
+  assert.equal(main.hasAttribute(APPEARANCE_PAGE_ATTRIBUTE), false);
+  assert.equal(document.getElementById('course')!.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  document.querySelectorAll('#site-main')[1]!.remove();
+  await flush();
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(main.getAttribute(APPEARANCE_PAGE_ATTRIBUTE), 'progress');
+  assert.ok(reads.shell > 0);
+  assert.ok(reads.content > 0);
+  reset();
+  main.id = 'native-changing-main';
+  await flush();
+  assert.equal(document.documentElement.hasAttribute(APPEARANCE_SHELL_ATTRIBUTE), false);
+  assert.equal(main.hasAttribute(APPEARANCE_PAGE_ATTRIBUTE), false);
+  main.id = 'site-main';
+  await flush();
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(main.getAttribute(APPEARANCE_PAGE_ATTRIBUTE), 'progress');
+  assert.ok(reads.shell > 0);
+  assert.ok(reads.content > 0);
+});
+
+test('a reused content root becoming a navigation root restores its old layout and recovers after re-ID', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const row = document.getElementById('course')!;
+  const courses = document.getElementById('coursesContainer')!;
+  const spacer = document.getElementById('site-top-spacer')!;
+  const original = document.querySelector('#group-header-Classes img')!;
+  assert.equal(main.getAttribute(APPEARANCE_PAGE_ATTRIBUTE), 'progress');
+  assert.equal(row.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  main.id = 'site-nav-container';
+  await flush();
+  assert.equal(main.hasAttribute(APPEARANCE_PAGE_ATTRIBUTE), false);
+  assert.equal(row.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  assert.equal(courses.hasAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), false);
+  assert.equal(document.documentElement.hasAttribute(APPEARANCE_SHELL_ATTRIBUTE), false);
+  assert.equal(spacer.hasAttribute('data-bn-header-part'), false);
+  assert.equal(original.hasAttribute('data-bn-native-icon'), false);
+  main.id = 'site-main';
+  await flush();
+  assert.equal(main.getAttribute(APPEARANCE_PAGE_ATTRIBUTE), 'progress');
+  assert.equal(row.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+  assert.equal(courses.getAttribute(APPEARANCE_PROGRESS_COURSES_ATTRIBUTE), 'cards');
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(spacer.getAttribute('data-bn-header-part'), 'spacer');
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+});
+
+test('a reused navigation root becoming a content root restores its old shell and recovers after re-ID', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const navigation = document.getElementById('site-nav-container')!;
+  const spacer = document.getElementById('site-top-spacer')!;
+  const original = navigation.querySelector('#group-header-Classes img')!;
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+  navigation.id = 'site-main';
+  await flush();
+  assert.equal(document.documentElement.hasAttribute(APPEARANCE_SHELL_ATTRIBUTE), false);
+  assert.equal(spacer.hasAttribute('data-bn-header-part'), false);
+  assert.equal(original.hasAttribute('data-bn-native-icon'), false);
+  assert.equal(main.hasAttribute(APPEARANCE_PAGE_ATTRIBUTE), false);
+  assert.equal(document.getElementById('course')!.hasAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), false);
+  navigation.id = 'site-nav-container';
+  await flush();
+  assert.equal(document.documentElement.getAttribute(APPEARANCE_SHELL_ATTRIBUTE), 'legacy');
+  assert.equal(spacer.getAttribute('data-bn-header-part'), 'spacer');
+  assert.equal(original.getAttribute('data-bn-native-icon'), 'replaced');
+  assert.equal(main.getAttribute(APPEARANCE_PAGE_ATTRIBUTE), 'progress');
+  assert.equal(document.getElementById('course')!.getAttribute(APPEARANCE_COURSE_ROW_ATTRIBUTE), 'true');
+});
+
+test('native navigation nested in the content root still updates both scopes when its hierarchy changes', async () => {
+  fixture(nativeHeaderFixtureHtml().replace('<main id="site-main"></main>', progressMain()));
+  mount();
+  await flush();
+  const main = document.getElementById('site-main')!;
+  const navigation = document.getElementById('site-nav-container')!;
+  main.prepend(navigation);
+  await flush();
+  const classes = document.getElementById('group-header-Classes')!;
+  classes.querySelector('img')!.setAttribute('role', 'button');
+  await flush();
+  assert.equal(classes.querySelector('svg'), null);
+  classes.querySelector('img')!.removeAttribute('role');
+  await flush();
+  assert.equal(classes.querySelectorAll('svg').length, 1);
+  const { reads } = countAppearanceReads(main);
+  document.getElementById('coursesContainer')!.append(document.createComment('Native content beneath mixed scopes'));
+  await flush();
+  assert.ok(reads.shell > 0, 'An unfamiliar mixed hierarchy must keep its nested navigation validated');
+  assert.ok(reads.content > 0);
 });

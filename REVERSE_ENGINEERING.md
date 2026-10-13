@@ -58,3 +58,25 @@ The final live reproduction retained the Resource Board route, native Resource B
 - Independent peer review covered preview identity handling and directory startup ownership/cancellation. `git diff --check` passed.
 
 The test profile's feature preferences were returned to their original enabled values. No manifest permissions or remote publication were added.
+
+## Hover preparation and rendering follow-up
+
+Assignment Center preparation now also responds to hover, keyboard focus, and pointer/touch intent on its validated native link across supported secure Blackbaud LMS pages. Sign-in and Assignment Center itself are excluded. Schedule keeps automatic preparation after its existing settling delay. One attempt per page visit lasts at most 30 seconds; equivalent links share the original rule without extending its lifetime. Delegated events avoid scanning every link in the document. Source availability, href changes, ancestor movement/visibility, Save-Data, navigation, feature switches, and cleanup remain authoritative.
+
+The live Progress test had no rule before interaction, then inserted the expected rule after actual pointer movement onto the native link. Profiling attachments initially caused Chrome to report `PrerenderingDisabledByDevTools`. Repeating in a clean test browser activated the prepared page (`activationStart` approximately 3,501 ms after prerender startup); all 24 previews and assignment shortcuts mounted. Fresh keyboard focus also prepared the destination. Feature/master switches removed the rule, and master re-enable allowed a new focus preparation. The profile's original enabled preferences were restored.
+
+The rendering investigation instrumented query methods only in the extension's isolated execution context, preserving native query results and recording counts/times rather than DOM contents. An initial faulty instrumentation run was discarded. Corrected observations:
+
+| Check | Before | After |
+| --- | --- | --- |
+| One observed Progress startup: selector calls | 10,137 | 3,232 |
+| Same startup: measured selector time | About 18 ms | About 2 ms |
+| Controlled 20 content-mutation batches: selector calls | 5,200 | 500 |
+| Those batches: document-wide Classes discovery queries | 20 | 0 |
+| Those batches: dropdown structure queries | 180 | 0 |
+
+The controlled batches added and removed temporary comment nodes under the native course container; no student data or native actions were changed. Startup traces can differ with native request timing, and query timing has limited precision. These results establish reduced local rendering work, not a percentage improvement in total page-load time.
+
+Classes discovery now stays inside native desktop/mobile navigation roots. Incremental identity tracking preserves modern uniqueness guards even when duplicate controls appear outside those roots. Header and content appearance updates have separate dirty scopes; navigation, root ambiguity, and root-role changes still reconcile the required branches. Peer review caught and fixed a still-matching root-ID transition that could leave stale markers. Regression coverage includes both transition directions, delayed/rerendered menus, hidden mobile search, native text/ARIA/visibility changes, and cleanup.
+
+Final follow-up validation: `rtk pnpm check`, all **583** unit tests, production build, all **five** Chrome smoke tests, and `git diff --check` passed. Generated bundles and popup copy were rebuilt. No permissions were added; directory/preview read behavior was not expanded by this follow-up.

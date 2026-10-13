@@ -1,5 +1,7 @@
 import { isLmsPage } from './routes.ts';
 
+export const NATIVE_CLASS_NAVIGATION_SELECTOR = '#site-nav-container, #site-mobile-sitenav';
+export const NATIVE_CLASS_CONTROL_SELECTOR = '#group-header-Classes';
 export const NATIVE_CLASSES_MENU_SELECTOR = 'li:has(> #group-header-Classes) > .subnav, li:has(> #mobile-group-header-Classes) > .app-mobile-level';
 export const NATIVE_CLASS_LINK_SELECTOR = 'a:is(.group-page-link-1, .mobile-group-page-link-1)[data-taskid="1853"][href*="#academicclass/"]';
 

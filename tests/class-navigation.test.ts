@@ -17,11 +17,11 @@ function classLink(id: number, name: string, mobile = false, extra = ''): string
 }
 
 function desktopMenu(links = classLink(123, 'Geometry') + classLink(456, 'Café Studies') + classLink(789, 'English I')): string {
-  return `<ul><li class="twoline parentitem"><a id="group-header-Classes">Classes</a><div class="subnavtop"></div><div class="subnav sec-75-bordercolor white-bgc sky-nav subnav-multicol nav-visible"><ul>${links}</ul><ul class="subnavfooter"><li class="divider"></li><li><a href="#otherclasses">View Other Classes</a></li></ul></div></li></ul>`;
+  return `<div id="site-nav-container"><div id="topnav-containter"><ul class="topnav"><li class="twoline parentitem"><a id="group-header-Classes">Classes</a><div class="subnavtop"></div><div class="subnav sec-75-bordercolor white-bgc sky-nav subnav-multicol nav-visible"><ul>${links}</ul><ul class="subnavfooter"><li class="divider"></li><li><a href="#otherclasses">View Other Classes</a></li></ul></div></li></ul></div></div>`;
 }
 
 function mobileMenu(): string {
-  return `<ul><li class="clearfix"><i></i><a id="mobile-group-header-Classes">Classes</a><div class="app-mobile-level"><h2>Classes</h2><div class="app-mobile-back">Back</div><ul>${classLink(123, 'Geometry', true)}${classLink(456, 'Café Studies', true)}<li><a href="#otherclasses">View Other Classes</a></li></ul></div></li></ul>`;
+  return `<div id="site-mobile-sitenav"><ul><li class="clearfix"><i></i><a id="mobile-group-header-Classes">Classes</a><div class="app-mobile-level"><h2>Classes</h2><div class="app-mobile-back">Back</div><ul>${classLink(123, 'Geometry', true)}${classLink(456, 'Café Studies', true)}<li><a href="#otherclasses">View Other Classes</a></li></ul></div></li></ul></div>`;
 }
 
 function modernClassLink(id: number, name: string, href = `/app/student?svcid=edu#academicclass/${id}/0/bulletinboard`, task = '1853'): string {
@@ -320,6 +320,188 @@ test('desktop and mobile menus share the current query without overwriting one a
   mobile.querySelector<HTMLButtonElement>('.bn-class-search button')!.click();
   assert.equal(replacement.querySelector<HTMLInputElement>('.bn-class-search input')!.value, '');
   assert.equal(document.querySelectorAll('[data-blackbaud-next-class-hidden]').length, 0);
+});
+
+test('Classes discovery stays inside native navigation during unrelated page mutations', async () => {
+  const win = fixture(desktopMenu() + mobileMenu() + '<main id="site-main"><div id="coursesContainer"></div></main>');
+  const scopes: ParentNode[] = [];
+  const documentQuery = document.querySelectorAll.bind(document);
+  document.querySelectorAll = ((selector: string) => {
+    if (selector === NATIVE_CLASSES_MENU_SELECTOR) scopes.push(document);
+    return documentQuery(selector);
+  }) as typeof document.querySelectorAll;
+  const elementQuery = win.Element.prototype.querySelectorAll;
+  win.Element.prototype.querySelectorAll = function (this: Element, selector: string) {
+    if (selector === NATIVE_CLASSES_MENU_SELECTOR) scopes.push(this);
+    return elementQuery.call(this, selector);
+  } as typeof elementQuery;
+  mount();
+  await flush();
+  assert.ok(scopes.length > 0);
+  assert.ok(scopes.every((scope) => scope === document.getElementById('site-nav-container') || scope === document.getElementById('site-mobile-sitenav')));
+  scopes.length = 0;
+  const courses = document.getElementById('coursesContainer')!;
+  for (let index = 0; index < 20; index++) {
+    courses.append(document.createComment(`Native update ${index}`));
+    await flush();
+  }
+  courses.innerHTML = '<div class="native-row"><a href="#resourceboard">Resources</a></div>';
+  await flush();
+  courses.firstElementChild!.classList.add('updated');
+  courses.firstElementChild!.setAttribute('hidden', '');
+  await flush();
+  assert.deepEqual(scopes, []);
+  assert.equal(document.querySelectorAll('.bn-class-search').length, 2);
+});
+
+test('reused navigation IDs, delayed control IDs and menu classes preserve query and native cleanup', async () => {
+  fixture(desktopMenu().replace('id="site-nav-container"', 'id="pending-navigation"'));
+  const navigation = document.getElementById('pending-navigation')!;
+  const control = navigation.querySelector<HTMLElement>('#group-header-Classes')!;
+  const menu = navigation.querySelector<HTMLElement>('.subnav')!;
+  const link = menu.querySelector<HTMLAnchorElement>('a.group-page-link-1')!;
+  const nativeHref = link.getAttribute('href');
+  const { controller } = mount();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  navigation.id = 'site-nav-container';
+  await flush();
+  search('geometry');
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 3 classes');
+  control.id = 'pending-classes';
+  await flush();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  assert.equal(link.getAttribute('href'), nativeHref);
+  assert.equal(menu.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  control.id = 'group-header-Classes';
+  await flush();
+  assert.equal(menu.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  menu.className = 'pending-menu';
+  await flush();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  menu.className = 'subnav';
+  await flush();
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 3 classes');
+  navigation.id = 'pending-navigation';
+  await flush();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  assert.equal(link.getAttribute('href'), nativeHref);
+  navigation.id = 'site-nav-container';
+  await flush();
+  assert.equal(menu.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  navigation.remove();
+  await flush();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  assert.equal(link.getAttribute('href'), nativeHref);
+  document.body.append(navigation);
+  await flush();
+  assert.equal(menu.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  controller.abort();
+  navigation.id = 'pending-navigation';
+  navigation.id = 'site-nav-container';
+  await flush();
+  assert.equal(menu.querySelector('.bn-class-search'), null);
+  assert.equal(menu.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  assert.equal(link.getAttribute('href'), nativeHref);
+});
+
+test('modern validation reacts to controlling anchor and outside-root duplicate IDs', async () => {
+  fixture(modernMenu(modernClassLink(100, 'Geometry') + modernClassLink(101, 'English')) + '<main id="site-main"><div id="outside"></div></main>');
+  mount();
+  const menu = document.querySelector<HTMLElement>('.subnav')!;
+  const control = document.getElementById('group-header-Classes')!;
+  const outside = document.getElementById('outside')!;
+  search('geometry');
+  const assertValid = () => {
+    assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 2 classes');
+    assert.equal(menu.querySelectorAll('[data-blackbaud-next-class-hidden]').length, 1);
+  };
+  const assertInvalid = () => {
+    assert.equal(menu.querySelector('.bn-tool-status')!.textContent, 'No classes match your search (0 of 0).');
+    assert.equal(menu.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  };
+  assertValid();
+  control.classList.remove('root-nav-item');
+  await flush();
+  assertInvalid();
+  control.classList.add('root-nav-item');
+  await flush();
+  assertValid();
+  control.setAttribute('href', '/other');
+  await flush();
+  assertInvalid();
+  control.setAttribute('href', '#');
+  await flush();
+  assertValid();
+  outside.id = 'group-header-Classes';
+  await flush();
+  assertInvalid();
+  outside.removeAttribute('id');
+  await flush();
+  assertValid();
+  outside.id = 'site-nav-container';
+  await flush();
+  assertInvalid();
+  outside.removeAttribute('id');
+  await flush();
+  assertValid();
+  const duplicate = control.cloneNode(true);
+  document.body.append(duplicate);
+  await flush();
+  assertInvalid();
+  duplicate.parentNode!.removeChild(duplicate);
+  await flush();
+  assertValid();
+});
+
+test('hidden navigation shells retain shared search while native row visibility changes remain respected', async () => {
+  fixture(desktopMenu() + mobileMenu());
+  const desktop = document.getElementById('site-nav-container')!;
+  const mobile = document.getElementById('site-mobile-sitenav')!;
+  mobile.hidden = true;
+  mount();
+  const menu = desktop.querySelector<HTMLElement>('.subnav')!;
+  const mobileList = mobile.querySelector<HTMLElement>('.app-mobile-level')!;
+  search('geometry', menu);
+  assert.equal(mobileList.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  assert.equal(mobileList.querySelector('.bn-tool-status')!.textContent, '1 of 2 classes');
+  const rows = menu.querySelector<HTMLElement>('ul:not(.subnavfooter)')!;
+  rows.setAttribute('aria-hidden', 'true');
+  await flush();
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, 'No classes match your search (0 of 0).');
+  assert.equal(menu.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  rows.removeAttribute('aria-hidden');
+  await flush();
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 3 classes');
+  desktop.hidden = true;
+  mobile.hidden = false;
+  await flush();
+  assert.equal(menu.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  assert.equal(mobileList.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  search('cafe', mobileList);
+  assert.equal(menu.querySelector('.bn-tool-status')!.textContent, '1 of 3 classes');
+  assert.equal(menu.querySelector<HTMLInputElement>('input')!.value, 'cafe');
+});
+
+test('unexpected nested navigation roots share one menu and keep it mounted until all scopes release it', async () => {
+  fixture(`<div id="site-mobile-sitenav">${desktopMenu()}</div>`);
+  const outer = document.getElementById('site-mobile-sitenav')!;
+  const inner = document.getElementById('site-nav-container')!;
+  const { controller } = mount();
+  search('geometry');
+  assert.equal(document.querySelectorAll('.bn-class-search').length, 1);
+  outer.id = 'pending-mobile';
+  await flush();
+  assert.equal(document.querySelectorAll('.bn-class-search').length, 1);
+  assert.equal(inner.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  inner.id = 'pending-desktop';
+  await flush();
+  assert.equal(document.querySelector('.bn-class-search'), null);
+  assert.equal(document.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  inner.id = 'site-nav-container';
+  await flush();
+  assert.equal(inner.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+  controller.abort();
+  assert.equal(document.querySelector('.bn-class-search'), null);
 });
 
 test('class search yields to real timers and stops mutating after mount, input and Clear', { timeout: 5000 }, async () => {
