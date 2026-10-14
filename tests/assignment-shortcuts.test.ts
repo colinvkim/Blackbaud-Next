@@ -100,6 +100,18 @@ test('only native same-origin assignment detail links provide row identities', (
   }
 });
 
+test('assignment row titles normalize literal formatted strings without rewriting native title content', () => {
+  fixture(row(123, '10/7/2026'));
+  const link = document.querySelector<HTMLAnchorElement>('app-assignment-title-link a')!;
+  const richTitle = '<span style="font-weight:400;">Read Example&#8211;&#8220;The Distant Shore&#8221;</span>';
+  link.textContent = richTitle;
+  assert.equal(readAssignmentRows(document)[0]!.title, 'Read Example–“The Distant Shore”');
+  assert.equal(link.textContent, richTitle);
+  link.textContent = 'Use Array<T> &amp; Map<K,V>';
+  assert.equal(readAssignmentRows(document)[0]!.title, 'Use Array<T> & Map<K,V>');
+  assert.equal(link.textContent, 'Use Array<T> &amp; Map<K,V>');
+});
+
 test('unfinished filtering retains unknown native statuses', () => {
   assert.equal(isFinishedAssignmentStatus('Completed'), true);
   assert.equal(isFinishedAssignmentStatus('Submitted'), true);

@@ -120,6 +120,65 @@ test('preview identifiers come only from same-origin native assignment detail li
   }
 });
 
+test('preview target labels normalize literal rich title strings while preserving the native link', () => {
+  const win = fixture(nativeLink(123));
+  const link = win.document.querySelector('a')!;
+  const richTitle = '<span style="font-weight:400;">Read Example&#8211;&#8220;The Distant Shore&#8221;</span>';
+  link.textContent = richTitle;
+  mount();
+  assert.equal(assignmentPreviewTarget(link, win.location.href)?.title, 'Read Example–“The Distant Shore”');
+  assert.equal(win.document.querySelector('[data-blackbaud-next-preview]')!.getAttribute('aria-label'), 'Preview Read Example–“The Distant Shore”');
+  assert.equal(link.textContent, richTitle);
+  assert.equal(link.getAttribute('href'), '/lms-assignment/assignment/assignment-student-view/123');
+});
+
+test('already-rendered native title formatting keeps its nodes while preview labels use their plain text', () => {
+  const win = fixture(nativeLink(123, '<span style="font-weight:400;">Read A &amp; B</span>'));
+  const link = win.document.querySelector('a')!;
+  const span = link.querySelector('span')!;
+  mount();
+  assert.equal(assignmentPreviewTarget(link, win.location.href)?.title, 'Read A & B');
+  assert.equal(win.document.querySelector('[data-blackbaud-next-preview]')!.getAttribute('aria-label'), 'Preview Read A & B');
+  assert.equal(link.querySelector('span'), span);
+  assert.equal(span.getAttribute('style'), 'font-weight:400;');
+});
+
+test('rendered native code titles keep literal tags and entity syntax without a second decoding pass', async () => {
+  const win = fixture(nativeLink(123, '<span>&lt;span&gt;code&lt;/span&gt; &amp;lt;tag&amp;gt;</span>'));
+  const link = win.document.querySelector('a')!;
+  mount();
+  assert.equal(assignmentPreviewTarget(link, win.location.href)?.title, '<span>code</span> &lt;tag&gt;');
+  assert.equal(win.document.querySelector('[data-blackbaud-next-preview]')!.getAttribute('aria-label'), 'Preview <span>code</span> &lt;tag&gt;');
+  link.textContent = '<span>Updated&#8211;title</span>';
+  await flush();
+  assert.equal(win.document.querySelector('[data-blackbaud-next-preview]')!.getAttribute('aria-label'), 'Preview Updated–title');
+});
+
+test('API preview titles decode formatted descriptions and use the native target when formatting is empty', () => {
+  fixture('');
+  const richTitle = `<span style="${'font-weight:400;'.repeat(30)}">Read Example&#8211;&#8220;The Distant Shore&#8221;</span>`;
+  assert.equal(normalizeAssignmentPreview(assignment(123, richTitle), target()).title, 'Read Example–“The Distant Shore”');
+  assert.equal(normalizeAssignmentPreview(assignment(123, '<span>&nbsp;</span>'), { ...target(), title: 'Native fallback title' }).title, 'Native fallback title');
+  assert.equal(normalizeAssignmentPreview(assignment(123, 'Use Array<T> &amp; Map<K,V>'), target()).title, 'Use Array<T> & Map<K,V>');
+});
+
+test('preview panel replaces its normalized initial title with a normalized fresh API title', async (t) => {
+  const win = fixture(nativeLink(123));
+  const link = win.document.querySelector('a')!;
+  const richTitle = '<span style="font-weight:400;">Initial&#8211;reading</span>';
+  link.textContent = richTitle;
+  t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL) => new Response(JSON.stringify(String(path) === '/api/webapp/context'
+    ? { UserInfo: { UserId: 42, DefaultPersonaId: 2 } }
+    : assignment(123, '<strong>Fresh &amp; updated reading</strong>'))));
+  mount();
+  win.document.querySelector<HTMLButtonElement>('[data-blackbaud-next-preview]')!.click();
+  assert.equal(win.document.querySelector('[role="dialog"] h2')!.textContent, 'Initial–reading');
+  await flush();
+  assert.equal(win.document.querySelector('[role="dialog"] h2')!.textContent, 'Fresh & updated reading');
+  assert.equal(link.textContent, richTitle);
+  assert.equal(win.document.querySelector('[role="dialog"] h2 span, [role="dialog"] h2 strong'), null);
+});
+
 test('preview responses validate the requested assignment and retain only display fields', () => {
   const preview = normalizeAssignmentPreview({ ...assignment(), AssignmentGrade: 'Private score', StudentUserId: 888, SubmissionResults: ['Private submission'], LinkItems: [
     { ShortDescription: 'Worksheet', Url: 'https://files.example.org/worksheet.pdf', OtherField: 'unused' },

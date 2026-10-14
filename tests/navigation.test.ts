@@ -125,6 +125,33 @@ test('assignment detail titles use the visible native breadcrumb title and follo
   assert.equal(document.title, 'Native LMS');
 });
 
+test('assignment tab titles normalize rich strings before truncation and preserve native heading content', async () => {
+  fixture('<title>Native LMS</title><h1 class="sky-theme-font-heading-1 display-inline"><a href="/assignments">Assignments</a><span></span></h1>');
+  const heading = document.querySelector('h1 > span')!;
+  const richTitle = `> <span style="${'font-weight:400;'.repeat(20)}">Read Example&#8211;&#8220;The Distant Shore&#8221;</span>`;
+  heading.textContent = richTitle;
+  const controller = new AbortController();
+  const cleanup = helpfulTabTitlesFeature.mount({ url: new URL('https://example.myschoolapp.com/lms-assignment/assignment/assignment-student-view/123'), settings: DEFAULT_SETTINGS, signal: controller.signal });
+  cleanups.push(() => controller.abort());
+  if (cleanup) cleanups.push(cleanup);
+  assert.equal(document.title, 'Read Example–“The Distant Shore” · Assignments — Blackbaud');
+  assert.equal(heading.textContent, richTitle);
+  heading.firstChild!.textContent = '> Use Array<T> &amp; Map<K,V>';
+  await flush();
+  assert.equal(document.title, 'Use Array<T> & Map<K,V> · Assignments — Blackbaud');
+  heading.firstChild!.textContent = `> <strong>${'X'.repeat(120)}</strong>`;
+  await flush();
+  assert.equal(document.title, `${'X'.repeat(100)} · Assignments — Blackbaud`);
+  heading.innerHTML = '&gt; <span>&lt;span&gt;literal code&lt;/span&gt; &amp;lt;tag&amp;gt;</span><span hidden>Old title</span>';
+  await flush();
+  assert.equal(document.title, '<span>literal code</span> &lt;tag&gt; · Assignments — Blackbaud');
+  heading.textContent = `> <strong>${'X'.repeat(120)}</strong>`;
+  await flush();
+  controller.abort();
+  assert.equal(document.title, 'Native LMS');
+  assert.equal(heading.textContent, `> <strong>${'X'.repeat(120)}</strong>`);
+});
+
 test('resource search normalizes accents and divides multiple terms', () => {
   assert.deepEqual(resourceSearchTerms('  CAFÉ   financial  aid  '), ['cafe', 'financial', 'aid']);
 });

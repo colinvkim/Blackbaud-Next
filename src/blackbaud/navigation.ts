@@ -1,4 +1,5 @@
 import { isLmsPage } from './routes.ts';
+import { assignmentTitle } from './assignment-title.ts';
 import { isActionable } from '../shared/dom.ts';
 
 export interface NativePageTitle {
@@ -14,14 +15,14 @@ function firstVisibleHeading(page: Document, selectors: string): HTMLElement | n
   ) ?? null;
 }
 
-function visibleHeadingText(heading: HTMLElement): string {
+function visibleHeadingText(heading: HTMLElement, limit = 100): string {
   const walker = heading.ownerDocument.createTreeWalker(heading, 4 /* SHOW_TEXT */);
   const fragments: string[] = [];
   while (walker.nextNode()) {
     const parent = walker.currentNode.parentElement;
     if (parent && isActionable(parent)) fragments.push(walker.currentNode.textContent ?? '');
   }
-  return fragments.join(' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+  return fragments.join(' ').replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
 function directHeadingText(heading: HTMLElement): string {
@@ -50,8 +51,11 @@ export function nativePageTitle(url: URL, page: Document = document): NativePage
 }
 
 export function formatNativePageTitle(context: NativePageTitle): string {
-  const text = context.heading ? context.directText ? directHeadingText(context.heading) : visibleHeadingText(context.heading) : '';
-  const heading = context.breadcrumb ? text.replace(/^>\s*/, '') : text;
+  const text = context.heading ? context.directText ? directHeadingText(context.heading) : visibleHeadingText(context.heading, context.breadcrumb ? 200_000 : 100) : '';
+  const assignmentText = text.replace(/^>\s*/, '');
+  const heading = context.breadcrumb
+    ? context.heading?.children.length ? assignmentText.slice(0, 100) : assignmentTitle(assignmentText, context.heading?.ownerDocument, 100)
+    : text;
   return `${heading && heading.toLowerCase() !== context.label.toLowerCase() ? `${heading} · ` : ''}${context.label} — Blackbaud`;
 }
 

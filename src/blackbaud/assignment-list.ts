@@ -1,3 +1,5 @@
+import { assignmentElementTitle } from './assignment-title.ts';
+
 export type AssignmentShortcut = 'all' | 'unfinished' | 'today' | 'tomorrow';
 
 export const ASSIGNMENT_LINK_SELECTOR = 'app-assignment-title-link a[href]';
@@ -45,7 +47,7 @@ export function readAssignmentRow(element: HTMLElement): NativeAssignmentRow | n
     element,
     group: element.parentElement?.closest<HTMLElement>('sky-repeater-item') ?? null,
     link,
-    title: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    title: assignmentElementTitle(link),
     dueDate: dueText ? parseAssignmentDate(dueText.replace(/^Due:\s*/i, '')) : null,
     status,
     finished: isFinishedAssignmentStatus(status),

@@ -1,4 +1,5 @@
 import { ASSIGNMENT_LINK_SELECTOR, assignmentTitleLinkUrl } from './assignment-list.ts';
+import { assignmentElementTitle, assignmentTitle } from './assignment-title.ts';
 import { isActionable } from '../shared/dom.ts';
 
 export interface AssignmentAttachment {
@@ -34,7 +35,7 @@ export function assignmentPreviewTarget(link: HTMLAnchorElement, base: string): 
     if (!url || url.origin !== new URL(base).origin || url.protocol !== 'https:' || url.username || url.password) return null;
     const route = url.pathname.match(/^\/lms-assignment\/assignment\/assignment-student-view\/([1-9]\d*)\/?$/);
     if (!route?.[1] || !validIndexId(route[1])) return null;
-    return { assignmentIndexId: route[1], detailsUrl: url.href, title: link.textContent?.trim().slice(0, 300) || 'Assignment' };
+    return { assignmentIndexId: route[1], detailsUrl: url.href, title: assignmentElementTitle(link) || 'Assignment' };
   } catch { return null; }
 }
 
@@ -97,7 +98,7 @@ export function normalizeAssignmentPreview(payload: unknown, target: AssignmentP
     attachments.push({ name: text(item?.ShortDescription, 300) || text(item?.FriendlyFileName, 300) || 'Assignment attachment', url });
   }
   return {
-    title: text(assignment.ShortDescription, 300),
+    title: assignmentTitle(assignment.ShortDescription) || target.title || 'Assignment',
     instructions: typeof assignment.LongDescription === 'string' ? assignment.LongDescription.slice(0, 200_000) : '',
     due: text(assignment.DueDate, 100),
     course: text(assignment.GroupName, 300),
