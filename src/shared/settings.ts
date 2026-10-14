@@ -7,6 +7,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'helpfulTabTitles', label: 'Useful tab titles', description: 'Identify the course, assignment, or page in each browser tab.', group: 'appearance', defaultValue: true },
   { key: 'assignmentShortcuts', label: 'Assignment shortcuts', description: 'Quickly focus on unfinished work or assignments due today and tomorrow.', group: 'assignments', defaultValue: true },
   { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', group: 'assignments', defaultValue: true },
+  { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do in one click, with Undo.', group: 'assignments', defaultValue: true },
   { key: 'prepareAssignmentCenter', label: 'Faster Assignment Center', description: 'Prepare Assignment Center on Schedule or when you hover over or focus its link.', group: 'assignments', defaultValue: true },
   { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'Simpler sign-in', description: 'Add a direct Google sign-in option on the school login page.', group: 'login', defaultValue: true },
   { key: 'automaticLogin', label: 'Automatic login', description: 'Continue through Blackbaud and select your school Google account.', group: 'login', defaultValue: true },
