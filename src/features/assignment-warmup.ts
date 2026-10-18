@@ -12,6 +12,37 @@ interface Source {
   key: string;
 }
 
+function watchWarmupSource(element: HTMLElement, changed: () => void): Cleanup {
+  let ancestors: HTMLElement[] = [];
+  let disposed = false;
+  const observer = new MutationObserver(() => {
+    if (disposed) return;
+    refresh();
+    changed();
+  });
+  function refresh() {
+    const current: HTMLElement[] = [];
+    for (let node: HTMLElement | null = element; node; node = node.parentElement) current.push(node);
+    if (current.length === ancestors.length && current.every((node, index) => node === ancestors[index])) return;
+    observer.disconnect();
+    ancestors = current;
+    for (const node of ancestors) {
+      observer.observe(node, {
+        attributes: true,
+        attributeFilter: ['href', 'class', 'hidden', 'style', 'aria-hidden', 'inert', 'disabled', 'aria-disabled'],
+        childList: true,
+      });
+    }
+  }
+  refresh();
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    observer.disconnect();
+    ancestors = [];
+  };
+}
+
 export const assignmentWarmupFeature: Feature = {
   id: 'assignment-center-preparation',
   enabled: (settings) => settings.prepareAssignmentCenter && !settings.oldAssignmentCenter,
@@ -24,8 +55,7 @@ export const assignmentWarmupFeature: Feature = {
     const connection = assignmentWarmupConnection();
     let source: Source | null = null;
     let intentLink: HTMLAnchorElement | null = null;
-    let intentObserver: MutationObserver | undefined;
-    let intentAncestors: HTMLElement[] = [];
+    let stopIntent: Cleanup = () => {};
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let rule: HTMLScriptElement | null = null;
@@ -35,9 +65,8 @@ export const assignmentWarmupFeature: Feature = {
     let stopDiscovery: Cleanup = () => {};
 
     const clearIntent = () => {
-      intentObserver?.disconnect();
-      intentObserver = undefined;
-      intentAncestors = [];
+      stopIntent();
+      stopIntent = () => {};
       intentLink = null;
     };
     const removeListeners = () => {
@@ -101,7 +130,6 @@ export const assignmentWarmupFeature: Feature = {
       source = candidate;
       if (attempted) {
         if (changed || !eligible(candidate)) finishAttempt();
-        else if (intentLink) observeIntent();
         return;
       }
       if (!eligible(candidate)) {
@@ -109,27 +137,9 @@ export const assignmentWarmupFeature: Feature = {
         clearIntent();
         return;
       }
-      if (intentLink) observeIntent();
       if (settleTimer === undefined) settleTimer = setTimeout(startPreparation, candidate.schedule ? ASSIGNMENT_WARMUP_SETTLE_DELAY : 0);
     }
 
-    function observeIntent() {
-      if (!intentLink) return;
-      const ancestors: HTMLElement[] = [];
-      for (let element: HTMLElement | null = intentLink; element; element = element.parentElement) ancestors.push(element);
-      if (ancestors.length === intentAncestors.length && ancestors.every((element, index) => element === intentAncestors[index])) return;
-      intentObserver?.disconnect();
-      intentAncestors = ancestors;
-      intentObserver = new MutationObserver(update);
-      for (const element of ancestors) {
-        intentObserver.observe(element, {
-          attributes: true, attributeFilter: ['href', 'class', 'hidden', 'style', 'aria-hidden', 'inert', 'disabled', 'aria-disabled'],
-          // Direct ancestry changes revalidate moves/removals without watching
-          // every descendant mutation in the native page.
-          childList: true,
-        });
-      }
-    }
     function prepareIntent(event: Event) {
       if (disposed || terminal || signal.aborted || (attempted && source?.schedule)) return;
       const link = assignmentWarmupIntentLink(event);
@@ -142,8 +152,11 @@ export const assignmentWarmupFeature: Feature = {
         clearTimeout(settleTimer);
         settleTimer = undefined;
       }
-      intentLink = link;
-      observeIntent();
+      if (intentLink !== link) {
+        clearIntent();
+        intentLink = link;
+        stopIntent = watchWarmupSource(link, update);
+      }
       update();
     }
 
@@ -156,16 +169,10 @@ export const assignmentWarmupFeature: Feature = {
       if (terminal || disposed) return;
       if (element.id === 'accordionSchedules') schedules.add(element);
       else if (element.tagName === 'A') links.add(element as HTMLAnchorElement);
-      const observer = new MutationObserver(update);
-      observer.observe(element, { attributes: true, attributeFilter: ['href', 'class', 'hidden', 'style', 'aria-hidden', 'inert'] });
-      // Native tiles/nav wrappers toggle visibility without replacing these
-      // sources. Observe only their ancestor attributes, never descendants.
-      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-        observer.observe(parent, { attributes: true, attributeFilter: ['class', 'hidden', 'style', 'aria-hidden', 'inert'] });
-      }
+      const stopWatching = watchWarmupSource(element, update);
       update();
       return () => {
-        observer.disconnect();
+        stopWatching();
         schedules.delete(element);
         links.delete(element as HTMLAnchorElement);
         update();
