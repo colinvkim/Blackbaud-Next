@@ -190,6 +190,33 @@ test('completion invokes the native radio and Save only after observer readiness
   assert.equal(document.querySelector('style'), null);
 });
 
+test('a native Save can capture and confirm its request synchronously without retaining ownership', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(row());
+  const current = target();
+  const observer = bridge();
+  const ui = start(current);
+  let releases = 0;
+  document.addEventListener(completionSettledEvent, () => { releases += 1; });
+  ui.save.addEventListener('click', () => {
+    observer.reply('sent');
+    current.button.textContent = 'Completed';
+    ui.close();
+    observer.reply('saved');
+  });
+
+  const promise = setAssignmentCompletion(current, 'completed', control().signal);
+  assert.equal(ui.saves, 1);
+  assert.deepEqual(await promise, { previous: 'todo', current: 'completed' });
+  assert.equal(isAssignmentCompletionBusy(), false);
+  assert.equal(ui.host.hasAttribute('data-blackbaud-next-completion-modal'), false);
+  assert.equal(ui.root.hasAttribute('data-blackbaud-next-completion-modal'), false);
+  assert.equal(document.querySelector('style'), null);
+  t.mock.timers.tick(35_000);
+  await flush();
+  assert.equal(releases, 1);
+});
+
 test('a saved response waits for a replacement row with the same identity and ignores an unrelated row', async () => {
   fixture(row() + row(456));
   const current = target();
@@ -455,6 +482,70 @@ test('a long save is unconfirmed while the document stays busy until the native 
   current.button.textContent = 'Completed';
   observer.reply('saved');
   await flush();
+  assert.equal(isAssignmentCompletionBusy(), false);
+});
+
+for (const confirmation of ['updated', 'expired'] as const) {
+  test(`a success near the caller deadline retains ownership until list confirmation is ${confirmation}`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    fixture(row());
+    const current = target();
+    const observer = bridge();
+    const ui = start(current);
+    let releases = 0;
+    document.addEventListener(completionSettledEvent, () => { releases += 1; });
+    const promise = setAssignmentCompletion(current, 'completed', control().signal);
+    const rejected = assert.rejects(promise, rejectsKind('unconfirmed'));
+    observer.reply('sent');
+    t.mock.timers.tick(29_000);
+    observer.reply('saved');
+    t.mock.timers.tick(1_000);
+    await rejected;
+    assert.equal(isAssignmentCompletionBusy(), true);
+    assert.equal(releases, 0);
+    assert.equal(dom!.window.getComputedStyle(ui.host).visibility, 'visible');
+
+    if (confirmation === 'updated') {
+      current.button.textContent = 'Completed';
+      await flush();
+      assert.equal(ui.cancels, 1);
+    } else {
+      t.mock.timers.tick(4_000);
+      await flush();
+      assert.equal(current.button.textContent, 'To do');
+      assert.equal(ui.cancels, 0);
+    }
+    assert.equal(isAssignmentCompletionBusy(), false);
+    assert.equal(ui.host.hasAttribute('data-blackbaud-next-completion-modal'), false);
+    t.mock.timers.tick(30_000);
+    await flush();
+    assert.equal(releases, 1);
+  });
+}
+
+test('a native failure after the caller deadline releases ownership for a fresh explicit retry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fixture(row());
+  const current = target();
+  const observer = bridge();
+  const ui = start(current);
+  const promise = setAssignmentCompletion(current, 'completed', control().signal);
+  const rejected = assert.rejects(promise, rejectsKind('unconfirmed'));
+  observer.reply('sent');
+  t.mock.timers.tick(30_000);
+  await rejected;
+  assert.equal(isAssignmentCompletionBusy(), true);
+  observer.failed();
+  await flush();
+  assert.equal(ui.cancels, 1);
+  assert.equal(isAssignmentCompletionBusy(), false);
+
+  const retry = start(target());
+  const retried = setAssignmentCompletion(target(), 'completed', control().signal);
+  assert.equal(retry.saves, 1);
+  current.button.textContent = 'Completed';
+  observer.reply('saved');
+  assert.deepEqual(await retried, { previous: 'todo', current: 'completed' });
   assert.equal(isAssignmentCompletionBusy(), false);
 });
 

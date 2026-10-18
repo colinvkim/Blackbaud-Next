@@ -1,5 +1,6 @@
 import { ASSIGNMENT_ROW_SELECTOR, assignmentTitleLinkUrl, readAssignmentRow } from './assignment-list.ts';
 import { ASSIGNMENT_STATUS_REQUEST_EVENT, ASSIGNMENT_STATUS_RESPONSE_EVENT, assignmentStatusResponse, isAssignmentStatusPage } from './assignment-status-protocol.ts';
+import type { AssignmentStatusRequest } from './assignment-status-protocol.ts';
 
 export type ManualAssignmentStatus = 'todo' | 'in-progress' | 'completed' | 'overdue';
 export const COMPLETION_NATIVE_ATTRIBUTE = 'data-blackbaud-next-completion-native';
@@ -107,6 +108,26 @@ interface NativeModal {
   previous: ManualAssignmentStatus;
 }
 
+interface CompletionChange {
+  previous: ManualAssignmentStatus;
+  requested: ManualAssignmentStatus;
+}
+
+type CompletionPhase =
+  | { kind: 'opening' }
+  | { kind: 'arming'; change: CompletionChange }
+  | { kind: 'armed'; change: CompletionChange }
+  | { kind: 'saving'; change: CompletionChange }
+  | { kind: 'captured'; change: CompletionChange }
+  | { kind: 'confirming'; change: CompletionChange }
+  | { kind: 'recovering'; error: AssignmentCompletionError }
+  | { kind: 'canceling' }
+  | { kind: 'released' };
+
+type CompletionOutcome =
+  | { kind: 'success'; change: CompletionChange }
+  | { kind: 'error'; error: unknown };
+
 function readModal(root: HTMLElement): NativeModal | null {
   const page = root.ownerDocument;
   const Input = page.defaultView?.HTMLInputElement;
@@ -162,21 +183,13 @@ export function setAssignmentCompletion(
   const initialUrl = page.URL;
   const focused = page.activeElement;
   return new Promise((resolve, reject) => {
-    let modal: NativeModal | null = null;
+    let phase: CompletionPhase = { kind: 'opening' };
+    let caller: { kind: 'pending'; resolve: typeof resolve; reject: typeof reject } | { kind: 'settled' } = { kind: 'pending', resolve, reject };
     let ownedRoot: HTMLElement | null = null;
     let ownedHost: HTMLElement | null = null;
     let style: HTMLStyleElement | null = null;
-    let saved = false;
-    let sent = false;
-    let acknowledged = false;
-    let ready = false;
-    let settled = false;
-    let released = false;
     let closingRequested = false;
-    let terminalError: AssignmentCompletionError | null = null;
-    let requested: ManualAssignmentStatus | null = null;
-    let previous: ManualAssignmentStatus | null = null;
-    let deadline: ReturnType<typeof setTimeout>;
+    let operationDeadline: ReturnType<typeof setTimeout>;
     let readinessTimer: ReturnType<typeof setTimeout> | undefined;
     let confirmationDeadline: ReturnType<typeof setTimeout> | undefined;
     const observer = new browser.MutationObserver(() => check());
@@ -189,10 +202,9 @@ export function setAssignmentCompletion(
     };
     const ownsModal = () => !!ownedRoot?.isConnected && ownedRoot.parentElement === ownedHost && ownedHost?.parentElement === page.body &&
       ownedRoot.getAttribute(MODAL_ATTRIBUTE) === token && ownedHost.getAttribute(MODAL_ATTRIBUTE) === token;
-    const request = (action: 'arm' | 'cancel') => page.dispatchEvent(new browser.CustomEvent(ASSIGNMENT_STATUS_REQUEST_EVENT, {
-      detail: JSON.stringify(action === 'arm'
-        ? { action, token, assignmentIndexId: Number(target.assignmentIndexId), assignmentStatus: statuses.find((status) => status.status === requested)!.value }
-        : { action, token }),
+    const preparing = () => phase.kind === 'opening' || phase.kind === 'arming' || phase.kind === 'armed';
+    const request = (request: AssignmentStatusRequest) => page.dispatchEvent(new browser.CustomEvent(ASSIGNMENT_STATUS_REQUEST_EVENT, {
+      detail: JSON.stringify(request),
     }));
     const restorePresentation = (removeOwnership = true) => {
       style?.remove();
@@ -200,19 +212,20 @@ export function setAssignmentCompletion(
       if (removeOwnership && ownedRoot?.getAttribute(MODAL_ATTRIBUTE) === token) ownedRoot.removeAttribute(MODAL_ATTRIBUTE);
       if (removeOwnership && ownedHost?.getAttribute(MODAL_ATTRIBUTE) === token) ownedHost.removeAttribute(MODAL_ATTRIBUTE);
     };
-    const finish = (error?: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
+    const finish = (outcome: CompletionOutcome) => {
+      if (caller.kind === 'settled') return;
+      const pending = caller;
+      caller = { kind: 'settled' };
+      clearTimeout(operationDeadline);
       clearTimeout(readinessTimer);
       restorePresentation(false);
-      if (error) reject(error);
-      else if (previous && requested) resolve({ previous, current: requested });
+      if (outcome.kind === 'error') pending.reject(outcome.error);
+      else pending.resolve({ previous: outcome.change.previous, current: outcome.change.requested });
     };
     const release = () => {
-      if (released) return;
-      released = true;
-      clearTimeout(deadline);
+      if (phase.kind === 'released') return;
+      phase = { kind: 'released' };
+      clearTimeout(operationDeadline);
       clearTimeout(readinessTimer);
       readinessTimer = undefined;
       clearTimeout(confirmationDeadline);
@@ -239,13 +252,14 @@ export function setAssignmentCompletion(
       }
     };
     const cancelBeforeSave = (error: unknown) => {
-      if (saved || released) return;
+      if (!preparing()) return;
+      phase = { kind: 'canceling' };
       const beforeCancel = page.activeElement;
       const ownsFocus = (element: Element | null) => element === focused || element === page.body || element === page.documentElement ||
         element === null || !!ownedRoot?.contains(element);
-      request('cancel');
+      request({ action: 'cancel', token });
       dismissOwnedModal();
-      finish(error);
+      finish({ kind: 'error', error });
       release();
       const restoreFocus = ownsFocus(beforeCancel) ? focused : beforeCancel;
       if (ownsFocus(page.activeElement) && restoreFocus instanceof browser.HTMLElement && restoreFocus.isConnected && page.URL === initialUrl) {
@@ -253,85 +267,110 @@ export function setAssignmentCompletion(
       }
     };
     const fail = (kind: AssignmentCompletionError['kind'], message: string) => {
+      if (phase.kind === 'released' || phase.kind === 'canceling') return;
       const error = new AssignmentCompletionError(kind, message);
-      if (!saved) cancelBeforeSave(error);
+      if (preparing()) cancelBeforeSave(error);
       else if (kind === 'failed') {
-        terminalError = error;
-        clearTimeout(deadline);
+        phase = { kind: 'recovering', error };
+        clearTimeout(operationDeadline);
         observe();
-        dismissOwnedModal();
-        deadline = setTimeout(() => {
-          finish(new AssignmentCompletionError('unsupported', 'Close the native status dialog to continue.'));
+        operationDeadline = setTimeout(() => {
+          finish({ kind: 'error', error: new AssignmentCompletionError('unsupported', 'Close the native status dialog to continue.') });
           release();
         }, 2_000);
+        dismissOwnedModal();
         check();
-      } else { finish(error); release(); }
+      } else { finish({ kind: 'error', error }); release(); }
     };
     function abort() {
-      if (!saved) cancelBeforeSave(abortReason(signal));
+      if (preparing()) cancelBeforeSave(abortReason(signal));
       else restorePresentation(false);
     }
     function navigation() {
-      if (page.URL !== initialUrl && !saved) cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The assignment page changed.'));
+      if (page.URL !== initialUrl && preparing()) cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The assignment page changed.'));
     }
     function departed() {
-      if (!saved) cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The assignment page changed.'));
+      if (preparing()) cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The assignment page changed.'));
       else restorePresentation(false);
     }
     function competingIntent(event: Event) {
-      if (!saved && event.isTrusted && (!ownedRoot || !(event.target instanceof browser.Node) || !ownedRoot.contains(event.target))) {
+      if (preparing() && event.isTrusted && (!ownedRoot || !(event.target instanceof browser.Node) || !ownedRoot.contains(event.target))) {
         cancelBeforeSave(new AssignmentCompletionError('unsupported', 'Use the native assignment status control.'));
       }
     }
     function response(event: Event) {
       if (!(event instanceof browser.CustomEvent)) return;
       const result = assignmentStatusResponse(event.detail);
-      if (!result || result.token !== token || released) return;
-      if (result.status === 'ready') ready = true;
-      else if (result.status === 'sent') sent = true;
-      else if (result.status === 'saved') {
-        if (acknowledged) return;
-        acknowledged = true;
-        observe();
-        confirmationDeadline = setTimeout(() => fail('unconfirmed', 'The assignment was saved, but the updated list could not be confirmed.'), 5_000);
-        check();
-      } else if (result.status === 'failed') {
-        if (result.httpStatus === 0 || (result.httpStatus >= 200 && result.httpStatus < 300)) {
-          fail('unconfirmed', 'The native assignment save could not be confirmed. Check its status before retrying.');
-        } else fail('failed', 'The native assignment save failed. Use its status control to retry.');
-      }
-      else if (result.status === 'unavailable') {
-        if (saved) {
-          if (!sent) dismissOwnedModal();
-          finish(new AssignmentCompletionError('unconfirmed', 'The native assignment save could not be confirmed.'));
-          if (!sent) release();
+      if (!result || result.token !== token || phase.kind === 'released' || phase.kind === 'canceling') return;
+      switch (result.status) {
+        case 'ready':
+          if (phase.kind === 'arming') phase = { kind: 'armed', change: phase.change };
+          return;
+        case 'sent':
+          if (phase.kind === 'saving') phase = { kind: 'captured', change: phase.change };
+          return;
+        case 'saved':
+          if (phase.kind !== 'saving' && phase.kind !== 'captured') return;
+          phase = { kind: 'confirming', change: phase.change };
+          observe();
+          confirmationDeadline = setTimeout(() => fail('unconfirmed', 'The assignment was saved, but the updated list could not be confirmed.'), 5_000);
+          check();
+          return;
+        case 'failed':
+          if (phase.kind === 'confirming' || phase.kind === 'recovering') return;
+          if (result.httpStatus === 0 || (result.httpStatus >= 200 && result.httpStatus < 300)) {
+            fail('unconfirmed', 'The native assignment save could not be confirmed. Check its status before retrying.');
+          } else fail('failed', 'The native assignment save failed. Use its status control to retry.');
+          return;
+        case 'unavailable': {
+          if (preparing()) {
+            fail(result.reason === 'busy' ? 'busy' : 'unsupported', 'Use the native assignment status control.');
+          } else if (phase.kind === 'saving' || phase.kind === 'captured') {
+            const captured = phase.kind === 'captured';
+            if (!captured) dismissOwnedModal();
+            finish({ kind: 'error', error: new AssignmentCompletionError('unconfirmed', 'The native assignment save could not be confirmed.') });
+            if (!captured) release();
+          }
+          return;
         }
-        else fail(result.reason === 'busy' ? 'busy' : 'unsupported', 'Use the native assignment status control.');
+        case 'released': return;
+        default: {
+          const exhaustive: never = result;
+          return exhaustive;
+        }
       }
     }
     function check() {
-      if (released) return;
-      if (saved) {
-        if (terminalError) {
+      switch (phase.kind) {
+        case 'recovering': {
+          const error = phase.error;
           dismissOwnedModal();
-          if (!ownsModal()) { finish(terminalError); release(); }
+          if (!ownsModal()) { finish({ kind: 'error', error }); release(); }
           return;
         }
-        if (!acknowledged || !previous || !requested) return;
-        const candidates = [...page.querySelectorAll<HTMLElement>(ASSIGNMENT_ROW_SELECTOR)].map(readAssignmentCompletionTarget)
-          .filter((candidate): candidate is AssignmentCompletionTarget => candidate?.assignmentIndexId === target.assignmentIndexId);
-        if (candidates.length === 1 && candidates[0]!.status === requested) {
-          dismissOwnedModal();
-          if (ownsModal()) return;
-          finish();
-          release();
-        } else if (!candidates.length && page.URL === initialUrl && !target.row.isConnected && ownedRoot && !ownsModal()) {
-          // Native filtering may remove the row in its successful save callback.
-          // The matched, parsed response and closed dialog still confirm it.
-          finish();
-          release();
+        case 'confirming': {
+          const change = phase.change;
+          const candidates = [...page.querySelectorAll<HTMLElement>(ASSIGNMENT_ROW_SELECTOR)].map(readAssignmentCompletionTarget)
+            .filter((candidate): candidate is AssignmentCompletionTarget => candidate?.assignmentIndexId === target.assignmentIndexId);
+          if (candidates.length === 1 && candidates[0]!.status === change.requested) {
+            dismissOwnedModal();
+            if (ownsModal()) return;
+            finish({ kind: 'success', change });
+            release();
+          } else if (!candidates.length && page.URL === initialUrl && !target.row.isConnected && ownedRoot && !ownsModal()) {
+            // Native filtering may remove the row in its successful save callback.
+            // The matched, parsed response and closed dialog still confirm it.
+            finish({ kind: 'success', change });
+            release();
+          }
+          return;
         }
-        return;
+        case 'arming': case 'armed': case 'saving': case 'captured': case 'canceling': case 'released': return;
+        case 'opening': break;
+        default: {
+          const exhaustive: never = phase;
+          return exhaustive;
+        }
       }
       if (signal.aborted || page.URL !== initialUrl) { abort(); navigation(); return; }
       const roots = page.querySelectorAll<HTMLElement>(MODAL_SELECTOR);
@@ -354,35 +393,37 @@ export function setAssignmentCompletion(
       }
       const candidate = readModal(root);
       if (!candidate) return;
-      if (modal && root !== modal.root) { fail('unsupported', 'The native assignment dialog changed.'); return; }
-      modal = candidate;
-      previous = candidate.previous;
       if (!targetUnchanged() || (candidate.previous !== target.status && !(isUnfinished(candidate.previous) && isUnfinished(target.status)))) {
         fail('unsupported', 'The assignment changed before saving.'); return;
       }
-      requested = desired === 'unfinished' || isUnfinished(desired) ? (candidate.radios.has('todo') ? 'todo' : 'overdue') : desired;
-      const radio = candidate.radios.get(requested);
+      const change: CompletionChange = {
+        previous: candidate.previous,
+        requested: desired === 'unfinished' || isUnfinished(desired) ? (candidate.radios.has('todo') ? 'todo' : 'overdue') : desired,
+      };
+      const radio = candidate.radios.get(change.requested);
       if (!radio) { fail('unsupported', 'This assignment does not offer that status.'); return; }
       radio.click();
       const modalUnchanged = () => {
         const current = readModal(root);
-        return current?.save === candidate.save && current.cancel === candidate.cancel && current.radios.get(requested!) === radio && current.previous === requested;
+        return current?.save === candidate.save && current.cancel === candidate.cancel && current.radios.get(change.requested) === radio && current.previous === change.requested;
       };
-      if (!radio.checked || !modalUnchanged() || !targetUnchanged() || signal.aborted) {
+      if (!preparing() || !radio.checked || !modalUnchanged() || !targetUnchanged() || signal.aborted) {
         fail('unsupported', 'The native assignment control is not ready.'); return;
       }
       page.addEventListener(ASSIGNMENT_STATUS_RESPONSE_EVENT, response);
-      request('arm');
-      if (!ready || released || signal.aborted || !targetUnchanged() || !modalUnchanged() || !root.isConnected || page.querySelectorAll(MODAL_SELECTOR).length !== 1) {
+      phase = { kind: 'arming', change };
+      const armed = () => phase.kind === 'armed' && phase.change === change;
+      request({ action: 'arm', token, assignmentIndexId: Number(target.assignmentIndexId), assignmentStatus: statuses.find((status) => status.status === change.requested)!.value });
+      if (!armed() || signal.aborted || !targetUnchanged() || !modalUnchanged() || !root.isConnected || page.querySelectorAll(MODAL_SELECTOR).length !== 1) {
         fail('unsupported', 'Use the native assignment status control.'); return;
       }
-      saved = true;
+      phase = { kind: 'saving', change };
       clearTimeout(readinessTimer);
       readinessTimer = undefined;
       observer.disconnect();
-      clearTimeout(deadline);
-      deadline = setTimeout(() => {
-        finish(new AssignmentCompletionError('unconfirmed', 'The assignment save is still pending. Check the native status before retrying.'));
+      clearTimeout(operationDeadline);
+      operationDeadline = setTimeout(() => {
+        finish({ kind: 'error', error: new AssignmentCompletionError('unconfirmed', 'The assignment save is still pending. Check the native status before retrying.') });
         // Native requests cannot be canceled by feature cleanup. Keep the
         // document operation until the observer reports its terminal result.
       }, 30_000);
@@ -391,9 +432,9 @@ export function setAssignmentCompletion(
     function pollReadiness() {
       readinessTimer = undefined;
       check();
-      if (!saved && !released) readinessTimer = setTimeout(pollReadiness, 100);
+      if (preparing()) readinessTimer = setTimeout(pollReadiness, 100);
     }
-    deadline = setTimeout(() => cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The native assignment dialog did not become ready.')), 5_000);
+    operationDeadline = setTimeout(() => cancelBeforeSave(new AssignmentCompletionError('unsupported', 'The native assignment dialog did not become ready.')), 5_000);
     // Angular can initialize radio.checked without a DOM mutation, including
     // when SkyModal reuses its existing host. Poll only until Save or teardown.
     readinessTimer = setTimeout(pollReadiness, 100);

@@ -37,6 +37,10 @@ Appearance styles target native legacy components and retain school branding and
 
 The modern Assignment Center has local shortcuts for all loaded rows, unfinished work, and work due today or tomorrow. Adapters read labeled due dates and native status text; shortcuts preserve native search, filters, collapsed groups, and server settings. Date comparisons use the local calendar and refresh at midnight.
 
+Completion saving stays inside the native status adapter. Private phases distinguish opening, observer arming, native Save, captured request, list confirmation, failure recovery, cancellation, and release. Validated previous/requested statuses travel with the save phases, preserving exact Undo without nullable status fields. The feature's Promise API and the native request path are unchanged.
+
+Caller settlement and document ownership have separate lifetimes: a 30-second timeout can reject the caller while the native request remains busy. A successful response starts a separate five-second confirmation window without resetting that original deadline. Native terminal results still clean up after caller rejection. The inline phase model keeps these rules alongside modal ownership and focus handling; a reducer/effect interpreter was rejected because it would add a second event vocabulary for this single operation.
+
 Assignment previews add an explicit button beside native title links. A cancellable same-origin request validates the current student identity and requested assignment, retaining only display fields. Instructions are rebuilt with a limited set of text-formatting elements and safe links. The panel supports retry, Escape, focus return, and full native navigation for submissions and embedded content. No preview payload is persisted.
 
 Helpful tab titles follow the current page and late native course or assignment headings. Resource Board search filters existing cards by title and description, temporarily compacts matching cards, and retains native actions. It preserves native card dimensions so Blackbaud can still calculate its layout when the window resizes during a search. Both features restore native state on cleanup.
