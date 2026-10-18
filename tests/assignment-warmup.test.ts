@@ -579,6 +579,86 @@ test('native parent visibility toggles resume an unused visit and cancel an atte
   assert.equal(ownRule(), null);
 });
 
+for (const [name, selector] of [['Schedule', '#accordionSchedules'], ['native link', '#assignment-center-btn'], ['Schedule wrapper', '#site-main'], ['link wrapper', 'nav']]) {
+  test(`moving the same ${name} out of a hidden container starts unused preparation`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    fixture(`${sourceHtml}<section id="hidden" hidden></section><section id="visible"></section>`);
+    const element = document.querySelector(selector)!;
+    document.querySelector('#hidden')!.append(element);
+    mount();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+    assert.equal(ownRule(), null);
+    document.querySelector('#visible')!.append(element);
+    await flush();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY - 1);
+    assert.equal(ownRule(), null);
+    t.mock.timers.tick(1);
+    const rule = ownRule();
+    assert.ok(rule);
+    assert.deepEqual(JSON.parse(rule.textContent!), { prerender: [{ source: 'list', urls: [nativeHref], eagerness: 'immediate' }] });
+  });
+
+  test(`moving the same active ${name} into a hidden container cancels preparation`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    fixture(`${sourceHtml}<section id="hidden" hidden></section>`);
+    const element = document.querySelector(selector)!;
+    mount();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+    const rule = ownRule();
+    assert.ok(rule);
+    document.querySelector('#hidden')!.append(element);
+    await flush();
+    assert.equal(ownRule(), null);
+    assert.equal(rule.isConnected, false);
+    document.body.append(element);
+    await flush();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+    assert.equal(ownRule(), null);
+  });
+
+  test(`moving the same ${name} between visible containers follows new ancestor visibility`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    fixture(`${sourceHtml}<section id="new-parent"></section>`);
+    const element = document.querySelector(selector)!;
+    const parent = document.querySelector<HTMLElement>('#new-parent')!;
+    mount();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+    const rule = ownRule();
+    assert.ok(rule);
+    parent.append(element);
+    await flush();
+    assert.equal(ownRule(), rule);
+    parent.hidden = true;
+    await flush();
+    assert.equal(ownRule(), null);
+    assert.equal(rule.isConnected, false);
+  });
+
+  test(`aborting after moving the same ${name} removes preparation and prevents restart`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    fixture(`${sourceHtml}<section id="new-parent"></section>`);
+    const element = document.querySelector(selector)!;
+    const parent = document.querySelector<HTMLElement>('#new-parent')!;
+    const { controller } = mount();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
+    const rule = ownRule();
+    assert.ok(rule);
+    parent.append(element);
+    await flush();
+    controller.abort();
+    assert.equal(ownRule(), null);
+    assert.equal(rule.isConnected, false);
+    parent.hidden = true;
+    await flush();
+    parent.hidden = false;
+    document.body.append(element);
+    await flush();
+    t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY + ASSIGNMENT_WARMUP_LIFETIME);
+    assert.equal(ownRule(), null);
+    assert.equal(document.querySelector('#assignment-center-btn')!.getAttribute('href'), nativeHref);
+  });
+}
+
 test('schedule descendant additions do not rescan the document or restart preparation settling', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   fixture();
