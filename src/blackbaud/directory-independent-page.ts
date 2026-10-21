@@ -20,7 +20,7 @@ interface DirectoryModule {
   Vs?: { Directory?: unknown };
 }
 interface NativeApp {
-  _currentMainView?: NativeView;
+  _currentMainView?: NativeView | false;
   _modules?: Record<string, DirectoryModule>;
   Layout?: { Containers?: { MainPage?: { [index: number]: unknown } } };
   Data?: { Context?: { get(key: string): unknown } };
@@ -179,7 +179,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
   });
   const nativeCurrent = (app: NativeApp, id: string) => {
     const view = app._currentMainView;
-    if (view?.template !== 'directory/directory.template.html' || !view.el.isConnected || view.el.parentElement !== mainRoot(app)) return false;
+    if (!view || view.template !== 'directory/directory.template.html' || !view.el.isConnected || view.el.parentElement !== mainRoot(app)) return false;
     try { return String(view.model?.get('DirectoryId') ?? view.model?.get('DirectoryID')) === id; }
     catch { return false; }
   };
@@ -188,7 +188,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     if (!request) return;
     check();
     if (acquiring !== request) return;
-    if (!gate || !hook || routeId() !== request.directoryId || !mainRoot(hook.app) || !directoryName(hook.app, request.directoryId)) {
+    if (!gate || !hook || routeId() !== request.directoryId) {
       cancelAcquisition();
       return;
     }
@@ -218,7 +218,9 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     const View = page.Bb?.View;
     const container = mainRoot(owned.app);
     const data = owned.module.Data;
-    if (!View || !container || !owned.app.renderMainPage || !data || typeof data !== 'object') return false;
+    const currentView = owned.app._currentMainView;
+    if (!View || !container || (currentView !== false && (!currentView || typeof currentView !== 'object')) ||
+      !owned.app.renderMainPage || !data || typeof data !== 'object') return false;
     cancelNativeStartup();
     release(false);
     const view = new View();
@@ -291,8 +293,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
     const original = owner?.renderDirectory;
     if (app && module && owner && typeof original === 'function' && module.Data && typeof module.Data === 'object' &&
       canGuardDirectoryStartup(module.Ms?.Directory) && typeof module.Vs?.Directory === 'function' &&
-      typeof app.renderMainPage === 'function' && typeof app.Data?.Context?.get === 'function' &&
-      typeof page.Bb?.View === 'function' && app._currentMainView && mainRoot(app)) {
+      typeof app.renderMainPage === 'function' && typeof page.Bb?.View === 'function') {
       const descriptor = Object.getOwnPropertyDescriptor(owner, 'renderDirectory');
       if (descriptor && (!('value' in descriptor) || descriptor.writable === false)) {
         cancelPending();
@@ -301,10 +302,11 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
       }
       const wrapped: NativeMethod = function (...args) {
         const id = routeId();
+        const currentView = app._currentMainView;
         const useNative = id !== null && nativeNextDirectory === id && String(args[0]) === id;
         if (useNative) nativeNextDirectory = null;
         const eligible = !useNative && !recovering && gate && hook?.wrapped === wrapped && page.p3 === app &&
-          app._modules?.['shared/directory'] === module && mainRoot(app) && id &&
+          app._modules?.['shared/directory'] === module && (currentView === false || (currentView && typeof currentView === 'object')) && mainRoot(app) && id &&
           String(args[0]) === id && (args.length < 2 || args[1] === undefined || args[1] === null || args[1] === '') &&
           Date.now() - gate.lastHeartbeat <= INDEPENDENT_DIRECTORY_GATE_LIFETIME;
         const name = eligible && id ? directoryName(app, id) : null;
@@ -358,7 +360,7 @@ export function installIndependentDirectoryPageBridge(page: PageWindow): Cleanup
       check();
       cancelAcquisition();
       const owned = active;
-      if (!gate || !hook || routeId() !== request.directoryId || !directoryName(hook.app, request.directoryId)) {
+      if (!gate || !hook || routeId() !== request.directoryId) {
         respond(request.token, { status: 'unsupported', directoryId: request.directoryId });
         return;
       }

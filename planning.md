@@ -114,6 +114,31 @@ Complete Faculty search, grade filtering, and sorting made no additional directo
 
 Assignment Center preparation uses one browser-managed prerender of the exact same-origin native student link. Schedule retains its short automatic settle timer; delegated hover, keyboard-focus, and pointer/touch intent can prepare valid links on other supported LMS pages. Sign-in and Assignment Center itself are excluded. No page-wide link discovery is needed for intent. A 30-second expiry bounds data age and resource use; equivalent native links preserve the original rule and lifetime. Hidden tabs, unavailable sources, changed destinations, disabled settings, legacy routing, and navigation remove only the owned rule. There are no background tabs, page bridges, request overrides, or extra manifest permissions. Chrome retains control over eligibility and activation; native navigation remains available when preparation is skipped. The destination's own initialization and session requests may run while prepared, while extension work waits until activation.
 
+### Directory startup on full reloads (2026-10-20)
+
+The directory preference gate and passive MAIN bridge now start at `document_start`. Other LMS tools wait for `DOMContentLoaded` through the existing runtime readiness option. The gate and enhanced view remain in one bundle so they share their document registries. Native module discovery no longer requires a rendered page. Invocation still checks the current application, authorized directory context, root, route, and gate lifetime. The supported native first-view value is exactly `false`; missing and other primitive values retain native startup.
+
+An acquisition can wait for delayed root and context readiness within its existing deadline. Expiry removes interception before reporting unsupported, so a late native callback cannot create an ownerless shell. Native startup that already began keeps the existing container enhancement. Feature and master disablement, original-directory fallback, and BFCache recovery retain native ownership.
+
+Five alternating baseline and candidate full reload pairs in the dedicated signed-in Chrome for Testing profile produced these results. Both builds included the same preexisting lifecycle edits. Normal browser caching stayed enabled, with no throttling. Separate diagnostic profiles and startup markers were excluded from timing samples. Readiness means an enabled search control and 50 rendered rows, followed by two animation frames. The collector did not check every search result during each timed run.
+
+| Reload sample | Baseline readiness, ms | Candidate readiness, ms |
+|---|---:|---:|
+| 1 | 2276 | 1313 |
+| 2 | 1595 | 1315 |
+| 3 | 1611 | 1428 |
+| 4 | 1649 | 1323 |
+| 5 | 2159 | 1335 |
+| Median | 1649 | 1323 |
+
+The measured median reduction was 326 ms, or 19.8%. Baseline range was 1595 to 2276 ms. Candidate range was 1313 to 1428 ms. Every baseline made two people reads. Every candidate made one people read plus one asynchronous configuration read, with no native introduction or facet initialization. All captured requests completed successfully. Response contents and query values were not saved or compared. The result demonstrates removed work on this tested startup path and does not establish a fixed speedup across schools or sessions.
+
+The remaining people request took about 700 ms in the separate post-change profile. Native subnavigation still made a synchronous availability read. The profile showed no directory initialization or facet wait. Separate startup markers placed hook installation at 254 ms, the authorized native callback at 604 ms, and shell creation at 605 ms. These diagnostic times are not benchmark samples. The machine's load average after the alternating runs was 4.34 on 10 logical cores; alternating sides reduced background-load bias.
+
+Live checks covered local search and clear, original-directory fallback after results, directory feature disablement, master disablement from an independent view, reenablement, and native contact-card navigation followed by Back. The isolated release bundle also restored enhanced rows after native Back navigation. Synthetic tests cover delayed native startup, missing context/root, unsupported initial views, acquisition timeout, pending settings, pagehide, and BFCache restoration. Broader synchronous Progress and permission-derived navigation reads remain unchanged because their native callbacks and return values need separate adapters.
+
+The compiled Chrome regression holds parsing open, verifies the first shell before DOM readiness, then checks one people read after parsing. A second case chooses original fallback while loading and confirms a late native metadata success cannot replace Progress after departure. The saved pre-change extension fails the startup assertions. The new browser test takes 1.91 seconds alone. The isolated patch passes 715 unit tests and 12 browser test results, with type checking and production builds complete. Integration with the preexisting lifecycle changes passes 744 unit tests and 13 browser test results. Remote CI timings are not yet available.
+
 ## Verification and extension points
 
 Run `rtk pnpm check`, `rtk pnpm test`, and `rtk pnpm build`. Synthetic fixtures contain no copied student records. Use the README smoke checklist against authenticated Blackbaud pages.
