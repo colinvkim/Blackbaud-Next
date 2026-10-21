@@ -87,9 +87,11 @@ function fixture() {
     renderMainPage(view: View) {
       const before = this._currentMainView;
       if (before.Page && view.Page && before.Page.name !== view.Page.name) before.Page.dispose();
-      before.remove();
-      before.off();
-      before.dispose?.();
+      if (main.childElementCount > 0) {
+        before.remove();
+        before.off();
+        before.dispose?.();
+      }
       main.replaceChildren();
       if (view.render) view.render(); else main.append(view.el);
       this._currentMainView = view;
@@ -149,6 +151,74 @@ test('enabled startup mounts the lightweight shell through the native lifecycle 
     name: 'Students', photoBaseUrl: 'https://example.myschoolapp.com/user/',
   });
   assert.equal('records' in frame.responses.at(-1)!, false);
+});
+
+test('an early gate waits for the first authorized native route before creating its directory shell', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 100_000 });
+  const frame = fixture();
+  t.after(() => frame.close());
+  const context = frame.app.Data;
+  frame.main.remove();
+  frame.main.replaceChildren();
+  Object.defineProperty(frame.app, '_currentMainView', { value: undefined, writable: true, configurable: true });
+  Object.defineProperty(frame.app, 'Data', { value: undefined, writable: true, configurable: true });
+  frame.page.history.replaceState({}, '', '#directory/438');
+  frame.send('enable');
+  assert.deepEqual(frame.responses.at(-1), { token: gate, status: 'enabled' });
+  frame.send('acquire', request, '438');
+  t.mock.timers.tick(100);
+  assert.equal(frame.responses.some((value) => value.token === request), false);
+  frame.page.document.body.append(frame.main);
+  frame.app.Data = context;
+  Object.defineProperty(frame.app, '_currentMainView', { value: false, writable: true, configurable: true });
+  frame.owner.renderDirectory('438');
+  assert.equal(frame.calls.length, 0);
+  assert.equal(frame.metadata.length, 0);
+  assert.equal(frame.app._currentMainView.template, 'blackbaud-next/directory');
+  assert.equal(frame.responses.at(-1)!.status, 'ready');
+  assert.equal(frame.responses.at(-1)!.token, request);
+});
+
+test('startup readiness timeout prevents a late native callback from creating an ownerless shell', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 100_000 });
+  const frame = fixture();
+  t.after(() => frame.close());
+  frame.send('enable');
+  const context = frame.app.Data;
+  frame.main.remove();
+  Object.defineProperty(frame.app, 'Data', { value: undefined, writable: true, configurable: true });
+  frame.page.history.replaceState({}, '', '#directory/438');
+  frame.send('acquire', request, '438');
+  t.mock.timers.tick(100);
+  assert.equal(frame.responses.some((value) => value.token === request), false);
+  t.mock.timers.tick(2_000);
+  assert.deepEqual(frame.responses.slice(-2), [
+    { token: gate, status: 'unsupported' },
+    { token: request, status: 'unsupported', directoryId: '438' },
+  ]);
+  frame.page.document.body.append(frame.main);
+  frame.app.Data = context;
+  frame.navigate();
+  assert.equal(frame.calls.length, 1);
+  assert.equal(frame.app._currentMainView.template, 'directory/directory.template.html');
+  assert.equal(frame.responses.some((value) => value.status === 'shell'), false);
+});
+
+test('unsupported initial view values forward startup without calling renderMainPage early', () => {
+  for (const value of [undefined, null, true, 0, 1, 'native']) {
+    const frame = fixture();
+    try {
+      frame.send('enable');
+      frame.deferMetadata();
+      Object.defineProperty(frame.app, '_currentMainView', { value, writable: true, configurable: true });
+      let renders = 0;
+      frame.app.renderMainPage = () => { renders++; throw new Error('Native startup has not initialized its view.'); };
+      assert.equal(frame.navigate(), 'native-result');
+      assert.equal(frame.calls.length, 1);
+      assert.equal(frame.metadata.length, 1);
+      assert.equal(renders, 0);
+    } finally { frame.close(); }
+  }
 });
 
 test('a current native directory is never replaced by acquisition when the gate missed startup', (t) => {
