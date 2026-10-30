@@ -3,7 +3,8 @@ import type { DirectoryLease } from '../blackbaud/directory-bridge.ts';
 import { directoryTargetFromUrl, fetchDirectorySnapshot } from '../blackbaud/directory.ts';
 import { DIRECTORY_UI_ATTRIBUTE } from '../blackbaud/directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE } from '../blackbaud/directory-independent-protocol.ts';
-import { addStyle, createButton } from '../shared/dom.ts';
+import { markOwned, createButton } from '../shared/dom.ts';
+import { createScope } from '../shared/scope.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 import { directoryStyles } from './directory-styles.ts';
@@ -23,19 +24,23 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
     enabled: (settings) => settings.enhancedDirectory,
     settingsKeys: ['downloadFullAvatar'],
     matches: (url) => directoryTargetFromUrl(url) !== null,
-    mount: ({ url, settings, signal }) => {
+    mount: ({ url, settings, signal: parentSignal }) => {
       const target = directoryTargetFromUrl(url);
-      if (signal.aborted || !target) return;
-      const removeStyle = addStyle('directory', directoryStyles);
-      let disposed = false;
+      if (parentSignal.aborted || !target) return;
+      const scope = createScope(parentSignal);
+      const { signal } = scope;
+      scope.style('directory', directoryStyles);
       let acquisition: AbortController | null = null;
       let acquisitionRevision = 0;
       let detachPendingNative: Cleanup = () => {};
       let notice: HTMLElement | null = null;
+      let noticeScope: ReturnType<typeof createScope> | null = null;
       let noticeObserver: MutationObserver | null = null;
       let mounted: { lease: DirectoryLease; dispose: Cleanup; detach: Cleanup } | null = null;
-      const isCurrent = () => !disposed && !signal.aborted && window.location.href === url.href;
+      const isCurrent = () => !signal.aborted && window.location.href === url.href;
       const clearNotice = () => {
+        noticeScope?.dispose();
+        noticeScope = null;
         noticeObserver?.disconnect();
         noticeObserver = null;
         notice?.remove();
@@ -57,14 +62,15 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         if (!isCurrent()) return;
         const host = noticeHost();
         if (!host) return;
-        notice = document.createElement('div');
+        noticeScope = createScope(signal);
+        notice = markOwned(document.createElement('div'));
         notice.className = 'bn-directory-notice';
         notice.setAttribute(DIRECTORY_UI_ATTRIBUTE, '');
         const text = document.createElement('p');
         text.setAttribute('role', 'status');
         text.textContent = message;
         const button = createButton(action, icon);
-        button.addEventListener('click', handler);
+        noticeScope.listen(button, 'click', handler);
         notice.append(text, button);
         host.append(notice);
         // Native metadata may replace the main view after fallback has already
@@ -156,18 +162,13 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         }
       }
 
-      const cleanup = () => {
-        if (disposed) return;
-        disposed = true;
+      scope.add(() => {
         cancelAcquisition();
         clearMounted();
         clearNotice();
-        removeStyle();
-        signal.removeEventListener('abort', cleanup);
-      };
-      signal.addEventListener('abort', cleanup, { once: true });
+      });
       void prepare();
-      return cleanup;
+      return scope.dispose;
     },
   };
 }

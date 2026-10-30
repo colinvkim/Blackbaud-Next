@@ -7,14 +7,30 @@ type Watcher = () => void;
 const hubs = new WeakMap<QueryRoot, { observer: MutationObserver; watchers: Set<Watcher> }>();
 const readyDocuments = new WeakSet<Document>();
 
+export function markOwned<T extends Element>(element: T): T {
+  element.setAttribute('data-bn-owned', '');
+  return element;
+}
+
+function isOwnedNode(node: Node): boolean {
+  const element = node.nodeType === 1 ? node as Element : node.parentElement;
+  return Boolean(element?.closest('[data-bn-owned]'));
+}
+
+function isRelevantMutation(record: MutationRecord): boolean {
+  if (isOwnedNode(record.target)) return false;
+  return record.type !== 'childList' || record.removedNodes.length > 0 ||
+    [...record.addedNodes].some((node) => !isOwnedNode(node));
+}
+
 export function observeDom(callback: Watcher, signal: AbortSignal, root: QueryRoot = document): Cleanup {
   if (signal.aborted) return () => {};
   let hub = hubs.get(root);
   if (!hub) {
     const watchers = new Set<Watcher>();
     let queued = false;
-    const observer = new MutationObserver(() => {
-      if (queued) return;
+    const observer = new MutationObserver((records) => {
+      if (queued || !records.some(isRelevantMutation)) return;
       queued = true;
       queueMicrotask(() => {
         queued = false;
@@ -64,7 +80,7 @@ export function watchElements<T extends Element>(
       }
     }
     for (const element of root.querySelectorAll<T>(selector)) {
-      if (!mounted.has(element)) mounted.set(element, mount(element) ?? (() => {}));
+      if (!isOwnedNode(element) && !mounted.has(element)) mounted.set(element, mount(element) ?? (() => {}));
     }
   };
   const stop = observeDom(update, signal, root);
@@ -96,7 +112,7 @@ export function watchAddedElements<T extends Element>(
   };
   const consider = (element: T) => {
     if (disposed || signal.aborted) return;
-    if (!element.isConnected || !root.contains(element) || !element.matches(selector)) {
+    if (!element.isConnected || !root.contains(element) || !element.matches(selector) || isOwnedNode(element)) {
       remove(element);
     } else if (!mounted.has(element)) {
       const cleanup = mount(element) ?? (() => {});
@@ -105,13 +121,14 @@ export function watchAddedElements<T extends Element>(
     }
   };
   const discover = (node: Node) => {
-    if (node.nodeType !== 1) return;
+    if (node.nodeType !== 1 || isOwnedNode(node)) return;
     const element = node as T;
     if (element.matches(selector)) consider(element);
     for (const candidate of element.querySelectorAll<T>(selector)) consider(candidate);
   };
   const observer = new MutationObserver((records) => {
     if (disposed) return;
+    records = records.filter(isRelevantMutation);
     if (records.some((record) => record.removedNodes.length > 0)) {
       for (const element of mounted.keys()) {
         if (!element.isConnected || !root.contains(element)) remove(element);
@@ -139,16 +156,203 @@ export function watchAddedElements<T extends Element>(
   return cleanup;
 }
 
+export interface ElementContextChange {
+  /** The element or one of its ancestors was inserted or removed. */
+  moved: boolean;
+  /** A visibility or state attribute changed on a strict ancestor. */
+  ancestors: boolean;
+  /** An attribute changed on the element, or (with subtree) anything inside it changed. */
+  contents: boolean;
+}
+
+interface ContextWatcher {
+  subtree: boolean;
+  onChange: (change: ElementContextChange) => void;
+  active: boolean;
+}
+
+interface ContextEntry {
+  element: Element;
+  path: Node[];
+  watchers: Set<ContextWatcher>;
+}
+
+interface ContextHub {
+  observer: MutationObserver;
+  entries: Map<Element, ContextEntry>;
+  descendants: Map<Node, Set<ContextEntry>>;
+  subtreeWatchers: number;
+}
+
+const CONTEXT_ATTRIBUTES = ['class', 'id', 'style', 'hidden', 'aria-hidden', 'inert', 'disabled', 'aria-disabled', 'href', 'aria-label'];
+const contextHubs = new WeakMap<Document, ContextHub>();
+
+function observeContextHub(page: Document, hub: ContextHub): void {
+  hub.observer.observe(page, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: CONTEXT_ATTRIBUTES,
+    characterData: hub.subtreeWatchers > 0,
+  });
+}
+
+function unindexContext(hub: ContextHub, entry: ContextEntry): void {
+  for (const node of entry.path) {
+    const entries = hub.descendants.get(node);
+    entries?.delete(entry);
+    if (!entries?.size) hub.descendants.delete(node);
+  }
+  entry.path = [];
+}
+
+function indexContext(hub: ContextHub, entry: ContextEntry): void {
+  unindexContext(hub, entry);
+  for (let node: Node | null = entry.element; node; node = node.parentNode) {
+    entry.path.push(node);
+    let entries = hub.descendants.get(node);
+    if (!entries) { entries = new Set(); hub.descendants.set(node, entries); }
+    entries.add(entry);
+  }
+}
+
+function dispatchContextRecords(hub: ContextHub, records: MutationRecord[]): void {
+  const changes = new Map<ContextWatcher, ElementContextChange>();
+  const moved = new Set<ContextEntry>();
+  const mark = (watcher: ContextWatcher, key: keyof ElementContextChange) => {
+    let change = changes.get(watcher);
+    if (!change) { change = { moved: false, ancestors: false, contents: false }; changes.set(watcher, change); }
+    change[key] = true;
+  };
+  for (const record of records.filter(isRelevantMutation)) {
+    for (let node: Node | null = record.target; node; node = node.parentNode) {
+      if (node.nodeType !== 1) continue;
+      const entry = hub.entries.get(node as Element);
+      if (!entry) continue;
+      for (const watcher of entry.watchers) {
+        if (watcher.subtree || (node === record.target && record.type === 'attributes')) mark(watcher, 'contents');
+      }
+    }
+    if (record.type === 'attributes') {
+      for (const entry of hub.descendants.get(record.target) ?? []) {
+        if (entry.element !== record.target) for (const watcher of entry.watchers) mark(watcher, 'ancestors');
+      }
+    } else if (record.type === 'childList') {
+      for (const node of [...record.addedNodes, ...record.removedNodes]) {
+        for (const entry of hub.descendants.get(node) ?? []) moved.add(entry);
+      }
+      // A watched element can move into a new wrapper before that wrapper is inserted.
+      for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || isOwnedNode(node)) continue;
+        const element = node as Element;
+        const own = hub.entries.get(element);
+        if (own) moved.add(own);
+        for (const child of element.querySelectorAll('*')) {
+          const entry = hub.entries.get(child);
+          if (entry) moved.add(entry);
+        }
+      }
+    }
+  }
+  for (const entry of moved) {
+    if (hub.entries.get(entry.element) !== entry) continue;
+    indexContext(hub, entry);
+    for (const watcher of entry.watchers) mark(watcher, 'moved');
+  }
+  for (const [watcher, change] of changes) {
+    if (!watcher.active) continue;
+    try { watcher.onChange(change); } catch (error) { console.warn('Blackbaud Next could not update a feature.', error); }
+  }
+}
+
+export function observeElementContext(
+  element: Element,
+  onChange: (change: ElementContextChange) => void,
+  options: { subtree?: boolean } = {},
+): Cleanup {
+  const page = element.ownerDocument;
+  let hub = contextHubs.get(page);
+  if (!hub) {
+    const created: ContextHub = {
+      observer: new MutationObserver((records) => dispatchContextRecords(created, records)),
+      entries: new Map(),
+      descendants: new Map(),
+      subtreeWatchers: 0,
+    };
+    hub = created;
+    contextHubs.set(page, hub);
+    observeContextHub(page, hub);
+  }
+  const activeHub = hub;
+  const watcher: ContextWatcher = { subtree: options.subtree ?? false, onChange, active: true };
+  let entry = activeHub.entries.get(element);
+  if (!entry) {
+    entry = { element, path: [], watchers: new Set() };
+    activeHub.entries.set(element, entry);
+    indexContext(activeHub, entry);
+  }
+  const activeEntry = entry;
+  activeEntry.watchers.add(watcher);
+  if (watcher.subtree && ++activeHub.subtreeWatchers === 1) observeContextHub(page, activeHub);
+  return () => {
+    if (!watcher.active) return;
+    watcher.active = false;
+    activeEntry.watchers.delete(watcher);
+    if (!activeEntry.watchers.size) {
+      unindexContext(activeHub, activeEntry);
+      activeHub.entries.delete(element);
+    }
+    if (watcher.subtree) activeHub.subtreeWatchers -= 1;
+    if (!activeHub.entries.size) {
+      activeHub.observer.disconnect();
+      contextHubs.delete(page);
+    } else if (watcher.subtree && activeHub.subtreeWatchers === 0) observeContextHub(page, activeHub);
+  };
+}
+
+type ManagedStyle = { css: string; references: number } & (
+  | { kind: 'sheet'; sheet: CSSStyleSheet }
+  | { kind: 'element'; element: HTMLStyleElement }
+);
+const stylesByDocument = new WeakMap<Document, Map<string, ManagedStyle>>();
+
 export function addStyle(id: string, css: string): Cleanup {
-  const style = document.createElement('style');
-  style.id = `blackbaud-next-${id}`;
-  style.textContent = css;
-  (document.head ?? document.documentElement).append(style);
-  return () => style.remove();
+  const page = document;
+  let styles = stylesByDocument.get(page);
+  if (!styles) { styles = new Map(); stylesByDocument.set(page, styles); }
+  let style = styles.get(id);
+  if (style && style.css !== css) throw new Error(`Conflicting Blackbaud Next style: ${id}`);
+  if (!style) {
+    const Sheet = page.defaultView?.CSSStyleSheet;
+    if (Sheet?.prototype.replaceSync && 'adoptedStyleSheets' in page) {
+      const sheet = new Sheet();
+      sheet.replaceSync(css);
+      page.adoptedStyleSheets = [...page.adoptedStyleSheets, sheet];
+      style = { kind: 'sheet', sheet, css, references: 0 };
+    } else {
+      const element = markOwned(page.createElement('style'));
+      element.id = `blackbaud-next-${id}`;
+      element.textContent = css;
+      (page.head ?? page.documentElement).append(element);
+      style = { kind: 'element', element, css, references: 0 };
+    }
+    styles.set(id, style);
+  }
+  const activeStyle = style;
+  activeStyle.references += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--activeStyle.references > 0) return;
+    if (activeStyle.kind === 'sheet') page.adoptedStyleSheets = page.adoptedStyleSheets.filter((sheet) => sheet !== activeStyle.sheet);
+    else activeStyle.element.remove();
+    styles.delete(id);
+  };
 }
 
 export function createButton(text: string, icon?: IconName): HTMLButtonElement {
-  const button = document.createElement('button');
+  const button = markOwned(document.createElement('button'));
   button.type = 'button';
   button.className = 'bn-button';
   if (icon) button.append(createIcon(icon));

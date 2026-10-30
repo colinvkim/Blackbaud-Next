@@ -1,40 +1,41 @@
 import { ASSIGNMENT_PREVIEW_LINK_SELECTOR, ASSIGNMENT_PREVIEW_ROOT_SELECTOR, assignmentInstructions, assignmentPreviewReturnFocus, assignmentPreviewTarget, createAssignmentPreviewReader } from '../blackbaud/assignment-preview.ts';
 import type { AssignmentPreviewTarget } from '../blackbaud/assignment-preview.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { addStyle, createButton, isActionable, observeDom, watchAddedElements } from '../shared/dom.ts';
+import { createButton, isActionable, markOwned, observeElementContext, watchAddedElements } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
+import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
 
 const panelId = 'blackbaud-next-assignment-preview';
 const styles = `
 .bn-preview-button { margin-left: 8px; min-height: 28px; padding: 4px 8px; vertical-align: middle; font-size: 12px; }
-.bn-preview-panel { position: fixed; inset: 0 0 0 auto; z-index: 100000; box-sizing: border-box; width: min(460px, 100vw); padding: 24px; overflow: auto; overscroll-behavior: contain; scroll-padding-block: 20px; border-left: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); box-shadow: -8px 0 32px #222a3514; font: 15px/1.6 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-preview-panel { position: fixed; inset: 0 0 0 auto; z-index: 100000; box-sizing: border-box; width: min(460px, 100vw); padding: 24px; overflow: auto; overscroll-behavior: contain; scroll-padding-block: 20px; border-left: 1px solid var(--bn-border); background: var(--bn-surface); color: var(--bn-text); box-shadow: -8px 0 32px #222a3514; font: 15px/1.6 var(--bn-font); }
 .bn-preview-panel * { box-sizing: border-box; }
-.bn-preview-panel > h2 { margin: 16px 0 8px; color: var(--bn-text, #222a35); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-.bn-preview-panel :is(a, button, pre, table):focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
-.bn-preview-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--bn-border, #dde3e8); }
+.bn-preview-panel > h2 { margin: 16px 0 8px; color: var(--bn-text); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.bn-preview-panel :is(a, button, pre, table):focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
+.bn-preview-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--bn-border); }
 .bn-preview-panel .bn-button { max-width: 100%; white-space: normal; }
-.bn-preview-actions > a.bn-button { background: var(--bn-accent, #0066a1); border-color: var(--bn-accent, #0066a1); color: #fff; }
-.bn-preview-actions > a.bn-button:hover { background: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent-hover, #004d7a); color: #fff; }
-.bn-preview-meta { color: var(--bn-muted, #657080); margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
+.bn-preview-actions > a.bn-button { background: var(--bn-accent); border-color: var(--bn-accent); color: #fff; }
+.bn-preview-actions > a.bn-button:hover { background: var(--bn-accent-hover); border-color: var(--bn-accent-hover); color: #fff; }
+.bn-preview-meta { color: var(--bn-muted); margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
 .bn-preview-instructions { overflow-wrap: anywhere; }
 .bn-preview-instructions :is(p, ul, ol, blockquote, pre, table) { margin: 0 0 12px; }
 .bn-preview-instructions :is(ul, ol) { padding-left: 20px; }
 .bn-preview-instructions blockquote { padding: 8px 12px; }
 .bn-preview-instructions :is(pre, table) { max-width: 100%; overflow: auto; }
 .bn-preview-instructions table { display: block; width: max-content; }
-.bn-preview-instructions :is(h1, h2, h3, h4, h5, h6) { margin: 16px 0 8px; color: var(--bn-text, #222a35); font: 600 16px/1.4 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
+.bn-preview-instructions :is(h1, h2, h3, h4, h5, h6) { margin: 16px 0 8px; color: var(--bn-text); font: 600 16px/1.4 var(--bn-font); }
 .bn-preview-instructions :is(h1, h2) { font-size: 18px; }
 .bn-preview-instructions > :first-child { margin-top: 0; }
 .bn-preview-instructions > :last-child { margin-bottom: 0; }
-.bn-preview-instructions a, .bn-preview-attachments a { color: var(--bn-accent, #0066a1); text-decoration: underline; }
-.bn-preview-instructions a:hover, .bn-preview-attachments a:hover { color: var(--bn-accent-hover, #004d7a); }
-.bn-preview-attachments { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--bn-border, #dde3e8); }
+.bn-preview-instructions a, .bn-preview-attachments a { color: var(--bn-accent); text-decoration: underline; }
+.bn-preview-instructions a:hover, .bn-preview-attachments a:hover { color: var(--bn-accent-hover); }
+.bn-preview-attachments { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--bn-border); }
 .bn-preview-attachments h3 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
 .bn-preview-attachments ul { margin: 0; padding-left: 20px; }
 .bn-preview-attachments li { margin: 0; overflow-wrap: anywhere; }
 .bn-preview-attachments li + li { margin-top: 8px; }
-.bn-preview-note { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--bn-border, #dde3e8); color: var(--bn-muted, #657080); font-size: 12px; }
+.bn-preview-note { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--bn-border); color: var(--bn-muted); font-size: 12px; }
 @media (max-width: 480px) { .bn-preview-panel { padding: 16px; } .bn-preview-panel > h2 { font-size: 22px; } }
 @media (max-width: 480px), (pointer: coarse) { .bn-preview-button, .bn-preview-panel .bn-button { min-height: 44px; } }
 `;
@@ -46,19 +47,21 @@ export const assignmentPreviewFeature: Feature = {
   matches: isLmsPage,
   mount: ({ url, signal }) => {
     if (signal.aborted) return;
-    const removeStyle = addStyle('assignment-previews', styles);
+    const scope = createScope(signal);
+    scope.style('assignment-previews', styles);
     const reader = createAssignmentPreviewReader();
     const controls = new Map<HTMLAnchorElement, { root: HTMLElement; button: HTMLButtonElement; dispose: () => void }>();
     let panel: HTMLDivElement | null = null;
+    let panelScope: ReturnType<typeof createScope> | null = null;
     let opener: HTMLButtonElement | null = null;
     let openedAssignmentId: string | null = null;
-    let request: AbortController | null = null;
-    let disposed = false;
+    let request: ReturnType<typeof createScope> | null = null;
 
     const close = (restoreFocus = true) => {
-      request?.abort();
+      request?.dispose();
       request = null;
-      panel?.remove();
+      panelScope?.dispose();
+      panelScope = null;
       panel = null;
       const previous = opener;
       const previousId = openedAssignmentId;
@@ -74,12 +77,15 @@ export const assignmentPreviewFeature: Feature = {
     };
 
     const open = (target: AssignmentPreviewTarget, button: HTMLButtonElement) => {
-      if (disposed || signal.aborted) return;
+      if (scope.signal.aborted) return;
       close(false);
       opener = button;
       openedAssignmentId = target.assignmentIndexId;
       button.setAttribute('aria-expanded', 'true');
-      const currentPanel = document.createElement('div');
+      const currentScope = createScope(scope.signal);
+      panelScope = currentScope;
+      const currentPanel = markOwned(document.createElement('div'));
+      currentScope.add(() => currentPanel.remove());
       panel = currentPanel;
       currentPanel.id = panelId;
       currentPanel.className = 'bn-preview-panel';
@@ -89,7 +95,7 @@ export const assignmentPreviewFeature: Feature = {
       const actions = document.createElement('div');
       actions.className = 'bn-preview-actions';
       const closeButton = createButton('Close preview', 'x');
-      closeButton.addEventListener('click', () => close());
+      currentScope.listen(closeButton, 'click', () => close());
       const full = document.createElement('a');
       full.className = 'bn-button';
       full.href = target.detailsUrl;
@@ -104,7 +110,7 @@ export const assignmentPreviewFeature: Feature = {
       note.className = 'bn-preview-note';
       note.textContent = 'Open the full assignment for submissions and any additional content.';
       currentPanel.append(actions, title, content, note);
-      currentPanel.addEventListener('keydown', (event) => {
+      currentScope.listen(currentPanel, 'keydown', (event) => {
         if (event.key !== 'Escape' || event.defaultPrevented) return;
         event.preventDefault();
         event.stopPropagation();
@@ -114,15 +120,15 @@ export const assignmentPreviewFeature: Feature = {
       closeButton.focus();
 
       const load = async () => {
-        if (disposed || signal.aborted || panel !== currentPanel || window.location.href !== url.href) return;
-        request?.abort();
-        const currentRequest = new AbortController();
+        if (currentScope.signal.aborted || panel !== currentPanel || window.location.href !== url.href) return;
+        request?.dispose();
+        const currentRequest = createScope(currentScope.signal);
         request = currentRequest;
         const status = document.createElement('p');
         status.setAttribute('role', 'status');
         status.textContent = 'Loading preview…';
         content.replaceChildren(status);
-        const isCurrent = () => !disposed && !signal.aborted && !currentRequest.signal.aborted &&
+        const isCurrent = () => !currentRequest.signal.aborted &&
           panel === currentPanel && request === currentRequest && window.location.href === url.href;
         try {
           const preview = await reader.read(target, currentRequest.signal);
@@ -159,16 +165,17 @@ export const assignmentPreviewFeature: Feature = {
           if (!isCurrent()) return;
           status.textContent = 'The preview could not be loaded. You can retry or open the full assignment.';
           const retry = createButton('Retry preview', 'refresh');
-          retry.addEventListener('click', () => { closeButton.focus(); void load(); });
+          currentRequest.listen(retry, 'click', () => { closeButton.focus(); void load(); });
           content.append(retry);
         }
       };
       void load();
     };
 
-    const stop = watchAddedElements<HTMLElement>(ASSIGNMENT_PREVIEW_ROOT_SELECTOR, (root) => {
+    scope.add(watchAddedElements<HTMLElement>(ASSIGNMENT_PREVIEW_ROOT_SELECTOR, (root) => {
+      const rootScope = createScope(scope.signal);
       const update = () => {
-        if (disposed || signal.aborted || !root.isConnected) return;
+        if (rootScope.signal.aborted || !root.isConnected) return;
         for (const [link, control] of controls) {
           if (control.root === root && (!root.contains(link) || !link.matches(ASSIGNMENT_PREVIEW_LINK_SELECTOR) || !assignmentPreviewTarget(link, url.href))) {
             control.dispose();
@@ -180,7 +187,9 @@ export const assignmentPreviewFeature: Feature = {
           if (!target) continue;
           let control = controls.get(link);
           if (!control) {
+            const controlScope = createScope(scope.signal);
             const button = createButton('Preview', 'eye');
+            controlScope.add(() => button.remove());
             button.classList.add('bn-preview-button');
             button.dataset.blackbaudNextPreview = 'true';
             button.setAttribute('aria-controls', panelId);
@@ -192,8 +201,8 @@ export const assignmentPreviewFeature: Feature = {
               const currentTarget = assignmentPreviewTarget(link, url.href);
               if (currentTarget) open(currentTarget, button);
             };
-            button.addEventListener('click', click);
-            control = { root, button, dispose: () => { button.removeEventListener('click', click); button.remove(); } };
+            controlScope.listen(button, 'click', click);
+            control = { root, button, dispose: controlScope.dispose };
             controls.set(link, control);
           }
           control.root = root;
@@ -203,31 +212,23 @@ export const assignmentPreviewFeature: Feature = {
           if (link.nextElementSibling !== control.button) link.insertAdjacentElement('afterend', control.button);
         }
       };
-      const textObserver = new MutationObserver(update);
-      textObserver.observe(root, { subtree: true, characterData: true });
-      const stopUpdates = observeDom(update, signal, root);
-      return () => {
-        stopUpdates();
-        textObserver.disconnect();
+      rootScope.add(observeElementContext(root, update, { subtree: true }));
+      rootScope.add(() => {
         for (const [link, control] of controls) {
           if (control.root !== root) continue;
           control.dispose();
           controls.delete(link);
         }
-      };
-    }, signal);
-    const cleanup = () => {
-      if (disposed) return;
-      disposed = true;
-      stop();
+      });
+      update();
+      return rootScope.dispose;
+    }, scope.signal));
+    scope.add(() => {
       close(false);
       reader.clear();
       for (const control of controls.values()) control.dispose();
       controls.clear();
-      removeStyle();
-      signal.removeEventListener('abort', cleanup);
-    };
-    signal.addEventListener('abort', cleanup, { once: true });
-    return cleanup;
+    });
+    return scope.dispose;
   },
 };

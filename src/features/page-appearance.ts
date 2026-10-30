@@ -1,18 +1,11 @@
+import { THEME_TOKENS } from '../shared/theme.ts';
 import { isSchoolPage } from '../blackbaud/routes.ts';
 import { addStyle } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 import { PROGRESS_STYLES } from './progress-styles.ts';
 
 const TOOL_STYLES = `
-html {
-  --bn-font: "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif;
-  --bn-text: #222a35; --bn-muted: #657080;
-  --bn-accent: #0066a1; --bn-accent-hover: #004d7a; --bn-accent-soft: #eef6fa;
-  --bn-surface: #fff; --bn-page: #f5f6f8;
-  --bn-border: #dde3e8; --bn-border-strong: #bbc7d1;
-  --bn-radius: 8px; --bn-radius-lg: 12px;
-  --bn-shadow: 0 2px 8px #222a3508;
-}
+${THEME_TOKENS}
 .bn-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
 .bn-icon { display: inline-block; flex: none; width: 18px; height: 18px; vertical-align: middle; pointer-events: none; }
 .bn-icon-label { display: inline-flex; align-items: center; gap: 7px; }

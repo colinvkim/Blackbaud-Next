@@ -7,8 +7,10 @@ import type { Feature } from '../src/shared/types.ts';
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-function setup(featureOptions: Partial<Feature> = {}) {
+function setup(featureOptions: Partial<Feature> = {}, withNavigation = false) {
   const dom = new JSDOM('', { url: 'https://example.myschoolapp.com/app#one' });
+  const navigation = new dom.window.EventTarget();
+  if (withNavigation) Object.defineProperty(dom.window, 'navigation', { value: navigation });
   const scope = globalThis as typeof globalThis & { chrome?: unknown };
   const previous = { window: globalThis.window, chrome: scope.chrome, warn: console.warn };
   let listener: ((changes: unknown, area: string) => void) | undefined;
@@ -38,6 +40,12 @@ function setup(featureOptions: Partial<Feature> = {}) {
       dom.window.history.pushState({}, '', hash);
       dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
     },
+    navigateEntry(hash: string) {
+      dom.window.history.pushState({}, '', hash);
+      navigation.dispatchEvent(new dom.window.Event('currententrychange'));
+    },
+    pagehide() { dom.window.dispatchEvent(new dom.window.Event('pagehide')); },
+    observingLocation: () => !!dom.window.__blackbaudNextLocationV1,
     notifyNavigation() { dom.window.dispatchEvent(new dom.window.HashChangeEvent('hashchange')); },
     async start() {
       cleanup = await startExtension([{
@@ -159,5 +167,39 @@ test('document scope survives native history notifications and is cancelled by t
     await flush();
     assert.equal(initialSignal?.aborted, true);
     assert.deepEqual(runtime.counts(), { readCount: 3, mounts: 1, removals: 1 });
+  } finally { runtime.dispose(); }
+});
+
+test('Navigation API entry changes update immediately and pagehide releases the runtime source', async () => {
+  const runtime = setup({}, true);
+  try {
+    await runtime.start();
+    const initialSignal = runtime.currentSignal();
+    runtime.navigateEntry('#two');
+    assert.deepEqual(runtime.counts(), { readCount: 1, mounts: 2, removals: 1 });
+    assert.equal(initialSignal?.aborted, true);
+    assert.equal(runtime.observingLocation(), true);
+    runtime.pagehide();
+    assert.deepEqual(runtime.counts(), { readCount: 1, mounts: 2, removals: 2 });
+    assert.equal(runtime.observingLocation(), false);
+    runtime.navigateEntry('#three');
+    assert.deepEqual(runtime.counts(), { readCount: 1, mounts: 2, removals: 2 });
+  } finally { runtime.dispose(); }
+});
+
+test('pagehide during startup prevents pending settings from mounting after disposal', async () => {
+  const runtime = setup();
+  let resolveSettings: ((settings: Settings) => void) | undefined;
+  const pending = new Promise<Settings>((resolve) => { resolveSettings = resolve; });
+  try {
+    runtime.readUsing(() => pending);
+    const starting = runtime.start();
+    assert.equal(runtime.observingLocation(), true);
+    runtime.pagehide();
+    assert.equal(runtime.observingLocation(), false);
+    assert.ok(resolveSettings);
+    resolveSettings({ ...DEFAULT_SETTINGS });
+    await starting;
+    assert.deepEqual(runtime.counts(), { readCount: 1, mounts: 0, removals: 0 });
   } finally { runtime.dispose(); }
 });

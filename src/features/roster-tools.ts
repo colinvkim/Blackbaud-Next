@@ -1,7 +1,8 @@
 import { ROSTER_PICKER_SELECTOR, createRosterReader, rosterPickerIdentity, rosterTargetFromPicker, rosterTargetFromRequest, rosterTargetFromUrl, rosterValues, rosterViewSelector } from '../blackbaud/roster.ts';
 import type { RosterTarget } from '../blackbaud/roster.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { createButton, watchAddedElements } from '../shared/dom.ts';
+import { createButton, markOwned, watchAddedElements } from '../shared/dom.ts';
+import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
 
 export const rosterToolsFeature: Feature = {
@@ -9,9 +10,13 @@ export const rosterToolsFeature: Feature = {
   settingsKeys: [],
   enabled: (settings) => settings.rosterTools,
   matches: (url) => isLmsPage(url) && rosterTargetFromUrl(url) !== null,
-  mount: ({ signal, url }) => watchAddedElements(rosterViewSelector(url), (root) =>
-    watchAddedElements<HTMLElement>(ROSTER_PICKER_SELECTOR, (picker) => {
-      const toolbar = document.createElement('div');
+  mount: ({ signal, url }) => {
+    if (signal.aborted) return;
+    const scope = createScope(signal);
+    const mountPicker = (picker: HTMLElement) => {
+      const pickerScope = createScope(scope.signal);
+      const toolbar = markOwned(document.createElement('div'));
+      pickerScope.add(() => toolbar.remove());
       toolbar.className = 'bn-tools';
       toolbar.dataset.blackbaudNextRoster = '1';
       toolbar.setAttribute('role', 'group');
@@ -34,7 +39,6 @@ export const rosterToolsFeature: Feature = {
       const reader = createRosterReader();
       let activeCopy: object | null = null;
       let resetTimer: ReturnType<typeof setTimeout> | undefined;
-      let disposed = false;
 
       const clearRequest = () => { reader.clear(); activeCopy = null; };
       const currentTarget = () => rosterTargetFromPicker(picker, new URL(window.location.href)) ?? latest ?? (termChanged ? null : initialTarget);
@@ -55,12 +59,12 @@ export const rosterToolsFeature: Feature = {
         latest = null;
         latestStart = -Infinity;
       };
-      picker.addEventListener('change', selectionChanged, true);
+      pickerScope.listen(picker, 'change', selectionChanged, true);
 
       // Observe only requests made while this roster and this term are active.
       // An old entry from another page in performance history is never a source.
       const observer = typeof PerformanceObserver === 'undefined' ? null : new PerformanceObserver((list) => {
-        if (disposed || signal.aborted || window.location.href !== route) return;
+        if (pickerScope.signal.aborted || window.location.href !== route) return;
         selectionChanged();
         for (const entry of list.getEntries()) {
           if (entry.startTime < since || entry.startTime < latestStart) continue;
@@ -78,7 +82,7 @@ export const rosterToolsFeature: Feature = {
       observer?.observe({ type: 'resource' });
 
       const copy = async (type: 'name' | 'email') => {
-        if (disposed || signal.aborted || window.location.href !== route) return;
+        if (pickerScope.signal.aborted || window.location.href !== route) return;
         selectionChanged();
         const target = currentTarget();
         if (!target) {
@@ -94,7 +98,7 @@ export const rosterToolsFeature: Feature = {
         status.textContent = 'Loading roster…';
         const isCurrent = () => {
           const current = currentTarget();
-          return !disposed && !signal.aborted && activeCopy === request && picker.isConnected &&
+          return !pickerScope.signal.aborted && activeCopy === request && picker.isConnected &&
             window.location.href === route && rosterPickerIdentity(picker) === copiedTerm &&
             current?.kind === target.kind && current.id === target.id;
         };
@@ -111,27 +115,22 @@ export const rosterToolsFeature: Feature = {
           if (isCurrent()) {
             names.disabled = false;
             emails.disabled = false;
-            resetTimer = setTimeout(() => { if (!disposed && !signal.aborted) status.textContent = ''; }, 4000);
+            resetTimer = setTimeout(() => { if (!pickerScope.signal.aborted) status.textContent = ''; }, 4000);
           }
           if (activeCopy === request) activeCopy = null;
         }
       };
-      const copyNames = () => { void copy('name'); };
-      const copyEmails = () => { void copy('email'); };
-      names.addEventListener('click', copyNames);
-      emails.addEventListener('click', copyEmails);
-      const cleanup = () => {
-        disposed = true;
+      pickerScope.listen(names, 'click', () => { void copy('name'); });
+      pickerScope.listen(emails, 'click', () => { void copy('email'); });
+      pickerScope.add(() => {
         clearRequest();
         clearTimeout(resetTimer);
         observer?.disconnect();
-        picker.removeEventListener('change', selectionChanged, true);
-        names.removeEventListener('click', copyNames);
-        emails.removeEventListener('click', copyEmails);
-        signal.removeEventListener('abort', cleanup);
-        toolbar.remove();
-      };
-      signal.addEventListener('abort', cleanup, { once: true });
-      return cleanup;
-    }, signal, root, ['id']), signal, document, ['id']),
+      });
+      return pickerScope.dispose;
+    };
+    scope.add(watchAddedElements(rosterViewSelector(url), (root) =>
+      watchAddedElements<HTMLElement>(ROSTER_PICKER_SELECTOR, mountPicker, scope.signal, root, ['id']), scope.signal, document, ['id']));
+    return scope.dispose;
+  },
 };

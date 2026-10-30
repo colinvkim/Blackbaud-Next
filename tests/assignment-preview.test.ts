@@ -550,3 +550,42 @@ test('preview reopening reuses identity while remounting obtains the current stu
   assert.equal(win.document.querySelector('[role="dialog"] h2')!.textContent, 'Fresh version 3');
   assert.deepEqual(studentIds, ['42', '42', '77']);
 });
+
+for (const teardown of ['cleanup', 'abort'] as const) {
+  test(`closed preview controls stay inert and ${teardown} cancels pending reads`, async (t) => {
+    const win = fixture(nativeLink(123) + nativeLink(456));
+    const requests: Array<{ signal: AbortSignal | null | undefined; resolve: (response: Response) => void }> = [];
+    t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL, options?: RequestInit) => {
+      if (String(path) === '/api/webapp/context') return new Response(JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } }));
+      return new Promise<Response>((resolve) => { requests.push({ signal: options?.signal, resolve }); });
+    });
+    const controller = new AbortController();
+    const cleanup = assignmentPreviewFeature.mount({ url: new URL(win.location.href), signal: controller.signal, settings: DEFAULT_SETTINGS });
+    cleanups.push(() => { cleanup?.(); controller.abort(); });
+    const buttons = win.document.querySelectorAll<HTMLButtonElement>('[data-blackbaud-next-preview]');
+    buttons[0]!.click();
+    await flush();
+    const oldPanel = win.document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const oldClose = oldPanel.querySelector<HTMLButtonElement>('button')!;
+    oldClose.click();
+    assert.equal(requests[0]!.signal?.aborted, true);
+    buttons[1]!.click();
+    await flush();
+    const current = win.document.querySelector<HTMLElement>('[role="dialog"]')!;
+    assert.equal(current.querySelector('h2')!.textContent, 'Assignment 456');
+    oldClose.click();
+    oldPanel.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(win.document.querySelector('[role="dialog"]'), current);
+    if (teardown === 'cleanup') cleanup?.();
+    else controller.abort();
+    assert.equal(requests[1]!.signal?.aborted, true);
+    buttons[1]!.click();
+    requests[0]!.resolve(new Response(JSON.stringify(assignment(123))));
+    requests[1]!.resolve(new Response(JSON.stringify(assignment(456))));
+    await flush();
+    assert.equal(requests.length, 2);
+    assert.equal(win.document.querySelector('[role="dialog"]'), null);
+    assert.equal(win.document.querySelector('[data-blackbaud-next-preview]'), null);
+    assert.equal(win.document.querySelector('#blackbaud-next-assignment-previews'), null);
+  });
+}

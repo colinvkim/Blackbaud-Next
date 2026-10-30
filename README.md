@@ -69,39 +69,39 @@ For the fastest account selection, enter your full Google email in the popup. Ex
 Use Node.js 24+ and pnpm 11:
 
 ```sh
-rtk pnpm install
-rtk pnpm check
-rtk pnpm test
-rtk pnpm build
+pnpm install
+pnpm check
+pnpm test
+pnpm build
 ```
 
 Load `chrome/` as an unpacked extension from `chrome://extensions/`. After rebuilding, reload the extension and refresh the Blackbaud tab so Chrome loads the new content scripts. Existing settings switches apply immediately once those scripts are running.
 
-`rtk pnpm dev` watches TypeScript, imported styles, and the preloaded header stylesheet. Restart it after editing the manifest, popup HTML, or source assets. The build verifies that every manifest resource and popup bundle exists.
+`pnpm dev` watches TypeScript, imported styles, and the preloaded header stylesheet. Restart it after editing the manifest, popup HTML, or source assets. The build verifies that every manifest resource and popup bundle exists.
 
 For automatic browser development:
 
 ```sh
-rtk pnpm dev:browser
+pnpm dev:browser
 ```
 
 This downloads the matching Chrome for Testing on the first run, opens a dedicated test browser, and loads the extension automatically. Sign into Blackbaud in that window. The dedicated profile is saved between runs, preserving extension preferences and browser sign-in data. Blackbaud or Google can still expire the session or require a fresh sign-in. Your everyday Chrome profile is separate.
 
 Saving changes in `src/`, `extension/`, `assets/`, or `scripts/build.ts` builds all six JavaScript bundles and their styles, reloads the extension, and refreshes tabs on the configured school's origin. Google sign-in and unrelated tabs are left alone. Chrome closes open extension popup/settings pages during reload; reopen them afterward. Rapid edits are combined and builds never overlap. A compile failure keeps the last complete development build available; the next edit retries. Press Ctrl+C or close the test browser to stop.
 
-The browser download, dedicated profile, and development builds live in ignored `.local/dev-browser/`. The runner builds into staging and publishes only a validated complete extension; production output in `chrome/` is still generated with `rtk pnpm build`. Restart the runner after changing its own scripts or dependencies. Native browser reloads refresh the page, so save any work in the test tab before editing extension source.
+The browser download, dedicated profile, and development builds live in ignored `.local/dev-browser/`. The runner builds into staging and publishes only a validated complete extension; production output in `chrome/` is still generated with `pnpm build`. Restart the runner after changing its own scripts or dependencies. Native browser reloads refresh the page, so save any work in the test tab before editing extension source.
 
 Options (paths with spaces must be quoted):
 
 ```sh
-rtk pnpm dev:browser --url https://your-school.myschoolapp.com
-rtk pnpm dev:browser --profile /path/to/a/dedicated-test-profile
-rtk pnpm dev:browser --executable "/path/to/Chrome for Testing"
+pnpm dev:browser --url https://your-school.myschoolapp.com
+pnpm dev:browser --profile /path/to/a/dedicated-test-profile
+pnpm dev:browser --executable "/path/to/Chrome for Testing"
 ```
 
 `--executable` skips downloading; use a compatible Chrome for Testing (the default version matches the pinned Puppeteer dependency). `--headless` supports automated checks and `--help` lists the options. Browser automation uses a local CDP pipe, with no debugging port or additional extension permissions. Credentials and browser profile files must stay out of Git.
 
-`rtk pnpm test:browser` verifies the real extension in headless Chrome with synthetic pages and disposable profiles. It exercises source and popup rebuilds, scoped tab refresh, retained settings, and recovery after a compile error. It also checks legacy and modern navigation/icons, responsive Progress summaries, aligned content gutters, narrow Schedule controls, native collapse/day navigation actions, and layout restoration when appearance or the master switch is disabled. Coordinator checks cover popup saves after closure, concurrent provider attempts, and worker restart. Build-watch checks wait for validated output readiness and exercise initial-error recovery before immediate source edits. It downloads/reuses the same browser binary and makes no requests to the real LMS.
+`pnpm test:browser` verifies the real extension in headless Chrome with synthetic pages and disposable profiles. It exercises source and popup rebuilds, scoped tab refresh, retained settings, and recovery after a compile error. It also checks legacy and modern navigation/icons, responsive Progress summaries, aligned content gutters, narrow Schedule controls, native collapse/day navigation actions, and layout restoration when appearance or the master switch is disabled. Coordinator checks cover popup saves after closure, concurrent provider attempts, and worker restart. Build-watch checks wait for validated output readiness and exercise initial-error recovery before immediate source edits. It downloads/reuses the same browser binary and makes no requests to the real LMS.
 
 ## Source layout
 

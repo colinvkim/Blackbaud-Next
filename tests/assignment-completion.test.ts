@@ -687,3 +687,19 @@ test('pending completion observers yield to real timers and settle before the na
   assert.equal(checkbox().disabled, false);
   observer.disconnect();
 });
+
+test('dismissing a completion notice disables its detached Undo action immediately', async () => {
+  const native = fixture();
+  mount();
+  checkbox().click();
+  await flush();
+  const oldUndo = button('Undo');
+  button('Dismiss').click();
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
+  oldUndo.click();
+  await flush();
+  assert.equal(native.requests.length, 1);
+  assert.equal(nativeButton().textContent, 'Completed');
+  assert.equal(checkbox().checked, true);
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
+});

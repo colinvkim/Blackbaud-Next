@@ -254,3 +254,35 @@ test('native group moves update row ownership and hidden ancestors without repla
   await flush();
   assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 0 loaded assignments/);
 });
+
+test('shortcut cleanup restores original markers and preserves newer native values', () => {
+  fixture(nativeToolbar() + group('done', row(123, '10/7/2026', 'Completed', `${hiddenAttribute}="row-original"`) + row(456, '10/7/2026', 'Completed'), `${hiddenAttribute}="group-original"`));
+  const { cleanup } = mount();
+  click('Unfinished');
+  const rows = document.querySelectorAll<HTMLElement>('.assignment-repeater-item');
+  assert.equal(rows[0]!.getAttribute(hiddenAttribute), 'true');
+  assert.equal(rows[1]!.getAttribute(hiddenAttribute), 'true');
+  rows[1]!.setAttribute(hiddenAttribute, 'native-update');
+  cleanup?.();
+  assert.equal(rows[0]!.getAttribute(hiddenAttribute), 'row-original');
+  assert.equal(rows[1]!.getAttribute(hiddenAttribute), 'native-update');
+  assert.equal(document.querySelector('#done')!.getAttribute(hiddenAttribute), 'group-original');
+  assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
+});
+
+test('toolbar matching follows changes to native search accessibility labels and repairs removed UI', async () => {
+  fixture(nativeToolbar() + group('todo', row(123, '10/7/2026')));
+  mount();
+  const search = document.querySelector<HTMLInputElement>('sky-toolbar input')!;
+  search.setAttribute('aria-label', 'Different search');
+  await flush();
+  assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
+  search.setAttribute('aria-label', 'Search items');
+  await flush();
+  const toolbar = document.querySelector('.bn-assignment-shortcuts')!;
+  assert.ok(toolbar);
+  toolbar.remove();
+  await flush();
+  assert.equal(document.querySelector('.bn-assignment-shortcuts'), toolbar);
+  assert.match(toolbar.textContent ?? '', /Showing 1 of 1 loaded assignments/);
+});

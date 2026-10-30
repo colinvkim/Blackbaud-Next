@@ -560,3 +560,38 @@ test('class search yields to real timers and stops mutating after mount, input a
   assert.equal(result.searchedStatus, '1 of 3 classes');
   assert.equal(result.clearedStatus, '3 classes');
 });
+
+for (const teardown of ['cleanup', 'abort'] as const) {
+  test(`class menu controls stop sharing queries after replacement and ${teardown}`, async () => {
+    const win = fixture(desktopMenu() + mobileMenu());
+    const { cleanup, controller } = mount();
+    const desktop = win.document.querySelector<HTMLElement>('#site-nav-container .subnav')!;
+    const mobile = win.document.querySelector<HTMLElement>('.app-mobile-level')!;
+    const oldInput = search('geometry', desktop);
+    const oldClear = desktop.querySelector<HTMLButtonElement>('.bn-class-search button')!;
+    desktop.outerHTML = `<div class="subnav"><ul>${classLink(456, 'Café Studies')}</ul></div>`;
+    await flush();
+    const replacement = win.document.querySelector<HTMLElement>('#site-nav-container .subnav')!;
+    const input = replacement.querySelector<HTMLInputElement>('.bn-class-search input')!;
+    assert.equal(input.value, 'geometry');
+    oldInput.value = 'english';
+    oldInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+    oldClear.click();
+    assert.equal(mobile.querySelector<HTMLInputElement>('input')!.value, 'geometry');
+    assert.equal(input.value, 'geometry');
+    const before = new win.KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    input.dispatchEvent(before);
+    assert.equal(before.defaultPrevented, true);
+    if (teardown === 'cleanup') cleanup?.();
+    else controller.abort();
+    const after = new win.KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    input.dispatchEvent(after);
+    assert.equal(after.defaultPrevented, false);
+    assert.equal(win.document.querySelector('.bn-class-search'), null);
+    assert.equal(win.document.querySelector('[data-blackbaud-next-class-hidden]'), null);
+    assert.equal(replacement.querySelector('a')!.getAttribute('href'), '?svcid=edu#academicclass/456/0/bulletinboard');
+    replacement.insertAdjacentHTML('beforeend', `<ul>${classLink(789, 'English I')}</ul>`);
+    await flush();
+    assert.equal(win.document.querySelector('.bn-class-search'), null);
+  });
+}

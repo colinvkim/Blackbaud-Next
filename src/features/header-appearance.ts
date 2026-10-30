@@ -1,3 +1,4 @@
+import { markOwned } from '../shared/dom.ts';
 import type { NativeHeaderAppearanceTarget } from '../blackbaud/header-appearance.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { createNavigationIcons } from './navigation-icons.ts';
@@ -110,7 +111,7 @@ export function createHeaderAppearance() {
         searchLabels.delete(element);
       } else {
         if (!label) {
-          label = element.ownerDocument.createElement('span');
+          label = markOwned(element.ownerDocument.createElement('span'));
           label.className = 'bn-header-search-label';
           label.textContent = 'Search';
           searchLabels.set(element, label);

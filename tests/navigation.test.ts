@@ -369,3 +369,38 @@ test('an existing resource board follows native visibility when moved between pa
   assert.equal(input.value, 'library');
   assert.equal(document.getElementById('library')!.hasAttribute('data-blackbaud-next-resource-hidden'), false);
 });
+
+test('resource cleanup preserves newer native markers and inline layout changes', () => {
+  fixture(resourceFixture, '#resourceboard');
+  const { cleanup } = mount(resourceSearchFeature);
+  search('cafe');
+  const layout = document.querySelector<HTMLElement>('.board-container.isotope')!;
+  const library = document.querySelector<HTMLElement>('#library')!;
+  library.setAttribute('data-blackbaud-next-resource-hidden', 'native-hidden');
+  layout.setAttribute('data-blackbaud-next-resource-filtered', 'native-layout');
+  layout.style.setProperty('--blackbaud-next-resource-column-width', '451px', 'important');
+  cleanup?.();
+  assert.equal(library.getAttribute('data-blackbaud-next-resource-hidden'), 'native-hidden');
+  assert.equal(layout.getAttribute('data-blackbaud-next-resource-filtered'), 'native-layout');
+  assert.equal(layout.style.getPropertyValue('--blackbaud-next-resource-column-width'), '451px');
+  assert.equal(layout.style.getPropertyPriority('--blackbaud-next-resource-column-width'), 'important');
+  assert.equal(document.querySelector('.bn-resource-search'), null);
+});
+
+test('resource card removals restore detached native state and stale search controls stay inactive', async () => {
+  fixture(resourceFixture, '#resourceboard');
+  mount(resourceSearchFeature);
+  const input = search('cafe');
+  const clear = document.querySelector<HTMLButtonElement>('.bn-resource-search button')!;
+  const library = document.querySelector<HTMLElement>('#library')!;
+  library.remove();
+  await flush();
+  assert.equal(library.hasAttribute('data-blackbaud-next-resource-hidden'), false);
+  assert.equal(document.querySelector('.bn-resource-search [role="status"]')!.textContent, '1 of 1 resources');
+  const board = document.querySelector('#board-container')!;
+  board.remove();
+  await flush();
+  clear.click();
+  assert.equal(input.value, 'cafe');
+  assert.equal(document.querySelector('.bn-resource-search'), null);
+});

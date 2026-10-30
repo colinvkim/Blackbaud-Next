@@ -498,6 +498,23 @@ test('native pushState departures are detected without patching history and clea
   assert.equal(reads, 1);
 });
 
+test('Navigation API entry changes preserve arrival and cancel directory reads immediately on departure', () => {
+  const anchor = fixture();
+  const navigation = new dom!.window.EventTarget();
+  Object.defineProperty(window, 'navigation', { value: navigation });
+  let readSignal: AbortSignal | undefined;
+  mount((_target, signal) => { readSignal = signal; return new Promise(() => {}); });
+  anchor.addEventListener('click', (event) => event.preventDefault());
+  click(anchor);
+  window.history.pushState(null, '', destinationHref);
+  navigation.dispatchEvent(new dom!.window.Event('currententrychange'));
+  assert.equal(readSignal?.aborted, false);
+  window.history.pushState(null, '', sourceHref);
+  navigation.dispatchEvent(new dom!.window.Event('currententrychange'));
+  assert.equal(readSignal?.aborted, true);
+  assert.equal(claimDirectoryPreparedSnapshot(target, new AbortController().signal), null);
+});
+
 test('an already aborted mount attaches no capture or registry entry', () => {
   const anchor = fixture();
   const controller = new AbortController();

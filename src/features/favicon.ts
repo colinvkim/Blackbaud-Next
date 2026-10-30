@@ -1,3 +1,4 @@
+import { markOwned } from '../shared/dom.ts';
 import { isSchoolPage } from '../blackbaud/routes.ts';
 import { extensionApi } from '../shared/extension.ts';
 import type { Feature } from '../shared/types.ts';
@@ -9,7 +10,7 @@ export const faviconFeature: Feature = {
   enabled: (settings) => settings.fixFavicon,
   matches: isSchoolPage,
   mount: () => {
-    const link = document.createElement('link');
+    const link = markOwned(document.createElement('link'));
     link.dataset.blackbaudNextFavicon = '1';
     link.rel = 'icon';
     link.type = 'image/png';

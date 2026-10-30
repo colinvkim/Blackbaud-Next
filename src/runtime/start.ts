@@ -1,5 +1,6 @@
 import { FeatureController } from './controller.ts';
 import { getSettings, subscribeSettings } from '../shared/settings.ts';
+import { watchLocation } from '../shared/location.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Feature, Cleanup } from '../shared/types.ts';
 
@@ -48,21 +49,13 @@ export async function startExtension(features: Feature[], options: StartOptions 
     }
   };
   const unsubscribe = subscribeSettings(() => { void loadSettings(); });
-  window.addEventListener('hashchange', refresh);
-  window.addEventListener('popstate', refresh);
-  // pushState runs in Blackbaud's isolated page environment. Observe its URL
-  // without patching native history or injecting a privileged page bridge.
-  const navigationCheck = window.setInterval(() => {
-    if (window.location.href !== href) refresh();
-  }, 300);
+  const stopLocation = watchLocation(refresh, startup.signal);
   const cleanup = () => {
     if (disposed) return;
     disposed = true;
     startup.abort();
     unsubscribe();
-    clearInterval(navigationCheck);
-    window.removeEventListener('hashchange', refresh);
-    window.removeEventListener('popstate', refresh);
+    stopLocation();
     window.removeEventListener('pagehide', cleanup);
     controller.dispose();
   };

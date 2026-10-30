@@ -1,25 +1,26 @@
+import { THEME_TOKENS } from '../shared/theme.ts';
 import { accountPreferenceForSchool, canAttempt, hasSigninRedirect, schoolFromSigninUrl, selectAuthContext, selectProviderAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
 import type { AuthContext } from '../blackbaud/auth.ts';
 import { accountChoices, findBlackbaudGoogleButton, findGoogleAccount, findSchoolSigninAnchor } from '../blackbaud/auth-dom.ts';
 import { blackbaudSigninUrl, isBlackbaudSignin, isGoogleOAuth, isLmsPage, isSchoolPage } from '../blackbaud/routes.ts';
-import { addStyle, createButton, observeDom, waitForElement, waitForReadyElement } from '../shared/dom.ts';
+import { markOwned, addStyle, createButton, observeDom, waitForElement, waitForReadyElement } from '../shared/dom.ts';
 import { claimAuthAttempt, createAuthFlow, pauseAuthFlow, readAuthContexts, recoverAuthFlow, removeAuthFlow, waitForAuthClaim } from '../shared/auth-flow.ts';
 import type { Cleanup, Feature, FeatureContext } from '../shared/types.ts';
 
 const TAB_FLOW_KEY = 'blackbaud-next-auth-flow-id';
 const providerFlows = new WeakMap<Document, string>();
 const LOGIN_STYLE = `
-.bn-login-option { margin-top: 12px; color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
-.bn-login-option .bn-button { width: 100%; min-height: 40px; padding: 10px 16px; color: #fff; background: var(--bn-accent, #0066a1); border: 1px solid var(--bn-accent, #0066a1); border-radius: var(--bn-radius, 8px); cursor: pointer; font: inherit; font-weight: 600; }
-.bn-login-option .bn-button:hover:not(:disabled) { background: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent-hover, #004d7a); }
+.bn-login-option { margin-top: 12px; color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
+.bn-login-option .bn-button { width: 100%; min-height: 40px; padding: 10px 16px; color: #fff; background: var(--bn-accent); border: 1px solid var(--bn-accent); border-radius: var(--bn-radius); cursor: pointer; font: inherit; font-weight: 600; }
+.bn-login-option .bn-button:hover:not(:disabled) { background: var(--bn-accent-hover); border-color: var(--bn-accent-hover); }
 .bn-login-option .bn-button:disabled { opacity: .6; cursor: default; }
-.bn-login-option .bn-button:focus-visible, #blackbaud-next-signin-status button:focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
-.bn-login-option small { display: block; margin-top: 8px; color: var(--bn-muted, #657080); }
-#blackbaud-next-signin-status { position: fixed; bottom: 20px; right: 20px; z-index: 100000; width: min(360px, calc(100vw - 40px)); box-sizing: border-box; background: var(--bn-surface, #fff); border: 1px solid var(--bn-border, #dde3e8); border-radius: var(--bn-radius-lg, 12px); padding: 16px; box-shadow: var(--bn-shadow, 0 4px 16px #222a3510); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); color: var(--bn-text, #222a35); }
+.bn-login-option .bn-button:focus-visible, #blackbaud-next-signin-status button:focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
+.bn-login-option small { display: block; margin-top: 8px; color: var(--bn-muted); }
+#blackbaud-next-signin-status { position: fixed; bottom: 20px; right: 20px; z-index: 100000; width: min(360px, calc(100vw - 40px)); box-sizing: border-box; background: var(--bn-surface); border: 1px solid var(--bn-border); border-radius: var(--bn-radius-lg); padding: 16px; box-shadow: var(--bn-shadow); font: 14px/1.5 var(--bn-font); color: var(--bn-text); }
 #blackbaud-next-signin-status p { margin: 0 0 12px; }
 #blackbaud-next-signin-status .bn-login-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-#blackbaud-next-signin-status button { min-height: 36px; border: 1px solid var(--bn-border-strong, #bbc7d1); border-radius: var(--bn-radius, 8px); background: var(--bn-surface, #fff); padding: 6px 10px; color: var(--bn-text, #222a35); font: inherit; font-weight: 600; cursor: pointer; }
-#blackbaud-next-signin-status button:hover { background: var(--bn-accent-soft, #eef6fa); border-color: var(--bn-accent, #0066a1); color: var(--bn-accent-hover, #004d7a); }
+#blackbaud-next-signin-status button { min-height: 36px; border: 1px solid var(--bn-border-strong); border-radius: var(--bn-radius); background: var(--bn-surface); padding: 6px 10px; color: var(--bn-text); font: inherit; font-weight: 600; cursor: pointer; }
+#blackbaud-next-signin-status button:hover { background: var(--bn-accent-soft); border-color: var(--bn-accent); color: var(--bn-accent-hover); }
 @media (prefers-reduced-motion: reduce) { #blackbaud-next-signin-status { scroll-behavior: auto; } }
 `;
 
@@ -79,7 +80,7 @@ function mountLogin(context: FeatureContext): Cleanup {
   const page = document;
   const controller = new AbortController();
   const signal = controller.signal;
-  const dispose: Cleanup[] = [addStyle('login', LOGIN_STYLE)];
+  const dispose: Cleanup[] = [addStyle('login', `${isSchoolPage(url) ? '' : THEME_TOKENS}\n${LOGIN_STYLE}`)];
   const abort = () => controller.abort();
   context.signal.addEventListener('abort', abort, { once: true });
   if (context.signal.aborted) abort();
@@ -112,7 +113,7 @@ function mountLogin(context: FeatureContext): Cleanup {
   const showStatus = (message: string, active = false) => {
     if (!settings.loadingOverlay || paused || statusDismissed || context.signal.aborted) return;
     if (!status) {
-      status = document.createElement('section');
+      status = markOwned(document.createElement('section'));
       status.id = 'blackbaud-next-signin-status';
       status.setAttribute('aria-label', 'Blackbaud Next sign-in');
       statusText = document.createElement('p');
@@ -161,7 +162,7 @@ function mountLogin(context: FeatureContext): Cleanup {
       }
       const anchor = findSchoolSigninAnchor();
       if (!anchor || added.has(anchor)) return;
-      const option = document.createElement('div');
+      const option = markOwned(document.createElement('div'));
       option.className = 'bn-login-option';
       const button = createButton('Sign in with Google');
       const explanation = document.createElement('small');

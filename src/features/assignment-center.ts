@@ -1,7 +1,7 @@
 import { isAssignmentCenter, isLmsPage, legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
 import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
 import { ASSIGNMENT_DETAILS_SELECTOR, assignmentBreadcrumbLinks, assignmentCenterUrl, isAssignmentDetail, isNativeAssignmentBackLink } from '../blackbaud/assignment-navigation.ts';
-import { createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
+import { markOwned, createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 
 export const ASSIGNMENT_STALL_DELAY = 15_000;
@@ -136,7 +136,7 @@ export const assignmentRecoveryFeature: Feature = {
         stallTimer = undefined;
         if (offered || !isStalled()) return;
         offered = true;
-        panel = document.createElement('div');
+        panel = markOwned(document.createElement('div'));
         panel.className = 'bn-recovery';
         panel.setAttribute('role', 'status');
         // The native full-page loading mask must not cover the recovery action.

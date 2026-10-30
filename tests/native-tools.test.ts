@@ -627,3 +627,39 @@ test('favicon cleanup preserves the school icon', () => {
   cleanup?.();
   assert.equal(win.document.querySelector('link[rel="icon"]')!.getAttribute('href'), '/school.png');
 });
+
+for (const teardown of ['cleanup', 'abort'] as const) {
+  test(`roster ${teardown} aborts pending copies and leaves detached controls inert`, async (t) => {
+    const win = fixture('<select id="roster-term-picker"><option value="123">Fall</option></select>');
+    let requestSignal: AbortSignal | null | undefined;
+    let resolveRequest: ((response: Response) => void) | undefined;
+    let requests = 0;
+    t.mock.method(globalThis, 'fetch', async (_path: RequestInfo | URL, options?: RequestInit) => {
+      requests += 1;
+      requestSignal = options?.signal;
+      return new Promise<Response>((resolve) => { resolveRequest = resolve; });
+    });
+    const copied: string[] = [];
+    Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text); } } });
+    const controller = new AbortController();
+    const cleanup = rosterToolsFeature.mount({ url: new URL(win.location.href), signal: controller.signal, settings: DEFAULT_SETTINGS });
+    cleanups.push(() => { cleanup?.(); controller.abort(); });
+    const button = win.document.querySelector<HTMLButtonElement>('.bn-tools button')!;
+    const picker = win.document.querySelector<HTMLSelectElement>('#roster-term-picker')!;
+    const status = win.document.querySelector<HTMLElement>('.bn-tool-status')!;
+    button.click();
+    assert.equal(status.textContent, 'Loading roster…');
+    if (teardown === 'cleanup') cleanup?.();
+    else controller.abort();
+    assert.equal(requestSignal?.aborted, true);
+    button.disabled = false;
+    button.click();
+    picker.dispatchEvent(new win.Event('change', { bubbles: true }));
+    resolveRequest?.(new Response(JSON.stringify([{ name: 'Late Student' }])));
+    await flush();
+    assert.equal(requests, 1);
+    assert.deepEqual(copied, []);
+    assert.equal(win.document.querySelector('.bn-tools'), null);
+    assert.equal(status.textContent, 'Loading roster…');
+  });
+}

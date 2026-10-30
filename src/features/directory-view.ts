@@ -3,7 +3,7 @@ import type { DirectoryLease } from '../blackbaud/directory-bridge.ts';
 import { directoryEntryGrades, directoryGradeCounts, directoryPage, directoryThumbnailUrl, filterDirectoryEntries, sortDirectoryEntries } from '../blackbaud/directory.ts';
 import type { DirectoryEntry, DirectoryGradeCount, DirectorySnapshot, DirectoryTarget, fetchDirectorySnapshot } from '../blackbaud/directory.ts';
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_UI_ATTRIBUTE } from '../blackbaud/directory-protocol.ts';
-import { createButton } from '../shared/dom.ts';
+import { markOwned, createButton } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Settings } from '../shared/settings.ts';
@@ -27,7 +27,7 @@ interface DirectoryViewOptions {
 let directoryNumber = 0;
 
 function ownedElement<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tag);
+  const element = markOwned(document.createElement(tag));
   element.className = className;
   element.setAttribute(DIRECTORY_UI_ATTRIBUTE, '');
   return element;

@@ -1,7 +1,9 @@
 import { ASSIGNMENT_ROW_SELECTOR, ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, ASSIGNMENT_TOOLBAR_SELECTOR, isNativeAssignmentVisible, matchesAssignmentShortcut, readAssignmentRow } from '../blackbaud/assignment-list.ts';
 import type { AssignmentShortcut, NativeAssignmentRow } from '../blackbaud/assignment-list.ts';
 import { isAssignmentCenter } from '../blackbaud/routes.ts';
-import { addStyle, createButton, watchAddedElements } from '../shared/dom.ts';
+import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
+import { createButton, markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
+import { createScope } from '../shared/scope.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
@@ -15,9 +17,9 @@ const shortcuts: Array<{ key: AssignmentShortcut; label: string; icon: IconName 
 
 const styles = `
 [${hiddenAttribute}="true"] { display: none !important; }
-.bn-assignment-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
-.bn-assignment-shortcuts .bn-button[aria-pressed="true"] { background: var(--bn-accent-soft, #eef6fa); color: var(--bn-accent-hover, #004d7a); border-color: var(--bn-accent, #0066a1); }
-.bn-assignment-shortcuts .bn-button[aria-pressed="true"]:hover { background: var(--bn-accent, #0066a1); color: #fff; border-color: var(--bn-accent, #0066a1); }
+.bn-assignment-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--bn-border); background: var(--bn-surface); color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
+.bn-assignment-shortcuts .bn-button[aria-pressed="true"] { background: var(--bn-accent-soft); color: var(--bn-accent-hover); border-color: var(--bn-accent); }
+.bn-assignment-shortcuts .bn-button[aria-pressed="true"]:hover { background: var(--bn-accent); color: #fff; border-color: var(--bn-accent); }
 .bn-assignment-shortcuts .bn-tool-status { margin-left: 4px; }
 @media (max-width: 480px) { .bn-assignment-shortcuts { padding: 12px; } .bn-assignment-shortcuts .bn-tool-status { flex-basis: 100%; margin: 2px 0 0; } }
 `;
@@ -28,32 +30,25 @@ export const assignmentShortcutsFeature: Feature = {
   routeScope: 'document',
   enabled: (settings) => settings.assignmentShortcuts,
   matches: isAssignmentCenter,
-  mount: ({ signal }) => {
-    if (signal.aborted) return;
-    const removeStyle = addStyle('assignment-shortcuts', styles);
+  mount: ({ signal: parentSignal }) => {
+    if (parentSignal.aborted) return;
+    const scope = createScope(parentSignal);
+    const { signal } = scope;
+    scope.style('assignment-shortcuts', styles);
+    const ownership = createAttributeOwnership();
+    scope.add(ownership.clear);
     let selected: AssignmentShortcut = 'all';
-    let disposed = false;
     let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
     const loaded = new Map<HTMLElement, NativeAssignmentRow | null>();
-    const hidden = new Set<HTMLElement>();
     const toolbars = new Map<HTMLElement, {
       toolbar: HTMLDivElement;
       status: HTMLSpanElement;
-      controls: Array<{ key: AssignmentShortcut; button: HTMLButtonElement; choose: () => void }>;
+      controls: Array<{ key: AssignmentShortcut; button: HTMLButtonElement }>;
     }>();
-    const clearHidden = () => {
-      for (const element of hidden) {
-        if (element.getAttribute(hiddenAttribute) === 'true') element.removeAttribute(hiddenAttribute);
-      }
-      hidden.clear();
-    };
-    const hide = (element: HTMLElement) => {
-      element.setAttribute(hiddenAttribute, 'true');
-      hidden.add(element);
-    };
+    const hide = (element: HTMLElement) => ownership.mark(element, hiddenAttribute, 'true');
     const update = () => {
-      if (disposed || signal.aborted) return;
-      clearHidden();
+      if (signal.aborted) return;
+      ownership.clear();
       if (!toolbars.size) return;
       const rows = [...loaded.values()].filter((row): row is NativeAssignmentRow => row !== null && isNativeAssignmentVisible(row.element));
       const now = new Date();
@@ -78,50 +73,20 @@ export const assignmentShortcutsFeature: Feature = {
     };
     let queued = false;
     const queueUpdate = () => {
-      if (queued || disposed || signal.aborted) return;
+      if (queued || signal.aborted) return;
       queued = true;
       queueMicrotask(() => { queued = false; update(); });
     };
 
-    // Discovery examines added subtrees. Each row owns its metadata and the
-    // ancestor visibility that can change without replacing that row.
     const stopRows = watchAddedElements<HTMLElement>(ASSIGNMENT_ROW_SELECTOR, (element) => {
-      let ancestors: HTMLElement[] = [];
-      const currentAncestors = () => {
-        const result: HTMLElement[] = [];
-        for (let parent = element.parentElement; parent; parent = parent.parentElement) result.push(parent);
-        return result;
-      };
-      const observer = new MutationObserver((records) => {
-        const nextAncestors = currentAncestors();
-        const moved = ancestors.length !== nextAncestors.length || ancestors.some((parent, index) => parent !== nextAncestors[index]);
-        const metadataChanged = records.some((record) => element.contains(record.target));
-        const visibilityChanged = records.some((record) => record.type === 'attributes' && ancestors.includes(record.target as HTMLElement));
-        if (!moved && !metadataChanged && !visibilityChanged) return;
-        if (moved) observeRow();
-        if (moved || metadataChanged) loaded.set(element, readAssignmentRow(element));
-        queueUpdate();
-      });
-      const observeRow = () => {
-        observer.disconnect();
-        observer.observe(element, {
-          childList: true, subtree: true, characterData: true, attributes: true,
-          attributeFilter: ['class', 'href', 'hidden', 'style', 'aria-hidden'],
-        });
-        ancestors = currentAncestors();
-        for (const parent of ancestors) {
-          // Direct child changes also identify moves into a different group.
-          observer.observe(parent, {
-            childList: true, attributes: true,
-            attributeFilter: ['class', 'hidden', 'style', 'aria-hidden'],
-          });
-        }
-      };
-      observeRow();
       loaded.set(element, readAssignmentRow(element));
       queueUpdate();
+      const stopContext = observeElementContext(element, ({ moved, contents }) => {
+        if (moved || contents) loaded.set(element, readAssignmentRow(element));
+        queueUpdate();
+      }, { subtree: true });
       return () => {
-        observer.disconnect();
+        stopContext();
         loaded.delete(element);
         queueUpdate();
       };
@@ -129,7 +94,9 @@ export const assignmentShortcutsFeature: Feature = {
 
     const stopToolbars = watchAddedElements<HTMLElement>(ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, (nativeToolbar) => {
       const page = nativeToolbar.ownerDocument;
-      const toolbar = page.createElement('div');
+      const toolbarScope = createScope(signal);
+      const toolbar = markOwned(page.createElement('div'));
+      toolbarScope.add(() => toolbar.remove());
       toolbar.className = 'bn-assignment-shortcuts';
       toolbar.setAttribute('role', 'group');
       toolbar.setAttribute('aria-label', 'Assignment shortcuts');
@@ -140,42 +107,40 @@ export const assignmentShortcutsFeature: Feature = {
       const controls = shortcuts.map(({ key, label, icon }) => {
         const button = createButton(label, icon);
         const choose = () => {
-          if (disposed || signal.aborted || !toolbars.has(nativeToolbar)) return;
+          if (signal.aborted || !toolbars.has(nativeToolbar)) return;
           selected = key;
           update();
         };
-        button.addEventListener('click', choose);
+        toolbarScope.listen(button, 'click', choose);
         toolbar.append(button);
-        return { key, button, choose };
+        return { key, button };
       });
       toolbar.append(status);
       let parent: HTMLElement | null = null;
-      const observer = new MutationObserver((records) => {
-        if (nativeToolbar.parentElement !== parent ||
-          (toolbars.has(nativeToolbar) && toolbar.previousElementSibling !== nativeToolbar) ||
-          records.some((record) => nativeToolbar.contains(record.target))) refresh();
-      });
+      let stopParent = () => {};
       const refresh = (immediate = false) => {
-        if (disposed || signal.aborted || !nativeToolbar.isConnected) return;
+        if (signal.aborted || !nativeToolbar.isConnected) return;
         if (nativeToolbar.parentElement !== parent) {
+          stopParent();
           parent = nativeToolbar.parentElement;
-          observer.disconnect();
-          observer.observe(nativeToolbar, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label'] });
-          if (parent) observer.observe(parent, { childList: true });
+          if (parent) stopParent = observeDom(() => {
+            if (nativeToolbar.parentElement !== parent ||
+              (toolbars.has(nativeToolbar) && toolbar.previousElementSibling !== nativeToolbar)) refresh();
+          }, toolbarScope.signal, parent);
         }
         if (nativeToolbar.matches(ASSIGNMENT_TOOLBAR_SELECTOR)) toolbars.set(nativeToolbar, { toolbar, status, controls });
         else { toolbars.delete(nativeToolbar); toolbar.remove(); }
         if (immediate) update();
         else queueUpdate();
       };
+      toolbarScope.add(() => stopParent());
+      toolbarScope.add(observeElementContext(nativeToolbar, () => refresh(), { subtree: true }));
       refresh(true);
-      return () => {
-        observer.disconnect();
+      toolbarScope.add(() => {
         toolbars.delete(nativeToolbar);
-        for (const { button, choose } of controls) button.removeEventListener('click', choose);
-        toolbar.remove();
         queueUpdate();
-      };
+      });
+      return toolbarScope.dispose;
     }, signal);
 
     const scheduleRollover = () => {
@@ -183,26 +148,17 @@ export const assignmentShortcutsFeature: Feature = {
       const now = new Date();
       const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       rolloverTimer = setTimeout(() => {
-        if (disposed || signal.aborted) return;
+        if (signal.aborted) return;
         update();
         scheduleRollover();
       }, Math.max(1, nextDay.getTime() - now.getTime()));
     };
     const visible = () => { update(); scheduleRollover(); };
-    document.addEventListener('visibilitychange', visible);
+    scope.listen(document, 'visibilitychange', visible);
     scheduleRollover();
-    const cleanup = () => {
-      if (disposed) return;
-      disposed = true;
-      stopToolbars();
-      stopRows();
-      clearTimeout(rolloverTimer);
-      document.removeEventListener('visibilitychange', visible);
-      clearHidden();
-      removeStyle();
-      signal.removeEventListener('abort', cleanup);
-    };
-    signal.addEventListener('abort', cleanup, { once: true });
-    return cleanup;
+    scope.add(() => clearTimeout(rolloverTimer));
+    scope.add(stopRows);
+    scope.add(stopToolbars);
+    return scope.dispose;
   },
 };

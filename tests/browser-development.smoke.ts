@@ -62,7 +62,9 @@ test('real Chrome loads, rebuilds, reloads, retains settings, and recovers from 
     });
     await queue.buildNow();
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#blackbaud-next-tools');
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--bn-accent').trim() === '#0066a1');
+    await page.evaluate(() => document.head.replaceChildren());
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bn-accent').trim()), '#0066a1');
     let popup = await browser.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     await popup.waitForSelector('#enabled:not(:disabled)');

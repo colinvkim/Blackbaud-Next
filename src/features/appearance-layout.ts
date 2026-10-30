@@ -3,6 +3,7 @@ import { isLmsPage } from '../blackbaud/routes.ts';
 import { nativeAppearanceNavigation } from '../blackbaud/appearance-icons.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { observeDom, watchAddedElements } from '../shared/dom.ts';
+import { createScope } from '../shared/scope.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 import { createNavigationIcons } from './navigation-icons.ts';
 import { nativeHeaderAppearanceTargets } from '../blackbaud/header-appearance.ts';
@@ -20,9 +21,10 @@ export const appearanceLayoutFeature: Feature = {
   enabled: (settings) => settings.pageAppearance,
   matches: (url) => nativeAppearancePageKind(url) !== null || nativeModernAppearanceRoute(url) !== null ||
     (isLmsPage(url) && !url.username && !url.password && /^\/app\/student\/?$/i.test(url.pathname)),
-  mount: ({ url, signal }) => {
-    if (signal.aborted) return;
-    let disposed = false;
+  mount: ({ url, signal: parentSignal }) => {
+    if (parentSignal.aborted) return;
+    const scope = createScope(parentSignal);
+    const { signal } = scope;
     let queued = false;
     let contentDirty = true;
     let shellDirty = true;
@@ -40,7 +42,7 @@ export const appearanceLayoutFeature: Feature = {
     const contentRoot = (element: HTMLElement) => element.id === 'site-main' ||
       ['SKY-TOOLBAR', 'SKY-REPEATER', 'SKY-REPEATER-ITEM'].includes(element.tagName);
     const queueUpdate = (content: boolean, shell: boolean) => {
-      if (disposed || signal.aborted) return;
+      if (signal.aborted) return;
       contentDirty ||= content;
       shellDirty ||= shell;
       if (queued) return;
@@ -165,7 +167,7 @@ export const appearanceLayoutFeature: Feature = {
       headerAppearance.update(headerTargets.some(({ part }) => part === 'spacer') ? headerTargets : []);
     };
     const update = () => {
-      if (disposed || signal.aborted || (!contentDirty && !shellDirty)) return;
+      if (signal.aborted || (!contentDirty && !shellDirty)) return;
       const current = window.location.href === url.href;
       if (!current) { contentDirty = true; shellDirty = true; }
       refreshObservations();
@@ -197,11 +199,9 @@ export const appearanceLayoutFeature: Feature = {
       };
     }, signal, document, ['id', 'class']);
     update();
-    window.addEventListener('hashchange', navigationChanged);
-    window.addEventListener('popstate', navigationChanged);
-    const cleanup: Cleanup = () => {
-      if (disposed) return;
-      disposed = true;
+    scope.listen(window, 'hashchange', navigationChanged);
+    scope.listen(window, 'popstate', navigationChanged);
+    scope.add(() => {
       stopRoots();
       for (const cleanup of observations.values()) cleanup();
       observations.clear();
@@ -213,14 +213,10 @@ export const appearanceLayoutFeature: Feature = {
       shellSemantics.clear();
       discovered.clear();
       rootScopes.clear();
-      window.removeEventListener('hashchange', navigationChanged);
-      window.removeEventListener('popstate', navigationChanged);
-      signal.removeEventListener('abort', cleanup);
       navigationIcons.clear();
       headerAppearance.clear();
       markers.clear();
-    };
-    signal.addEventListener('abort', cleanup, { once: true });
-    return cleanup;
+    });
+    return scope.dispose;
   },
 };

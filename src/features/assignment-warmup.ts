@@ -1,5 +1,6 @@
 import { ASSIGNMENT_WARMUP_SOURCE_SELECTOR, assignmentWarmupConnection, assignmentWarmupDestination, assignmentWarmupDestinationKey, assignmentWarmupIntentLink, assignmentWarmupRules, canPrepareAssignmentCenter, isAssignmentWarmupPage, isAssignmentWarmupSource, supportsAssignmentWarmup } from '../blackbaud/assignment-warmup.ts';
-import { isActionable, watchAddedElements } from '../shared/dom.ts';
+import { isActionable, markOwned, observeElementContext, watchAddedElements } from '../shared/dom.ts';
+import { createScope } from '../shared/scope.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 
 export const ASSIGNMENT_WARMUP_SETTLE_DELAY = 600;
@@ -12,44 +13,16 @@ interface Source {
   key: string;
 }
 
-function watchWarmupSource(element: HTMLElement, changed: () => void): Cleanup {
-  let ancestors: HTMLElement[] = [];
-  let disposed = false;
-  const observer = new MutationObserver(() => {
-    if (disposed) return;
-    refresh();
-    changed();
-  });
-  function refresh() {
-    const current: HTMLElement[] = [];
-    for (let node: HTMLElement | null = element; node; node = node.parentElement) current.push(node);
-    if (current.length === ancestors.length && current.every((node, index) => node === ancestors[index])) return;
-    observer.disconnect();
-    ancestors = current;
-    for (const node of ancestors) {
-      observer.observe(node, {
-        attributes: true,
-        attributeFilter: ['href', 'class', 'hidden', 'style', 'aria-hidden', 'inert', 'disabled', 'aria-disabled'],
-        childList: true,
-      });
-    }
-  }
-  refresh();
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    observer.disconnect();
-    ancestors = [];
-  };
-}
-
 export const assignmentWarmupFeature: Feature = {
   id: 'assignment-center-preparation',
   enabled: (settings) => settings.prepareAssignmentCenter && !settings.oldAssignmentCenter,
   settingsKeys: [],
   matches: isAssignmentWarmupPage,
-  mount: ({ url, signal }) => {
-    if (signal.aborted || !isAssignmentWarmupPage(url) || !supportsAssignmentWarmup()) return;
+  mount: ({ url, signal: parentSignal }) => {
+    if (parentSignal.aborted || !isAssignmentWarmupPage(url) || !supportsAssignmentWarmup()) return;
+    const scope = createScope(parentSignal);
+    const { signal } = scope;
+    const listeners = createScope(signal);
     const schedules = new Set<HTMLElement>();
     const links = new Set<HTMLAnchorElement>();
     const connection = assignmentWarmupConnection();
@@ -61,20 +34,12 @@ export const assignmentWarmupFeature: Feature = {
     let rule: HTMLScriptElement | null = null;
     let attempted = false;
     let terminal = false;
-    let disposed = false;
     let stopDiscovery: Cleanup = () => {};
 
     const clearIntent = () => {
       stopIntent();
       stopIntent = () => {};
       intentLink = null;
-    };
-    const removeListeners = () => {
-      document.removeEventListener('visibilitychange', update);
-      connection?.removeEventListener?.('change', update);
-      document.removeEventListener('pointerover', prepareIntent);
-      document.removeEventListener('focusin', prepareIntent);
-      document.removeEventListener('pointerdown', prepareIntent);
     };
 
     const cancelPreparation = () => {
@@ -91,7 +56,7 @@ export const assignmentWarmupFeature: Feature = {
       cancelPreparation();
       stopDiscovery();
       clearIntent();
-      removeListeners();
+      listeners.dispose();
     };
     const currentSource = (): Source | null => {
       if (intentLink) {
@@ -109,12 +74,12 @@ export const assignmentWarmupFeature: Feature = {
       (!candidate.schedule || isActionable(candidate.schedule)) && isActionable(candidate.link);
     const startPreparation = () => {
       settleTimer = undefined;
-      if (disposed || terminal || attempted) return;
+      if (signal.aborted || terminal || attempted) return;
       const candidate = currentSource();
       if (!eligible(candidate) || !source || candidate.schedule !== source.schedule || candidate.link !== source.link || candidate.key !== source.key ||
         (candidate.schedule && candidate.href !== source.href) || !document.head) return;
       attempted = true;
-      rule = document.createElement('script');
+      rule = markOwned(document.createElement('script'));
       rule.id = 'blackbaud-next-assignment-warmup';
       rule.type = 'speculationrules';
       rule.textContent = assignmentWarmupRules(candidate.href);
@@ -122,7 +87,7 @@ export const assignmentWarmupFeature: Feature = {
       expiryTimer = setTimeout(finishAttempt, ASSIGNMENT_WARMUP_LIFETIME);
     };
     function update() {
-      if (disposed || terminal || signal.aborted) return;
+      if (terminal || signal.aborted) return;
       const candidate = currentSource();
       const changed = candidate?.schedule !== source?.schedule || candidate?.key !== source?.key ||
         (candidate?.schedule && (candidate.link !== source?.link || candidate.href !== source?.href));
@@ -141,7 +106,7 @@ export const assignmentWarmupFeature: Feature = {
     }
 
     function prepareIntent(event: Event) {
-      if (disposed || terminal || signal.aborted || (attempted && source?.schedule)) return;
+      if (terminal || signal.aborted || (attempted && source?.schedule)) return;
       const link = assignmentWarmupIntentLink(event);
       const href = link && assignmentWarmupDestination(link, url);
       if (!link || !href || !isActionable(link) || window.location.href !== url.href || !canPrepareAssignmentCenter()) return;
@@ -155,21 +120,22 @@ export const assignmentWarmupFeature: Feature = {
       if (intentLink !== link) {
         clearIntent();
         intentLink = link;
-        stopIntent = watchWarmupSource(link, update);
+        stopIntent = observeElementContext(link, update);
       }
       update();
     }
 
-    document.addEventListener('visibilitychange', update);
+    listeners.listen(document, 'visibilitychange', update);
     connection?.addEventListener?.('change', update);
-    document.addEventListener('pointerover', prepareIntent);
-    document.addEventListener('focusin', prepareIntent);
-    document.addEventListener('pointerdown', prepareIntent);
+    listeners.add(() => connection?.removeEventListener?.('change', update));
+    listeners.listen(document, 'pointerover', prepareIntent);
+    listeners.listen(document, 'focusin', prepareIntent);
+    listeners.listen(document, 'pointerdown', prepareIntent);
     if (isAssignmentWarmupSource(url)) stopDiscovery = watchAddedElements<HTMLElement>(ASSIGNMENT_WARMUP_SOURCE_SELECTOR, (element) => {
-      if (terminal || disposed) return;
+      if (terminal || signal.aborted) return;
       if (element.id === 'accordionSchedules') schedules.add(element);
       else if (element.tagName === 'A') links.add(element as HTMLAnchorElement);
-      const stopWatching = watchWarmupSource(element, update);
+      const stopWatching = observeElementContext(element, update);
       update();
       return () => {
         stopWatching();
@@ -178,16 +144,11 @@ export const assignmentWarmupFeature: Feature = {
         update();
       };
     }, signal, document, ['id']);
-    const cleanup = () => {
-      if (disposed) return;
-      disposed = true;
+    scope.add(() => {
       cancelPreparation();
       stopDiscovery();
       clearIntent();
-      removeListeners();
-      signal.removeEventListener('abort', cleanup);
-    };
-    signal.addEventListener('abort', cleanup, { once: true });
-    return cleanup;
+    });
+    return scope.dispose;
   },
 };

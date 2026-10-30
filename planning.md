@@ -141,6 +141,6 @@ The compiled Chrome regression holds parsing open, verifies the first shell befo
 
 ## Verification and extension points
 
-Run `rtk pnpm check`, `rtk pnpm test`, and `rtk pnpm build`. Synthetic fixtures contain no copied student records. Use the README smoke checklist against authenticated Blackbaud pages.
+Run `pnpm check`, `pnpm test`, and `pnpm build`. Synthetic fixtures contain no copied student records. Use the README smoke checklist against authenticated Blackbaud pages.
 
 Future improvements should be a feature module plus a narrowly scoped adapter and regression coverage for its meaningful behavior. Expand school and page coverage from observed DOM evidence. Add richer rendered components only when a workflow requires them.

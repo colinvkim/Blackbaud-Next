@@ -1,19 +1,21 @@
 import { classDestinationForSection, classSearchTerms, NATIVE_CLASS_CONTROL_SELECTOR, NATIVE_CLASS_NAVIGATION_SELECTOR, NATIVE_CLASSES_MENU_SELECTOR, nativeClassMenuItems, nativeClassRowVisible, nativeClassSearchReference, normalizeClassSearch } from '../blackbaud/class-navigation.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { addStyle, createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
+import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
+import { createButton, markOwned, observeDom, observeElementContext, watchAddedElements, watchElements } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
+import { createScope } from '../shared/scope.ts';
 import type { Cleanup, Feature } from '../shared/types.ts';
 
 const hiddenAttribute = 'data-blackbaud-next-class-hidden';
 const menuAttribute = 'data-blackbaud-next-class-menu';
 const styles = `
-[${menuAttribute}] .bn-class-search { display: flex; flex-wrap: wrap; align-items: center; clear: both; box-sizing: border-box; width: 100%; gap: 8px; padding: 12px; border-bottom: 1px solid var(--bn-border, #dde3e8); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: 14px/1.5 var(--bn-font, "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif); }
-.bn-class-search label { margin: 0; color: var(--bn-text, #222a35); font-size: 13px; font-weight: 600; }
-.bn-class-search input { box-sizing: border-box; min-height: 36px; flex: 1 1 160px; min-width: 0; padding: 6px 10px; border: 1px solid var(--bn-border-strong, #bbc7d1); border-radius: var(--bn-radius, 8px); background: var(--bn-surface, #fff); color: var(--bn-text, #222a35); font: inherit; }
-.bn-class-search input:focus-visible { outline: 2px solid var(--bn-accent, #0066a1); outline-offset: 3px; }
+[${menuAttribute}] .bn-class-search { display: flex; flex-wrap: wrap; align-items: center; clear: both; box-sizing: border-box; width: 100%; gap: 8px; padding: 12px; border-bottom: 1px solid var(--bn-border); background: var(--bn-surface); color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
+.bn-class-search label { margin: 0; color: var(--bn-text); font-size: 13px; font-weight: 600; }
+.bn-class-search input { box-sizing: border-box; min-height: 36px; flex: 1 1 160px; min-width: 0; padding: 6px 10px; border: 1px solid var(--bn-border-strong); border-radius: var(--bn-radius); background: var(--bn-surface); color: var(--bn-text); font: inherit; }
+.bn-class-search input:focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
 .bn-class-search [hidden] { display: none !important; }
 [${menuAttribute}] li[${hiddenAttribute}] { display: none !important; }
-.bn-class-search .bn-tool-status { flex-basis: 100%; color: var(--bn-muted, #657080); }
+.bn-class-search .bn-tool-status { flex-basis: 100%; color: var(--bn-muted); }
 @media (max-width: 480px), (pointer: coarse) { .bn-class-search input { min-height: 44px; } }
 `;
 let searchNumber = 0;
@@ -30,14 +32,18 @@ export const classNavigationFeature: Feature = {
   matches: isLmsPage,
   mount: ({ url, signal }) => {
     if (signal.aborted) return;
-    const removeStyle = addStyle('class-navigation', styles);
+    const scope = createScope(signal);
+    scope.style('class-navigation', styles);
     let query = '';
     const searches = new Set<() => void>();
     const updateSearches = () => { for (const updateSearch of searches) updateSearch(); };
     const mountMenu = (menu: HTMLElement): Cleanup => {
-      const previousMenuAttribute = menu.getAttribute(menuAttribute);
-      menu.setAttribute(menuAttribute, '');
-      const toolbar = document.createElement('div');
+      const menuScope = createScope(scope.signal);
+      const ownership = createAttributeOwnership();
+      menuScope.add(ownership.clear);
+      ownership.mark(menu, menuAttribute, '');
+      const toolbar = markOwned(document.createElement('div'));
+      menuScope.add(() => toolbar.remove());
       toolbar.className = 'bn-class-search';
       toolbar.setAttribute('role', 'search');
       toolbar.setAttribute('aria-label', 'Classes');
@@ -65,20 +71,11 @@ export const classNavigationFeature: Feature = {
       };
       insertToolbar();
       const links = new Map<HTMLAnchorElement, LinkState>();
-      const hiddenRows = new Map<HTMLElement, string | null>();
-      let disposed = false;
-      const restoreRow = (row: HTMLElement) => {
-        const previous = hiddenRows.get(row);
-        if (previous === undefined) return;
-        if (previous === null) row.removeAttribute(hiddenAttribute);
-        else row.setAttribute(hiddenAttribute, previous);
-        hiddenRows.delete(row);
-      };
       const restoreLink = (link: HTMLAnchorElement, state: LinkState) => {
         if (link.getAttribute('href') === state.appliedHref && state.appliedHref !== state.nativeHref) link.setAttribute('href', state.nativeHref);
       };
       const update = () => {
-        if (disposed || signal.aborted || !menu.isConnected) return;
+        if (menuScope.signal.aborted || !menu.isConnected) return;
         if (toolbar.parentElement !== menu) insertToolbar();
         if (input.value !== query) input.value = query;
         const items = nativeClassMenuItems(menu, url);
@@ -90,7 +87,7 @@ export const classNavigationFeature: Feature = {
             links.delete(link);
           }
         }
-        for (const row of hiddenRows.keys()) if (!currentRows.has(row)) restoreRow(row);
+        ownership.retain((element, attribute) => attribute === menuAttribute || currentRows.has(element));
         const terms = classSearchTerms(query);
         let total = 0;
         let matches = 0;
@@ -104,7 +101,7 @@ export const classNavigationFeature: Feature = {
           const destination = classDestinationForSection(state.nativeHref, url) ?? state.nativeHref;
           state.appliedHref = destination;
           if (link.getAttribute('href') !== destination) link.setAttribute('href', destination);
-          if (hiddenRows.has(row)) row.removeAttribute(hiddenAttribute);
+          ownership.restore(row, hiddenAttribute);
           const available = nativeClassRowVisible(row, menu);
           const matching = terms.every((term) => normalizeClassSearch(name).includes(term));
           if (available) {
@@ -112,17 +109,15 @@ export const classNavigationFeature: Feature = {
             if (matching) matches += 1;
           }
           if (terms.length && available && !matching) {
-            if (!hiddenRows.has(row)) hiddenRows.set(row, row.getAttribute(hiddenAttribute));
-            row.setAttribute(hiddenAttribute, '');
-          } else restoreRow(row);
+            ownership.mark(row, hiddenAttribute, '');
+          }
         }
         const hideClear = !query;
         if (clear.hidden !== hideClear) clear.hidden = hideClear;
         const message = terms.length ? matches ? `${matches} of ${total} classes` : `No classes match your search (0 of ${total}).` : `${total} ${total === 1 ? 'class' : 'classes'}`;
         if (status.textContent !== message) status.textContent = message;
       };
-      const textObserver = new MutationObserver(update);
-      textObserver.observe(menu, { subtree: true, characterData: true });
+      menuScope.add(observeElementContext(menu, update, { subtree: true }));
       const searchInput = () => { query = input.value; updateSearches(); };
       const clearSearch = () => { query = ''; updateSearches(); input.focus(); };
       const stopNativeMenuClose = (event: Event) => { event.stopPropagation(); };
@@ -130,27 +125,18 @@ export const classNavigationFeature: Feature = {
         if (event.key === 'Enter') event.preventDefault();
         if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
       };
-      input.addEventListener('input', searchInput);
-      input.addEventListener('keydown', preventSubmit);
-      clear.addEventListener('click', clearSearch);
-      toolbar.addEventListener('click', stopNativeMenuClose);
+      menuScope.listen(input, 'input', searchInput);
+      menuScope.listen(input, 'keydown', preventSubmit);
+      menuScope.listen(clear, 'click', clearSearch);
+      menuScope.listen(toolbar, 'click', stopNativeMenuClose);
       searches.add(update);
       update();
-      return () => {
-        disposed = true;
-        textObserver.disconnect();
+      menuScope.add(() => {
         searches.delete(update);
-        input.removeEventListener('input', searchInput);
-        input.removeEventListener('keydown', preventSubmit);
-        clear.removeEventListener('click', clearSearch);
-        toolbar.removeEventListener('click', stopNativeMenuClose);
-        for (const row of hiddenRows.keys()) restoreRow(row);
         for (const [link, state] of links) restoreLink(link, state);
         links.clear();
-        toolbar.remove();
-        if (previousMenuAttribute === null) menu.removeAttribute(menuAttribute);
-        else menu.setAttribute(menuAttribute, previousMenuAttribute);
-      };
+      });
+      return menuScope.dispose;
     };
     // Native desktop and mobile shells are separate. Share ownership if an
     // unexpected nested shell exposes the same menu to both scoped watchers.
@@ -168,33 +154,23 @@ export const classNavigationFeature: Feature = {
         menus.delete(menu);
       };
     };
-    const stopNavigation = watchAddedElements<HTMLElement>(NATIVE_CLASS_NAVIGATION_SELECTOR, (navigation) => {
-      const controller = new AbortController();
-      watchElements(NATIVE_CLASSES_MENU_SELECTOR, retainMenu, controller.signal, navigation);
+    scope.add(watchAddedElements<HTMLElement>(NATIVE_CLASS_NAVIGATION_SELECTOR, (navigation) => {
+      const navigationScope = createScope(scope.signal);
+      navigationScope.add(watchElements(NATIVE_CLASSES_MENU_SELECTOR, retainMenu, navigationScope.signal, navigation));
       // Validation also depends on the controlling anchor and its ancestors,
       // outside the menu itself. These small shells capture their mutations.
-      observeDom(updateSearches, controller.signal, navigation);
+      navigationScope.add(observeDom(updateSearches, navigationScope.signal, navigation));
       return () => {
-        controller.abort();
+        navigationScope.dispose();
         updateSearches();
       };
-    }, signal, document, ['id']);
+    }, scope.signal, document, ['id']));
     // Modern rows require one unambiguous desktop control. A duplicate added
     // outside navigation must invalidate existing rows without a page scan.
-    const stopControls = watchAddedElements(NATIVE_CLASS_CONTROL_SELECTOR, () => {
+    scope.add(watchAddedElements(NATIVE_CLASS_CONTROL_SELECTOR, () => {
       updateSearches();
       return updateSearches;
-    }, signal, document, ['id']);
-    let disposed = false;
-    const cleanup = () => {
-      if (disposed) return;
-      disposed = true;
-      stopControls();
-      stopNavigation();
-      removeStyle();
-      signal.removeEventListener('abort', cleanup);
-    };
-    signal.addEventListener('abort', cleanup, { once: true });
-    return cleanup;
+    }, scope.signal, document, ['id']));
+    return scope.dispose;
   },
 };
