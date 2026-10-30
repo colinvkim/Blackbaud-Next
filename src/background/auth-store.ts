@@ -9,41 +9,36 @@ export class AuthStore {
 
   constructor(storage: StorageArea) { this.storage = storage; }
 
-  request(request: AuthRequest): Promise<AuthContext[] | AuthContext | null> {
+  request(request: AuthRequest, tabId: number): Promise<AuthContext[] | AuthContext | null> {
     // One worker owns every flow mutation. A rejected operation must not leave
     // later reads, pauses or claims stuck behind a rejected queue.
-    const result = this.pending.then(() => this.perform(request));
+    const result = this.pending.then(() => this.perform(request, tabId));
     this.pending = result.then(() => {}, () => {});
     return result;
   }
 
-  private async perform(request: AuthRequest): Promise<AuthContext[] | AuthContext | null> {
-    if (request.action === 'list') {
-      const values = await this.storage.get(null);
-      const contexts: AuthContext[] = [];
-      const expired: string[] = [];
-      for (const [key, value] of Object.entries(values)) {
-        if (!key.startsWith(AUTH_CONTEXT_PREFIX)) continue;
-        const context = parseAuthContext(value);
-        if (context && key === `${AUTH_CONTEXT_PREFIX}${context.id}`) contexts.push(context);
-        else expired.push(key);
-      }
-      if (expired.length) await this.storage.remove(expired);
-      return contexts;
-    }
-    const key = `${AUTH_CONTEXT_PREFIX}${request.id}`;
-    if (request.action === 'create') {
-      const context = createAuthContext(request.hostname, request.id);
-      await this.storage.set({ [key]: context });
-      return context;
-    }
-    if (request.action === 'remove') {
-      await this.storage.remove(key);
-      return null;
-    }
+  private async perform(request: AuthRequest, tabId: number): Promise<AuthContext[] | AuthContext | null> {
+    const key = `${AUTH_CONTEXT_PREFIX}${tabId}`;
     const values = await this.storage.get(key);
     const context = parseAuthContext(values[key]);
-    if (!context) return null;
+    if (request.action === 'list') {
+      if (!context && key in values) await this.storage.remove(key);
+      return context ? [context] : [];
+    }
+    if (request.action === 'create') {
+      if (context?.id === request.id) {
+        if (context.hostname !== request.hostname.toLowerCase()) throw new Error('The auth flow belongs to another school.');
+        return context;
+      }
+      const created = createAuthContext(request.hostname, request.id);
+      await this.storage.set({ [key]: created });
+      return created;
+    }
+    if (!context || context.id !== request.id) return null;
+    if (request.action === 'remove') {
+      if (context.hostname === request.hostname) await this.storage.remove(key);
+      return null;
+    }
     if (request.action === 'pause') {
       const paused = { ...context, paused: true };
       await this.storage.set({ [key]: paused });

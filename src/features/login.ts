@@ -1,13 +1,12 @@
 import { THEME_TOKENS } from '../shared/theme.ts';
-import { accountPreferenceForSchool, canAttempt, hasSigninRedirect, schoolFromSigninUrl, selectAuthContext, selectProviderAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
+import { accountPreferenceForSchool, canAttempt, hasSigninRedirect, schoolFromSigninUrl, selectAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
 import type { AuthContext } from '../blackbaud/auth.ts';
-import { accountChoices, findBlackbaudGoogleButton, findGoogleAccount, findSchoolSigninAnchor } from '../blackbaud/auth-dom.ts';
-import { blackbaudSigninUrl, isBlackbaudSignin, isGoogleOAuth, isLmsPage, isSchoolPage } from '../blackbaud/routes.ts';
-import { markOwned, addStyle, createButton, observeDom, waitForElement, waitForReadyElement } from '../shared/dom.ts';
+import { accountChoices, findAuthenticatedSchoolRoot, findBlackbaudGoogleButton, findGoogleAccount, findSchoolSigninAnchor } from '../blackbaud/auth-dom.ts';
+import { blackbaudSigninUrl, isBlackbaudSignin, isGoogleOAuth, isLmsPage, isSchoolPage, isStudentPortal } from '../blackbaud/routes.ts';
+import { markOwned, addStyle, createButton, observeDom, waitForReadyElement } from '../shared/dom.ts';
 import { claimAuthAttempt, createAuthFlow, pauseAuthFlow, readAuthContexts, recoverAuthFlow, removeAuthFlow, waitForAuthClaim } from '../shared/auth-flow.ts';
 import type { Cleanup, Feature, FeatureContext } from '../shared/types.ts';
 
-const TAB_FLOW_KEY = 'blackbaud-next-auth-flow-id';
 const providerFlows = new WeakMap<Document, string>();
 const LOGIN_STYLE = `
 .bn-login-option { margin-top: 12px; color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
@@ -24,14 +23,6 @@ const LOGIN_STYLE = `
 @media (prefers-reduced-motion: reduce) { #blackbaud-next-signin-status { scroll-behavior: auto; } }
 `;
 
-function readTabFlowId(): string | undefined {
-  try { return sessionStorage.getItem(TAB_FLOW_KEY) ?? undefined; } catch { return undefined; }
-}
-
-function rememberTabFlow(id: string): void {
-  try { sessionStorage.setItem(TAB_FLOW_KEY, id); } catch { /* Storage can be disabled by the browser. */ }
-}
-
 async function waitForAccountChoices(signal: AbortSignal, preference: string): Promise<HTMLElement[]> {
   if (preference.includes('@')) {
     // An exact address cannot become ambiguous when other accounts arrive, so
@@ -39,7 +30,7 @@ async function waitForAccountChoices(signal: AbortSignal, preference: string): P
     const intendedAccount = preference.trim().toLowerCase();
     return await waitForReadyElement(() => findGoogleAccount(preference, intendedAccount), signal) ? accountChoices() : [];
   }
-  if (!await waitForElement('[data-email]', signal, 10_000) || signal.aborted) return [];
+  if (!await waitForReadyElement(() => accountChoices()[0] ?? null, signal, 10_000) || signal.aborted) return [];
   return new Promise((resolve) => {
     let stop: Cleanup = () => {};
     let settled = false;
@@ -69,10 +60,8 @@ async function waitForAccountChoices(signal: AbortSignal, preference: string): P
   });
 }
 
-async function newContext(hostname: string): Promise<AuthContext> {
-  const context = await createAuthFlow(hostname, crypto.randomUUID());
-  rememberTabFlow(context.id);
-  return context;
+function newContext(hostname: string): Promise<AuthContext> {
+  return createAuthFlow(hostname, crypto.randomUUID());
 }
 
 function mountLogin(context: FeatureContext): Cleanup {
@@ -171,12 +160,7 @@ function mountLogin(context: FeatureContext): Cleanup {
         if (context.signal.aborted) return;
         button.disabled = true;
         try {
-          // The school page already prepares a flow for native sign-in. Reuse
-          // its ID so the direct button cannot create an ambiguous second flow.
-          if (flow && flow.hostname === url.hostname) {
-            flow = await createAuthFlow(url.hostname, flow.id);
-            rememberTabFlow(flow.id);
-          } else {
+          if (!flow || flow.hostname !== url.hostname || !canAttempt(flow, 'blackbaud')) {
             flow = await newContext(url.hostname);
           }
           if (!context.signal.aborted) window.location.assign(blackbaudSigninUrl(url.hostname));
@@ -197,17 +181,13 @@ function mountLogin(context: FeatureContext): Cleanup {
     if (signal.aborted) return;
     const contexts = await readAuthContexts();
     if (signal.aborted) return;
-    const storedId = readTabFlowId();
-    // Per-origin session storage survives returning to a provider later. An ID
-    // for a completed or expired flow cannot block a fresh unambiguous sign-in.
-    const rememberedId = contexts.some((candidate) => candidate.id === storedId) ? storedId : undefined;
     if (isSchoolPage(url)) {
-      // A school login starts this tab's flow. A context from a different tab
-      // must not be reused just because it happens to be the same school.
-      flow = rememberedId ? selectAuthContext(contexts, { id: rememberedId, hostname: url.hostname }) : null;
+      flow = selectAuthContext(contexts, { hostname: url.hostname });
       if (isLmsPage(url)) {
-        // Clear only the flow belonging to this tab's original school page.
-        if (flow && rememberedId) await removeAuthFlow(flow.id);
+        const completed = flow;
+        if (completed && isStudentPortal(url) && await waitForReadyElement(findAuthenticatedSchoolRoot, signal) && !signal.aborted) {
+          await removeAuthFlow(completed);
+        }
         return;
       }
       if (settings.automaticLogin && !flow) flow = await newContext(url.hostname);
@@ -219,16 +199,13 @@ function mountLogin(context: FeatureContext): Cleanup {
     const school = isBlackbaudSignin(url) ? schoolFromSigninUrl(url) : null;
     if (isBlackbaudSignin(url) && hasSigninRedirect(url) && !school) return;
     const boundId = providerFlows.get(page);
-    flow = boundId
-      ? selectAuthContext(contexts, { id: boundId, ...(school ? { hostname: school } : {}) })
-      : selectProviderAuthContext(contexts, { id: rememberedId, ...(school ? { hostname: school } : {}), step: isBlackbaudSignin(url) ? 'blackbaud' : 'google' });
+    flow = selectAuthContext(contexts, { ...(boundId ? { id: boundId } : {}), ...(school ? { hostname: school } : {}) });
     if (!flow && !boundId && school && !contexts.some((candidate) => candidate.hostname === school)) flow = await newContext(school);
     if (!flow || signal.aborted) return;
     // A provider document keeps one flow across settings changes and BFCache
     // mounts. Spent attempts cannot make this same chooser borrow a newer flow.
     if (!boundId) providerFlows.set(page, flow.id);
     if (flow.paused) return;
-    rememberTabFlow(flow.id);
 
     if (isBlackbaudSignin(url)) {
       if (/\/signin\/error(?:\/|$)/i.test(url.pathname)) {

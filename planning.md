@@ -139,6 +139,12 @@ Live checks covered local search and clear, original-directory fallback after re
 
 The compiled Chrome regression holds parsing open, verifies the first shell before DOM readiness, then checks one people read after parsing. A second case chooses original fallback while loading and confirms a late native metadata success cannot replace Progress after departure. The saved pre-change extension fails the startup assertions. The new browser test takes 1.91 seconds alone. The isolated patch passes 715 unit tests and 12 browser test results, with type checking and production builds complete. Integration with the preexisting lifecycle changes passes 744 unit tests and 13 browser test results. Remote CI timings are not yet available.
 
+### Tab-isolated sign-in flows (2026-10-29)
+
+Provider scripts read preferences and tab-owned sign-in metadata while the page parses. Native DOM readiness and enabled controls gate automatic clicks. The worker keeps each tab's flow in session storage and validates its generation before completion or attempt changes. Authentication challenges and ambiguous account choices remain manual.
+
+The authenticated student shell clears only the flow observed by that document, including when Google redirects without displaying an account chooser. The legacy Assignment Center preference and loading-recovery action remain available.
+
 ## Verification and extension points
 
 Run `pnpm check`, `pnpm test`, and `pnpm build`. Synthetic fixtures contain no copied student records. Use the README smoke checklist against authenticated Blackbaud pages.

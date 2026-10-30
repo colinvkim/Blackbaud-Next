@@ -12,6 +12,10 @@ export function isLmsPage(url: URL): boolean {
   return isSchoolPage(url) && !isLoginPage(url);
 }
 
+export function isStudentPortal(url: URL): boolean {
+  return isLmsPage(url) && /^\/app\/student\/?$/i.test(url.pathname) && !url.username && !url.password;
+}
+
 export function isBlackbaudSignin(url: URL): boolean {
   return url.origin === 'https://app.blackbaud.com' && /^\/signin(?:\/|$)/.test(url.pathname);
 }

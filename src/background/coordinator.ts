@@ -1,5 +1,5 @@
 import { isSchoolHostname, schoolFromSigninUrl } from '../blackbaud/auth.ts';
-import { isBlackbaudSignin, isGoogleOAuth, isSchoolPage } from '../blackbaud/routes.ts';
+import { isBlackbaudSignin, isGoogleOAuth, isSchoolPage, isStudentPortal } from '../blackbaud/routes.ts';
 import type { AuthRequest } from '../shared/coordinator.ts';
 import type { ExtensionApi, MessageListener, MessageSender } from '../shared/extension.ts';
 import { settingsPatch } from '../shared/settings.ts';
@@ -13,7 +13,10 @@ function authRequest(raw: unknown): AuthRequest {
   if (raw.action === 'create' && 'hostname' in raw && typeof raw.hostname === 'string' && isSchoolHostname(raw.hostname)) {
     return { action: 'create', id: raw.id, hostname: raw.hostname };
   }
-  if (raw.action === 'remove' || raw.action === 'pause' || raw.action === 'recover') return { action: raw.action, id: raw.id };
+  if (raw.action === 'remove' && 'hostname' in raw && typeof raw.hostname === 'string' && isSchoolHostname(raw.hostname)) {
+    return { action: 'remove', id: raw.id, hostname: raw.hostname.toLowerCase() };
+  }
+  if (raw.action === 'pause' || raw.action === 'recover') return { action: raw.action, id: raw.id };
   if ((raw.action === 'claim' || raw.action === 'confirm' || raw.action === 'release') && 'step' in raw &&
     (raw.step === 'blackbaud' || raw.step === 'google') && 'token' in raw && typeof raw.token === 'string' && raw.token.trim() && raw.token.length <= 128) {
     return { action: raw.action, id: raw.id, step: raw.step, token: raw.token };
@@ -22,7 +25,7 @@ function authRequest(raw: unknown): AuthRequest {
 }
 
 export function createCoordinator(api: ExtensionApi): (message: unknown, sender: MessageSender) => Promise<unknown> {
-  const auth = new AuthStore(api.storage.local);
+  const auth = new AuthStore(api.storage.session);
   let settingsWrites = Promise.resolve();
   return async (raw, sender) => {
     if (sender.id !== api.runtime.id || !sender.url) throw new Error('Unrecognized extension sender.');
@@ -38,13 +41,16 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
       return undefined;
     }
     if (raw.kind !== 'auth' || !('request' in raw) || !(isSchoolPage(url) || isBlackbaudSignin(url) || isGoogleOAuth(url))) throw new Error('Invalid auth sender.');
+    const tabId = sender.tab?.id;
+    if (typeof tabId !== 'number' || !Number.isSafeInteger(tabId) || tabId < 0 || sender.frameId !== 0) throw new Error('Invalid auth tab.');
     const request = authRequest(raw.request);
     if (request.action === 'create') {
       const school = isSchoolPage(url) ? url.hostname : isBlackbaudSignin(url) ? schoolFromSigninUrl(url) : null;
       if (school !== request.hostname.toLowerCase()) throw new Error('The auth school does not match this page.');
     }
     if ('step' in request && ((request.step === 'blackbaud' && !isBlackbaudSignin(url)) || (request.step === 'google' && !isGoogleOAuth(url)))) throw new Error('The auth provider does not match this page.');
-    return auth.request(request);
+    if (request.action === 'remove' && (!isStudentPortal(url) || url.hostname !== request.hostname)) throw new Error('Invalid auth completion page.');
+    return auth.request(request, tabId);
   };
 }
 

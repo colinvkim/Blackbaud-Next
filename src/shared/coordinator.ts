@@ -5,7 +5,8 @@ export type AuthStep = 'blackbaud' | 'google';
 export type AuthRequest =
   | { action: 'list' }
   | { action: 'create'; id: string; hostname: string }
-  | { action: 'remove' | 'pause' | 'recover'; id: string }
+  | { action: 'remove'; id: string; hostname: string }
+  | { action: 'pause' | 'recover'; id: string }
   | { action: 'claim' | 'confirm' | 'release'; id: string; step: AuthStep; token: string };
 
 export type CoordinatorMessage =

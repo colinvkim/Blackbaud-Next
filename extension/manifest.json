@@ -12,7 +12,7 @@
     { "css": ["dist/appearance.css"], "js": ["dist/appearance.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start" },
     { "js": ["dist/directory-page.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start", "world": "MAIN" },
     { "js": ["dist/lms.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start" },
-    { "js": ["dist/auth.js"], "matches": ["https://accounts.google.com/*", "https://app.blackbaud.com/signin*"], "run_at": "document_end" }
+    { "js": ["dist/auth.js"], "matches": ["https://accounts.google.com/*", "https://app.blackbaud.com/signin*"], "run_at": "document_start" }
   ],
   "web_accessible_resources": [
     { "resources": ["assets/blackbaud.png"], "matches": ["https://*.myschoolapp.com/*"] }

@@ -16,8 +16,8 @@ export function createAuthFlow(hostname: string, id: string): Promise<AuthContex
   return requestAuth({ action: 'create', hostname, id });
 }
 
-export function removeAuthFlow(id: string): Promise<null> {
-  return requestAuth({ action: 'remove', id });
+export function removeAuthFlow(flow: AuthContext): Promise<null> {
+  return requestAuth({ action: 'remove', id: flow.id, hostname: flow.hostname });
 }
 
 export function pauseAuthFlow(id: string): Promise<AuthContext | null> {

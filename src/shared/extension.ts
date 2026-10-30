@@ -14,6 +14,8 @@ export interface MessageSender {
   id?: string;
   url?: string;
   documentId?: string;
+  tab?: { id?: number };
+  frameId?: number;
 }
 
 export type MessageListener = (message: unknown, sender: MessageSender, respond: (response: unknown) => void) => boolean | void;
@@ -22,6 +24,7 @@ export interface ExtensionApi {
   storage: {
     sync: StorageArea;
     local: StorageArea;
+    session: StorageArea;
     onChanged: {
       addListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void;
       removeListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void;

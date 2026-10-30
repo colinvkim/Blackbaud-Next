@@ -70,23 +70,6 @@ export function selectAuthContext(contexts: AuthContext[], options: { id?: strin
   return current.length === 1 ? current[0] ?? null : null;
 }
 
-export function selectProviderAuthContext(
-  contexts: AuthContext[],
-  options: { id?: string; hostname?: string; step: 'blackbaud' | 'google' },
-  now = Date.now(),
-): AuthContext | null {
-  const current = contexts.filter((context) => parseAuthContext(context, now) && (!options.hostname || context.hostname === options.hostname.toLowerCase()));
-  const remembered = options.id ? current.find((context) => context.id === options.id) : undefined;
-  if (!remembered) return selectAuthContext(contexts, options, now);
-  // Pauses and unfinished flows still belong to the remembered provider tab.
-  // Only a flow with no automatic steps remaining can yield to a newer intent.
-  if (remembered.paused || remembered.blackbaudAttempts !== 1 || remembered.googleAttempts !== 1) return remembered;
-  const pending = current.filter((context) => context[`${options.step}Attempts`] === 0 && context.hostname === remembered.hostname && context.createdAt > remembered.createdAt);
-  // Count paused pending flows too: ignoring them could borrow another tab's
-  // active context despite an ambiguous or manually paused sign-in.
-  return pending.length === 0 ? remembered : pending.length === 1 ? pending[0] ?? null : null;
-}
-
 export function schoolFromSigninUrl(url: URL): string | null {
   const redirects = [...url.searchParams].filter(([key]) => key === 'redirectUrl' || key === 'redirecturl').map(([, value]) => value);
   if (new Set(redirects).size !== 1) return null;
