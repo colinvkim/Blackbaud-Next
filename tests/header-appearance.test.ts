@@ -523,6 +523,33 @@ for (const modern of [false, true]) {
       }
     }
   });
+
+  test(`${modern ? 'modern' : 'legacy'} additional native communication content keeps its original layout and recovers when removed`, () => {
+    const { dom, page, url } = fixture(modern);
+    const appearance = createHeaderAppearance();
+    try {
+      for (const action of ['notes', 'messages']) {
+        const control = page.querySelector<HTMLAnchorElement>(action === 'notes' ? 'a[href$="#message/officialnotes"]' : '#inbox-link')!;
+        for (const container of [control, control.querySelector('.desc')!]) {
+          for (const markup of ['New native context', '<button type="button">Native action</button>']) {
+            appearance.update(nativeHeaderAppearanceTargets(page, url));
+            assert.equal(control.getAttribute(HEADER_APPEARANCE_PART_ATTRIBUTE), `tool-${action}`);
+            const template = page.createElement('template');
+            template.innerHTML = markup;
+            const extra = template.content.firstChild!;
+            container.append(extra);
+            appearance.update(nativeHeaderAppearanceTargets(page, url));
+            assert.equal(control.hasAttribute(HEADER_APPEARANCE_PART_ATTRIBUTE), false, `${action}: ${markup}`);
+            assert.equal(extra.parentNode, container, 'Unfamiliar native content stays in place');
+            assert.equal(control.querySelector('[data-bn-navigation-icon]'), null);
+            extra.remove();
+            appearance.update(nativeHeaderAppearanceTargets(page, url));
+            assert.equal(control.getAttribute(HEADER_APPEARANCE_PART_ATTRIBUTE), `tool-${action}`);
+          }
+        }
+      }
+    } finally { appearance.clear(); dom.window.close(); }
+  });
 }
 
 test('Calendar infers My Day and Schedule in the modern app and the Calendar destination in the legacy app', () => {

@@ -86,8 +86,8 @@ function utilityHeader(modern: boolean): string {
     : `<span class="desc"><span class="title">${text}</span></span>`;
   const list = `<ul class="topnav${modern ? ' user-nav' : ''}">
     <li><a href="${studentPage}#searchresults" data-native-utility="search">${modern ? '<span class="search"><sky-icon iconname="search"></sky-icon></span><sky-icon iconname="caret-down"></sky-icon>' : '<i class="topnav-icon p3icon-search"></i><span class="caret for-search"></span>'}</a><div class="subnavtop"></div><div class="subnav" data-native-menu="search"><div><input id="site-search-input" type="text" aria-label="Search the portal"></div></div></li>
-    <li><a ${modern ? 'id="official-notes"' : ''} href="${modern ? studentPage : ''}#message/officialnotes" data-native-utility="notes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>&nbsp;${description('Official Notes')}</a></li>
-    <li><a id="inbox-link" href="${modern ? studentPage : ''}#message/inbox" data-native-utility="messages"><span class="site-badge site-badge-message">0</span>&nbsp;${description('Messages')}</a></li>
+    <li><a ${modern ? 'id="official-notes"' : ''} href="${modern ? studentPage : ''}#message/officialnotes" data-native-utility="notes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Official Notes')}</a></li>
+    <li><a id="inbox-link" href="${modern ? studentPage : ''}#message/inbox" data-native-utility="messages"><span class="site-badge site-badge-message">0</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Messages')}</a></li>
     <li><a id="account-nav" href="#" data-native-utility="account"><div class="bb-avatar-wrapper-nav"><img class="bb-avatar-image-nav" src="${origin}/fixture-avatar.svg" alt=""></div>${description(modern ? 'Alex</div><div>Student' : 'Alex<br>Student')}${modern ? '<sky-icon iconname="caret-down"></sky-icon>' : '<span class="caret"></span>'}</a><div class="subnavtop"></div><div class="subnav" data-native-menu="account"><ul><li><a href="/app/student?svcid=edu#profile">Profile</a></li><li><a href="/app/student?svcid=edu#settings">Settings</a></li><li class="${modern ? 'sep' : 'divider'}"></li><li><a href="/app/SignOut">Sign out</a></li></ul></div></li>
   </ul>`;
   return `<div id="site-header-parent-container"><div id="site-header-container"><header id="site-header" class="${modern ? 'sky-container' : 'container'}"><div class="row"><div class="col-md-12">
@@ -108,6 +108,7 @@ function nativeFixture(modern: boolean): string {
     #site-logo img { display: block; width: 160px; height: 32px; }
     #site-mobile-btn { display: none; } #site-mobile-btn button { width: 44px; height: 44px; }
     #fixture-native-drawer { position: fixed; inset: 45px 0 0; z-index: 50; width: 240px; padding: 20px; background: #fff; border-right: 1px solid #ccc; }
+    #site-user-nav { height: 36px; margin-top: 5px; }
     #site-user-nav .topnav { display: flex; align-items: center; flex-wrap: wrap; }
     #site-user-nav .topnav > li > a { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 6px 10px; color: white; }
     #site-user-nav .topnav > li > a > .desc { float: none; padding: 0; }
@@ -116,6 +117,8 @@ function nativeFixture(modern: boolean): string {
     #site-user-nav .topnav-icon, #site-user-nav sky-icon[iconname="search"] { display: inline-block; width: 18px; height: 18px; }
     #site-user-nav .site-badge { min-width: 18px; padding: 2px; text-align: center; background: #e6edf3; color: #30445c; }
     .bb-avatar-image-nav { display: block; width: 26px; height: 26px; border-radius: 50%; }
+    .bb-avatar-wrapper-nav { position: relative; top: -1px; }
+    #account-nav { line-height: 26px !important; height: 36px !important; margin-top: 0 !important; padding-top: 4px !important; }
     #site-user-nav .topnav > li { position: relative; }
     #site-user-nav .subnav { display: none; position: absolute; right: 0; top: 100%; z-index: 10; }
     #site-nav-container { position: fixed; top: 45px; width: 100%; height: 55px; z-index: 20; }
@@ -168,9 +171,9 @@ function nativeFixture(modern: boolean): string {
     <script>const mobileButton = document.querySelector('#site-mobile-btn button'); const drawer = document.getElementById('fixture-native-drawer');
     mobileButton.addEventListener('click', () => { drawer.hidden = !drawer.hidden; mobileButton.setAttribute('aria-expanded', String(!drawer.hidden)); document.body.dataset.drawerActions = String(Number(document.body.dataset.drawerActions || 0) + 1); });
     drawer.querySelector('button').addEventListener('click', () => { drawer.hidden = true; mobileButton.setAttribute('aria-expanded', 'false'); });
-    const closeMenus = () => document.querySelectorAll('[data-native-menu], .subnavtop').forEach(menu => { menu.style.display = 'none'; menu.classList.remove('nav-visible'); });
+    const closeMenus = (root = document) => root.querySelectorAll('[data-native-menu], .subnavtop').forEach(menu => { menu.style.display = 'none'; menu.classList.remove('nav-visible'); });
     const showMenu = (link) => {
-      closeMenus(); const menu = link.parentElement.querySelector('[data-native-menu]');
+      closeMenus(${modern} ? document : link.closest('#site-header, #site-nav-container') || document); const menu = link.parentElement.querySelector('[data-native-menu]');
       if (menu) { menu.style.display = 'block'; menu.classList.add('nav-visible'); const pointer = link.parentElement.querySelector('.subnavtop'); if (pointer) pointer.style.display = 'block'; }
     };
     // Native legacy menus open on mouseover and close immediately when the pointer
@@ -182,7 +185,7 @@ function nativeFixture(modern: boolean): string {
         link.parentElement.querySelectorAll('[data-native-menu], .subnavtop').forEach(menu => { menu.style.display = 'none'; menu.classList.remove('nav-visible'); });
       });
     });
-    document.body.addEventListener('click', closeMenus);
+    document.body.addEventListener('click', () => closeMenus());
     document.querySelectorAll('#site-nav-container .topnav > li > a, #site-nav-lower ul > li > a').forEach(link => link.addEventListener('click', event => {
       event.preventDefault(); document.body.dataset.navigationActions = String(Number(document.body.dataset.navigationActions || 0) + 1);
       document.body.dataset.lastNavigationAction = link.id || link.textContent.trim();
@@ -191,7 +194,7 @@ function nativeFixture(modern: boolean): string {
       event.preventDefault(); document.body.dataset.utilityActions = String(Number(document.body.dataset.utilityActions || 0) + 1);
       document.body.dataset.lastUtilityAction = link.dataset.nativeUtility;
       const badge = link.querySelector('.site-badge'); if (badge) badge.textContent = String(Number(badge.textContent) + 1);
-      const menu = link.parentElement.querySelector('[data-native-menu]'); const wasOpen = menu && menu.style.display === 'block'; closeMenus();
+      const menu = link.parentElement.querySelector('[data-native-menu]'); const wasOpen = menu && menu.style.display === 'block'; closeMenus(${modern} ? document : link.closest('#site-header'));
       if (menu && !wasOpen) { event.stopPropagation(); menu.style.display = 'block'; menu.classList.add('nav-visible'); const pointer = link.parentElement.querySelector('.subnavtop'); if (pointer) pointer.style.display = 'block'; }
     })); document.querySelectorAll('[data-native-menu] a').forEach(link => link.addEventListener('click', event => {
       event.preventDefault(); document.body.dataset.menuActions = String(Number(document.body.dataset.menuActions || 0) + 1); document.body.dataset.lastMenuAction = link.getAttribute('href');
@@ -335,15 +338,16 @@ async function earlyAppearance(
       assert.equal(current.readyState, 'loading', `Appearance applies before DOMContentLoaded: ${evidence}`);
       assert.equal(current.shell, scenario.modern ? 'modern' : 'legacy');
       assert.equal(current.appearance, true);
-      assert.deepEqual(current.header && { top: current.header.top, height: current.header.height }, { top: 0, height: 52 }, `Preloaded CSS resizes the masthead before application startup finishes: ${evidence}`);
-      assert.deepEqual(current.primary && { top: current.primary.top, height: current.primary.height }, { top: 52, height: 61 }, `The primary bar is coordinated with the early masthead: ${evidence}`);
-      assert.deepEqual(current.tabs && { top: current.tabs.top, height: current.tabs.height }, { top: 113, height: 55 }, `The third bar has its final geometry before parsing ends: ${evidence}`);
-      assert.equal(current.spacer?.height, 196, `The content spacer reserves the entire redesigned stack: ${evidence}`);
+      assert.deepEqual(current.header && { top: current.header.top, height: current.header.height }, { top: 0, height: 48 }, `Preloaded CSS resizes the masthead before application startup finishes: ${evidence}`);
+      assert.deepEqual(current.primary && { top: current.primary.top, height: current.primary.height }, { top: 48, height: 49 }, `The primary bar is coordinated with the early masthead: ${evidence}`);
+      assert.deepEqual(current.tabs && { top: current.tabs.top, height: current.tabs.height }, { top: 97, height: 44 }, `The third bar has its final geometry before parsing ends: ${evidence}`);
+      assert.equal(current.spacer?.height, 161, `The content spacer reserves the entire compact stack: ${evidence}`);
       assert.equal(current.primaryCount, 7, 'All verified native primary controls are ready before DOMContentLoaded');
       assert.equal(current.icons, 14, 'Inline icons are installed by the early runtime');
     };
     try {
       const first = await before;
+      await page.waitForSelector('script[src="/early-before-render.js"]');
       if (scenario.enabled && scenario.appearance) {
         if (scenario.state === 'complete') await assertEnhanced();
         else {
@@ -375,7 +379,7 @@ async function earlyAppearance(
         if (scenario.state === 'late') {
           await page.waitForFunction(() => (window as Window & { fixtureFirstHeaderFrame?: unknown }).fixtureFirstHeaderFrame !== undefined, { polling: 'raf' });
           const frame = await page.evaluate(() => (window as Window & { fixtureFirstHeaderFrame?: unknown }).fixtureFirstHeaderFrame);
-          assert.deepEqual(frame, { readyState: 'loading', heights: [52, 61, 55, 196], primaryCount: 7 }, 'A complete header rendered in one native app task already has its final styling on the first frame that can paint it');
+          assert.deepEqual(frame, { readyState: 'loading', heights: [48, 49, 44, 161], primaryCount: 7 }, 'A complete header rendered in one native app task already has its final styling on the first frame that can paint it');
         }
       }
       await release(second);
@@ -449,6 +453,7 @@ async function navigationIcons(page: Page, enhanced: boolean, expectedDay = '11'
         iconCount: control.querySelectorAll(':scope > svg[data-bn-navigation-icon]').length,
         iconHidden: icon?.getAttribute('aria-hidden'), iconFocusable: icon?.getAttribute('focusable'),
         iconWidth: icon?.getBoundingClientRect().width,
+        labelSize: Number.parseFloat(getComputedStyle(control.querySelector('[data-bn-header-part="primary-title"]') ?? control).fontSize),
         originalMarker: original?.getAttribute('data-bn-native-icon'),
         originalDisplay: original ? getComputedStyle(original).display : null,
         originalWidth: original?.getBoundingClientRect().width,
@@ -471,14 +476,15 @@ async function navigationIcons(page: Page, enhanced: boolean, expectedDay = '11'
   if (enhanced) {
     assert.deepEqual(icons.top.map(({ kind }) => kind), ['house', ...topNavigation.map((item) => item[4])]);
     assert.deepEqual(icons.lower.map(({ kind }) => kind), lowerNavigation.map((item) => item[4]));
+    assert.ok(icons.lower.every((icon) => icon.iconWidth! > Math.max(...icons.top.map((primary) => primary.iconWidth!))), 'Page tabs have more prominent icons than primary destinations');
+    assert.ok(icons.lower.every((icon) => icon.labelSize > Math.max(...icons.top.map((primary) => primary.labelSize))), 'Page tabs have more prominent labels than primary destinations');
   }
-  for (const [index, icon] of [...icons.top, ...icons.lower].entries()) {
+  for (const icon of [...icons.top, ...icons.lower]) {
     assert.ok(icon.caretVisible, 'Native dropdown affordances remain available');
     if (enhanced) {
       assert.equal(icon.iconCount, 1);
       assert.equal(icon.iconHidden, 'true');
       assert.equal(icon.iconFocusable, 'false');
-      assert.equal(icon.iconWidth, index < 7 ? 20 : 18);
       assert.equal(icon.originalMarker, 'replaced');
       assert.equal(icon.originalDisplay, 'none', 'Only verified original decorations are hidden');
     } else {
@@ -531,7 +537,9 @@ async function fixedHeaderGeometry(page: Page): Promise<void> {
     })).filter(({ width, height }) => width > 0 && height > 0);
     const header = bounds(document.getElementById('site-header')!);
     const controls = [...document.querySelectorAll('[data-native-utility]')].map((control) => ({
-      ...bounds(control), labels: [...control.querySelectorAll('.title')].map((label) => {
+      ...bounds(control), contents: [...control.querySelectorAll('[data-bn-header-part="tool-label"], .bn-header-search-label, [data-bn-header-part="account-name"], .bb-avatar-image-nav, :scope > .bn-icon, [data-bn-header-part="tool-count"]')]
+        .map(bounds).filter(({ width, height }) => width > 0 && height > 0),
+      labels: [...control.querySelectorAll('.title')].map((label) => {
         const text = document.createRange(); text.selectNodeContents(label);
         const { top, bottom } = text.getBoundingClientRect(); return { top, bottom };
       }),
@@ -552,12 +560,15 @@ async function fixedHeaderGeometry(page: Page): Promise<void> {
   }
   for (const control of state.controls) {
     assert.ok(control.top >= state.header.top - 1 && control.bottom <= state.header.bottom + 1, `Native utility heights must fit the masthead: ${JSON.stringify(state)}`);
+    assert.ok(Math.abs((control.top - state.header.top) - (state.header.bottom - control.bottom)) <= 1, `Utility controls have equal space above and below: ${JSON.stringify(state)}`);
+    for (const content of control.contents) assert.ok(Math.abs((content.top + content.bottom) - (control.top + control.bottom)) <= 2, `Utility text, icons, badges and avatars are centered inside their controls: ${JSON.stringify(state)}`);
     for (const label of control.labels) assert.ok(label.top >= control.top - 1 && label.bottom <= control.bottom + 1, `Native utility descriptions must not spill outside their controls: ${JSON.stringify(state)}`);
   }
   const primary = state.rows.find(({ id }) => id === 'site-nav-container');
   if (primary) for (const link of state.navigation) assert.ok(link.top >= primary.top - 1 && link.bottom <= primary.bottom + 1, `Primary links fit their resized native row: ${JSON.stringify(state)}`);
   const lower = state.rows.find(({ id }) => id === 'site-nav-lower');
   if (lower) for (const link of state.tabs) assert.ok(link.top >= lower.top - 1 && link.bottom <= lower.bottom + 1, `Secondary links fit their resized native row: ${JSON.stringify(state)}`);
+  assert.ok([...state.navigation, ...state.tabs].every(({ height }) => height >= 44), 'Compact navigation retains 44px click targets');
   assert.ok(state.content.top >= Math.max(...state.rows.map(({ bottom }) => bottom)) - 1, `The native spacer must keep content below the fixed navigation: ${JSON.stringify(state)}`);
 }
 
@@ -680,12 +691,14 @@ async function headerUtilities(page: Page, enhanced: boolean): Promise<void> {
       const icon = control.querySelector(':scope > svg[data-bn-navigation-icon]');
       const original = control.querySelector(':scope > i.p3icon-search, :scope > span.search');
       const badge = control.querySelector('.site-badge');
+      const label = control.querySelector('[data-bn-header-part="tool-label"]');
       const { left, right, top, bottom } = control.getBoundingClientRect();
       return {
         action: control.dataset.nativeUtility, marker: control.getAttribute('data-bn-header-part'),
         icon: icon?.getAttribute('data-bn-navigation-icon'),
         iconCount: control.querySelectorAll(':scope > svg[data-bn-navigation-icon]').length,
         iconHidden: icon?.getAttribute('aria-hidden'), iconFocusable: icon?.getAttribute('focusable'),
+        iconLabelGap: icon && label ? label.getBoundingClientRect().left - icon.getBoundingClientRect().right : null,
         originalMarker: original?.getAttribute('data-bn-native-icon'),
         originalDisplay: original ? getComputedStyle(original).display : null,
         badge: badge?.textContent, badgeMarker: badge?.getAttribute('data-bn-header-part'),
@@ -732,6 +745,9 @@ async function headerUtilities(page: Page, enhanced: boolean): Promise<void> {
         assert.equal(control.iconFocusable, 'false');
       }
       if (state.viewport >= 992) assert.ok(control.left >= 0 && control.right <= state.viewport + 1 && control.bottom > control.top, `Header utilities fit: ${JSON.stringify(state)}`);
+      if (state.viewport >= 992 && ['notes', 'messages'].includes(control.action!)) {
+        assert.ok(control.iconLabelGap! > 0 && control.iconLabelGap! <= 10, `Native spacer text must not add extra distance between utility icons and labels: ${JSON.stringify(state)}`);
+      }
       if (control.action === 'search') {
         assert.equal(control.originalMarker, 'replaced');
         assert.equal(control.originalDisplay, 'none');
@@ -856,10 +872,10 @@ async function longSecondaryNavigation(page: Page, setAppearance: (enabled: bool
         };
       });
       const evidence = `${width}px: ${JSON.stringify(state)}`;
-      assert.equal(state.rowHeight, 55, `Long secondary labels retain the fixed third-bar height: ${evidence}`);
-      assert.equal(state.height, 55, `Secondary controls remain in a single row: ${evidence}`);
+      assert.equal(state.rowHeight, 44, `Long secondary labels retain the compact third-bar height: ${evidence}`);
+      assert.equal(state.height, 44, `Secondary controls remain in a single row: ${evidence}`);
       assert.ok(/auto|scroll/.test(state.overflow) && state.scrollWidth > state.clientWidth, `Overflowing labels use an internal horizontal scroller: ${evidence}`);
-      assert.ok(state.controls.every((control) => control.whiteSpace === 'nowrap' && Math.abs(control.top - state.controls[0]!.top) < 1 && control.bottom - control.top <= 55), `Long labels do not wrap or grow the bar: ${evidence}`);
+      assert.ok(state.controls.every((control) => control.whiteSpace === 'nowrap' && Math.abs(control.top - state.controls[0]!.top) < 1 && control.bottom - control.top <= 44), `Long labels do not wrap or grow the bar: ${evidence}`);
       await page.focus('#site-nav-lower ul > li:first-child > a');
       for (let index = 0; index < 3; index += 1) await page.keyboard.press('Tab');
       await page.waitForFunction(() => {
@@ -969,6 +985,52 @@ async function openNativeMenu(page: Page, id: string): Promise<void> {
   }, { polling: 50 }, id);
 }
 
+async function exclusiveHeaderMenus(page: Page, enhanced: boolean): Promise<void> {
+  const visible = () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-native-menu]')]
+    .filter((menu) => menu.getBoundingClientRect().height > 0).map((menu) => menu.dataset.nativeMenu));
+  const dismiss = () => page.evaluate(() => document.body.click());
+  const input = (await page.$('#site-search-input'))!;
+  const original = await input.evaluate((element) => (element as HTMLInputElement).value);
+  try {
+    await dismiss();
+    assert.deepEqual(await visible(), [], 'Native outside-click dismissal establishes a closed-menu starting state');
+    const before = await page.evaluate(() => ({ utility: Number(document.body.dataset.utilityActions || 0), navigation: Number(document.body.dataset.navigationActions || 0) }));
+    await openNativeMenu(page, 'account');
+    await page.hover('#group-header-Classes');
+    const legacy = await page.evaluate(() => !document.querySelector('#site-user-nav edu-user-nav'));
+    assert.deepEqual(await visible(), legacy ? enhanced ? ['group-header-Classes'] : ['account', 'group-header-Classes'] : ['account'], 'Pointer entry respects the native hover or click activation model');
+    await openNativeMenu(page, 'group-header-Classes');
+    assert.deepEqual(await visible(), enhanced || !legacy ? ['group-header-Classes'] : ['account', 'group-header-Classes'], 'Legacy coordination is reversible while modern menus keep their native exclusive behavior');
+    assert.deepEqual(await page.evaluate(() => ({ utility: Number(document.body.dataset.utilityActions || 0), navigation: Number(document.body.dataset.navigationActions || 0) })), { utility: before.utility + 1, navigation: before.navigation + 1 }, 'Switching menus never repeats native trigger actions');
+    if (!enhanced) return;
+    for (const [first, second] of [['group-header-Groups', 'search'], ['search', 'myday'], ['myday', 'account'], ['account', 'directory-subnav']]) {
+      await dismiss();
+      await openNativeMenu(page, first!);
+      await openNativeMenu(page, second!);
+      assert.deepEqual(await visible(), [second], `${first} closes before ${second} opens`);
+    }
+    await dismiss();
+    await openNativeMenu(page, 'account');
+    await page.focus('#group-header-Classes');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await visible(), ['group-header-Classes'], 'Keyboard activation also dismisses the previous dropdown');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'group-header-Classes', 'Native dismissal does not steal keyboard focus');
+    await openNativeMenu(page, 'search');
+    await page.type('#site-search-input', 'Pending query');
+    await openNativeMenu(page, 'group-header-Classes');
+    await openNativeMenu(page, 'search');
+    assert.equal(await input.evaluate((element) => element === document.getElementById('site-search-input') && (element as HTMLInputElement).value), `${original}Pending query`, 'Switching menus preserves the native search input and its unfinished text');
+    await dismiss();
+    await openNativeMenu(page, 'account');
+    await page.click('[data-native-utility="account"]');
+    assert.deepEqual(await visible(), [], 'The original toggle still closes its own open menu');
+  } finally {
+    await input.evaluate((element, value) => { (element as HTMLInputElement).value = value; }, original);
+    await dismiss();
+    await input.dispose();
+  }
+}
+
 async function keyboardFocusStyle(page: Page, selector: string): Promise<void> {
   await page.focus(selector);
   // Keyboard input enables Chrome's focus-visible state even after a pointer click.
@@ -1034,7 +1096,7 @@ async function nativeDropdowns(page: Page, enhanced: boolean): Promise<void> {
           const destination = await page.$eval(selector, (link) => link.getAttribute('href'));
           if (enhanced) {
             await keyboardFocusStyle(page, selector);
-            assert.equal(await page.$eval(selector, (control) => getComputedStyle(control).backgroundColor), 'rgb(237, 244, 250)', 'Keyboard focus receives the same readable menu-row tint as hover');
+            assert.equal(await page.$eval(selector, (control) => getComputedStyle(control).backgroundColor), 'rgb(241, 243, 245)', 'Keyboard focus gives menu rows a neutral highlight');
           }
           if (id === 'account') {
             await page.focus(selector);
@@ -1139,7 +1201,10 @@ async function unfamiliarDropdownFallback(page: Page): Promise<void> {
   await page.waitForFunction(() => !document.querySelector('[data-native-menu="group-header-Groups"]')!.hasAttribute('data-bn-header-part'), { polling: 50 });
   assert.equal(await page.$eval('#site-top-spacer', (spacer) => spacer.getAttribute('data-bn-header-part')), 'spacer', 'An unfamiliar menu does not remove the independently verified header layout');
   assert.equal(await page.$eval('[data-native-menu="directory-subnav"]', (menu) => menu.getAttribute('data-bn-header-part')), 'dropdown', 'Other verified dropdowns keep their appearance');
+  await openNativeMenu(page, 'account');
   await openNativeMenu(page, 'group-header-Groups');
+  const legacy = await page.evaluate(() => !document.querySelector('#site-user-nav edu-user-nav'));
+  assert.equal(await page.$eval('[data-native-menu="account"]', (menu) => menu.getBoundingClientRect().height > 0), legacy, 'Unverified menus retain their native sibling-dismissal behavior');
   await page.click('#unfamiliar-dropdown-row button');
   assert.equal(await page.evaluate(() => document.body.dataset.unfamiliarGroupAction), 'used', 'An unfamiliar native menu control remains usable');
   await page.evaluate(() => document.getElementById('unfamiliar-dropdown-row')!.remove());
@@ -1471,6 +1536,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       await keyboardFocusStyle(page, '#group-header-Classes');
       await nativeNavigationActions(page);
       await nativeUtilityActions(page);
+      await exclusiveHeaderMenus(page, true);
       await headerUtilities(page, true);
       await nativeDropdowns(page, true);
       if (page === legacy) await nativeDropdownHover(page, true);
@@ -1545,6 +1611,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
         assert.deepEqual(await navigationLabels(page), labels.get(page), 'Cleanup retains native labels and destinations');
         await nativeNavigationActions(page);
         await headerUtilities(page, false);
+        await exclusiveHeaderMenus(page, false);
         assert.deepEqual(await utilityLabels(page), utilities.get(page), 'Cleanup retains native utility names and destinations');
         await nativeUtilityActions(page);
         await nativeDropdowns(page, false);

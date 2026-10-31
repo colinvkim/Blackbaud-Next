@@ -51,8 +51,8 @@ export function nativeUtilityHeader(modern = false): string {
   const description = (label: string) => nativeHeaderDescription(modern, label);
   const tools = `<ul class="topnav${modern ? ' user-nav' : ''}">
     <li><a ${modern ? 'class="root-nav-item search-item"' : ''} href="/app/student?svcid=edu#searchresults">${modern ? '<span class="search"><sky-icon iconname="search"></sky-icon></span><span class="expand"><sky-icon iconname="caret-down"></sky-icon></span>' : '<i class="topnav-icon p3icon-search"></i><span class="caret for-search"></span>'}</a></li>
-    <li><a ${modern ? 'id="official-notes"' : ''} href="/app/student?svcid=edu#message/officialnotes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>&nbsp;${description('Official Notes')}</a></li>
-    <li><a id="inbox-link" href="/app/student?svcid=edu#message/inbox"><span class="site-badge site-badge-message">0</span>&nbsp;${description('Messages')}</a></li>
+    <li><a ${modern ? 'id="official-notes"' : ''} href="/app/student?svcid=edu#message/officialnotes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Official Notes')}</a></li>
+    <li><a id="inbox-link" href="/app/student?svcid=edu#message/inbox"><span class="site-badge site-badge-message">0</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Messages')}</a></li>
     <li><a id="account-nav" href="#"><div class="bb-avatar-wrapper-nav"><img class="bb-avatar-image-nav" src="/fixture-avatar.svg" alt="Example account avatar"></div>${modern ? '<div class="desc"><div class="title"><div>Alex</div><div>Student</div></div></div><span class="expand"><sky-icon iconname="caret-down"></sky-icon></span>' : '<span class="desc"><span class="title">Alex<br>Student</span></span><span class="caret"></span>'}</a></li>
   </ul>`;
   return `<header id="site-header" class="${modern ? 'sky-container' : 'container'}"><div class="row"><div class="col-md-12">

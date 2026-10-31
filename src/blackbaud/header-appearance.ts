@@ -13,6 +13,7 @@ export interface NativeHeaderAppearanceTarget {
   element: HTMLElement;
   part: NativeHeaderAppearancePart;
   current?: boolean;
+  opensOnHover?: boolean;
   icon?: NativeNavigationIconTarget;
   spaceAfter?: HTMLElement;
 }
@@ -99,7 +100,7 @@ function primaryParts(page: Document, url: URL, modern: boolean, icons: NativeNa
     const validCount = !!count && !!caption && !count.children.length && decorative(count) && /^\d+$/.test(count.textContent?.trim() ?? '') &&
       text.toLowerCase() === caption.toLowerCase() && (modern ? breaks.length === 0 : breaks.length === 1 && decorative(breaks[0]!));
     if (!shape || !((!count && !text) || validCount)) continue;
-    targets.push({ element: control, part: 'primary-item', current: selected ? (kind === 'house' ? selected === 'my-day' : control.id === selected) : active(control) });
+    targets.push({ element: control, part: 'primary-item', opensOnHover: !modern, current: selected ? (kind === 'house' ? selected === 'my-day' : control.id === selected) : active(control) });
     targets.push({ element: parts.label, part: 'primary-title' }, { element: parts.description, part: 'primary-description' });
     if (count) targets.push({ element: count, part: 'primary-count' });
   }
@@ -172,15 +173,18 @@ function utilityParts(page: Document, url: URL, modern: boolean): NativeHeaderAp
     if (notes || messages) {
       const part = notes ? 'notes' : 'messages';
       const count = one(control, `:scope > span.site-badge.${notes && !modern ? 'site-badge-official-notes' : 'site-badge-message'}`);
-      const label = title(control, modern)?.label;
+      const caption = title(control, modern);
+      const content = [...control.children].filter((element) => !element.matches('svg[data-bn-navigation-icon]'));
       const graphic = control.querySelector(':scope > img, :scope > i, :scope > sky-icon, :scope > svg:not([data-bn-navigation-icon])');
-      if (actions.has(part) || !count || count.children.length || !decorative(count) || !/^\d+$/.test(count.textContent?.trim() ?? '') || !label ||
+      if (actions.has(part) || !count || count.children.length || !decorative(count) || !/^\d+$/.test(count.textContent?.trim() ?? '') || !caption ||
+        meaningfulDirectText(control) || meaningfulDirectText(caption.description) || caption.description.children.length !== 1 ||
+        content.length !== 2 || !content.includes(count) || !content.includes(caption.description) ||
         graphic ||
         controls.filter((candidate) => studentDestination(candidate, url, notes ? 'message/officialnotes' : 'message/inbox')).length !== 1 ||
         ((modern || messages) && page.querySelectorAll(notes ? '#official-notes' : '#inbox-link').length !== 1)) continue;
       actions.add(part);
       targets.push({ element: control, part: notes ? 'tool-notes' : 'tool-messages', icon: { control, kind: notes ? 'file-text' : 'mail', original: null } });
-      targets.push({ element: count, part: 'tool-count' }, { element: label, part: 'tool-label' });
+      targets.push({ element: count, part: 'tool-count' }, { element: caption.label, part: 'tool-label' });
       continue;
     }
     if (control.id === 'account-nav' && control.getAttribute('href') === '#' && destination(control, url) && page.querySelectorAll('#account-nav').length === 1) {

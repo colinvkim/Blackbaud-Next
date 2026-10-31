@@ -7,6 +7,70 @@ export const HEADER_APPEARANCE_PART_ATTRIBUTE = 'data-bn-header-part';
 export const HEADER_APPEARANCE_CURRENT_ATTRIBUTE = 'data-bn-header-current';
 export const HEADER_APPEARANCE_COUNT_EMPTY_ATTRIBUTE = 'data-bn-header-count-empty';
 
+function createHeaderMenuDismissal() {
+  type Menu = { trigger: NativeHeaderAppearanceTarget; panel: NativeHeaderAppearanceTarget; root: HTMLElement };
+  let menus = new Map<HTMLElement, Menu>();
+  const roots = new Set<HTMLElement>();
+  const verified = ({ trigger, panel, root }: Menu) => trigger.element.isConnected && panel.element.isConnected &&
+    root.contains(trigger.element) && trigger.element.parentElement === panel.element.parentElement &&
+    trigger.element.getAttribute(HEADER_APPEARANCE_PART_ATTRIBUTE) === trigger.part &&
+    panel.element.getAttribute(HEADER_APPEARANCE_PART_ATTRIBUTE) === panel.part;
+  const isOpen = (menu: Menu) => {
+    const view = menu.panel.element.ownerDocument.defaultView;
+    return verified(menu) && menu.panel.element.classList.contains('nav-visible') &&
+      !!view && view.getComputedStyle(menu.panel.element).display !== 'none';
+  };
+  const activate = (event: Event) => {
+    const target = event.target as Element | null;
+    const control = target?.nodeType === 1 ? target.closest('a') : null;
+    const menu = control && menus.get(control);
+    if (!menu || !verified(menu) || event.defaultPrevented) return;
+    const pointer = event as MouseEvent;
+    if (event.type === 'click' && (pointer.button !== 0 || pointer.ctrlKey || pointer.metaKey || pointer.shiftKey || pointer.altKey)) return;
+    if (event.type === 'mouseover') {
+      const related = pointer.relatedTarget as Node | null;
+      if (!menu.trigger.opensOnHover || (related?.nodeType && menu.trigger.element.contains(related))) return;
+    }
+    if (isOpen(menu) || ![...menus.values()].some((other) => other.root !== menu.root && isOpen(other))) return;
+    // Let Blackbaud dismiss its own menus before the next native handler runs.
+    menu.trigger.element.ownerDocument.body?.click();
+  };
+  const detach = (root: HTMLElement) => {
+    root.removeEventListener('click', activate, true);
+    root.removeEventListener('mouseover', activate, true);
+    roots.delete(root);
+  };
+  return {
+    update(targets: NativeHeaderAppearanceTarget[]) {
+      const panels = new Map(targets.filter(({ part }) => part === 'dropdown' || part === 'dropdown-classes')
+        .map((target) => [target.element.parentElement, target]));
+      const next = new Map<HTMLElement, Menu>();
+      // Modern headers already coordinate their menus; legacy rows dismiss independently.
+      if (targets.some(({ part, opensOnHover }) => part === 'primary-item' && opensOnHover)) {
+        for (const trigger of targets) {
+          if (!['primary-item', 'tool-search', 'tool-account'].includes(trigger.part)) continue;
+          const panel = panels.get(trigger.element.parentElement);
+          const root = trigger.element.closest<HTMLElement>('#site-header, #site-nav-container');
+          if (panel && root) next.set(trigger.element, { trigger, panel, root });
+        }
+      }
+      menus = next;
+      const activeRoots = new Set([...menus.values()].map(({ root }) => root));
+      for (const root of roots) if (!activeRoots.has(root)) detach(root);
+      for (const root of activeRoots) {
+        if (roots.has(root)) continue;
+        root.addEventListener('click', activate, true);
+        root.addEventListener('mouseover', activate, true);
+        roots.add(root);
+      }
+    },
+    clear() {
+      for (const root of roots) detach(root);
+      menus.clear();
+    },
+  };
+}
+
 function createTabFocusScrolling(list: HTMLElement) {
   const page = list.ownerDocument;
   const view = page.defaultView;
@@ -66,6 +130,7 @@ export function createHeaderAppearance() {
   const searchLabels = new Map<HTMLElement, HTMLSpanElement>();
   const tabFocus = new Map<HTMLElement, ReturnType<typeof createTabFocusScrolling>>();
   const utilityIcons = createNavigationIcons();
+  const menuDismissal = createHeaderMenuDismissal();
   const update = (targets: NativeHeaderAppearanceTarget[]) => {
     const active = new Set(targets.map(({ element }) => element));
     markers.retain((element) => active.has(element));
@@ -120,8 +185,10 @@ export function createHeaderAppearance() {
       }
     }
     utilityIcons.update(targets.flatMap(({ icon }) => icon ? [icon] : []));
+    menuDismissal.update(targets);
   };
   const clear = () => {
+    menuDismissal.clear();
     utilityIcons.clear();
     for (const scrolling of tabFocus.values()) scrolling.clear();
     tabFocus.clear();
