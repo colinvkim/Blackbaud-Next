@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { Browser, HTTPRequest } from 'puppeteer-core';
 import { AUTH_CONTEXT_PREFIX, parseAuthContext } from '../src/blackbaud/auth.ts';
 import { buildDevelopmentExtension, developmentPaths, ensureDevelopmentBrowser, launchDevelopmentBrowser, parseDevelopmentOptions } from '../scripts/browser-development.ts';
+import { copyExtensionProject } from './fixtures/extension-project.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -14,10 +15,7 @@ test('provider sign-in prepares before DOM readiness and preserves native accoun
   const fixture = await mkdtemp(resolve(tmpdir(), 'blackbaud-auth-startup-'));
   let browser: Browser | undefined;
   try {
-    for (const name of ['src', 'assets', 'extension']) await cp(resolve(root, name), resolve(fixture, name), { recursive: true });
-    await mkdir(resolve(fixture, 'scripts'));
-    await cp(resolve(root, 'scripts/build.ts'), resolve(fixture, 'scripts/build.ts'));
-    await symlink(resolve(root, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+    await copyExtensionProject(root, fixture);
     await buildDevelopmentExtension(fixture, new AbortController().signal);
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);

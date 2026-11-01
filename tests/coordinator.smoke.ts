@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,7 @@ import type { Browser, Page } from 'puppeteer-core';
 import { parseAuthContext } from '../src/blackbaud/auth.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
 import { buildDevelopmentExtension, developmentPaths, ensureDevelopmentBrowser, launchDevelopmentBrowser, parseDevelopmentOptions } from '../scripts/browser-development.ts';
+import { copyExtensionProject } from './fixtures/extension-project.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const googleUrl = 'https://accounts.google.com/signin?redirect_uri=https%3A%2F%2Fid.blackbaud.com%2Fcallback';
@@ -45,10 +46,7 @@ test('real Chrome preserves popup saves, per-tab auth attempts and worker restar
   const fixture = await mkdtemp(resolve(tmpdir(), 'blackbaud-coordinator-browser-'));
   let browser: Browser | undefined;
   try {
-    for (const name of ['src', 'assets', 'extension']) await cp(resolve(root, name), resolve(fixture, name), { recursive: true });
-    await mkdir(resolve(fixture, 'scripts'));
-    await cp(resolve(root, 'scripts/build.ts'), resolve(fixture, 'scripts/build.ts'));
-    await symlink(resolve(root, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+    await copyExtensionProject(root, fixture);
     await buildDevelopmentExtension(fixture, new AbortController().signal);
     const executable = await ensureDevelopmentBrowser(developmentPaths(root).cache);
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), executable);

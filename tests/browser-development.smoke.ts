@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -13,6 +13,7 @@ import {
   launchDevelopmentBrowser, parseDevelopmentOptions, reloadDevelopmentExtension,
 } from '../scripts/browser-development.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
+import { copyExtensionProject } from './fixtures/extension-project.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -29,12 +30,7 @@ test('real Chrome loads, rebuilds, reloads, retains settings, and recovers from 
   let queue: BuildQueue | undefined;
   let browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>> | undefined;
   try {
-    for (const name of ['src', 'assets', 'extension']) await cp(resolve(root, name), resolve(fixture, name), { recursive: true });
-    await mkdir(resolve(fixture, 'scripts'));
-    for (const name of ['build.ts', 'browser-build.ts', 'browser-development.ts', 'dev-browser.ts']) {
-      await cp(resolve(root, 'scripts', name), resolve(fixture, 'scripts', name));
-    }
-    await symlink(resolve(root, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+    await copyExtensionProject(root, fixture, ['build.ts', 'browser-build.ts', 'browser-development.ts', 'dev-browser.ts']);
     const url = 'https://dev-fixture.myschoolapp.com/app/student#studentmyday/progress';
     const options = parseDevelopmentOptions(['--headless', '--url', url], fixture);
     const executable = await ensureDevelopmentBrowser(developmentPaths(root).cache);

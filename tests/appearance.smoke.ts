@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import {
 } from '../scripts/browser-development.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
 import { FEATURE_DEFINITIONS } from '../src/shared/settings.ts';
+import { copyExtensionProject } from './fixtures/extension-project.ts';
 import { HEADER_LOWER_ITEMS as lowerNavigation, HEADER_PRIMARY_ITEMS as topNavigation, nativePrimaryDescription } from './fixtures/header.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -1462,10 +1463,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
   const fixture = await mkdtemp(resolve(tmpdir(), 'blackbaud-next-appearance-'));
   let browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>> | undefined;
   try {
-    for (const name of ['src', 'assets', 'extension']) await cp(resolve(root, name), resolve(fixture, name), { recursive: true });
-    await mkdir(resolve(fixture, 'scripts'));
-    await cp(resolve(root, 'scripts/build.ts'), resolve(fixture, 'scripts/build.ts'));
-    await symlink(resolve(root, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+    await copyExtensionProject(root, fixture);
     const options = parseDevelopmentOptions(['--headless', '--url', legacyUrl], fixture);
     browser = await launchDevelopmentBrowser(options, await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const legacy = await syntheticPage(browser, false);

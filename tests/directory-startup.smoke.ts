@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Browser, HTTPRequest, Page } from 'puppeteer-core';
 import { buildDevelopmentExtension, developmentPaths, ensureDevelopmentBrowser, launchDevelopmentBrowser, parseDevelopmentOptions } from '../scripts/browser-development.ts';
+import { copyExtensionProject } from './fixtures/extension-project.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
 import { FEATURE_DEFINITIONS } from '../src/shared/settings.ts';
 
@@ -124,10 +125,7 @@ test('compiled Chrome catches the initial directory route before DOM readiness a
   const fixture = await mkdtemp(resolve(tmpdir(), 'blackbaud-directory-startup-'));
   let browser: Browser | undefined;
   try {
-    for (const name of ['src', 'assets', 'extension']) await cp(resolve(root, name), resolve(fixture, name), { recursive: true });
-    await mkdir(resolve(fixture, 'scripts'));
-    await cp(resolve(root, 'scripts/build.ts'), resolve(fixture, 'scripts/build.ts'));
-    await symlink(resolve(root, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+    await copyExtensionProject(root, fixture);
     await buildDevelopmentExtension(fixture, new AbortController().signal);
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
