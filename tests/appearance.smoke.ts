@@ -151,9 +151,28 @@ function nativeFixture(modern: boolean): string {
     #coursesContainer > .row { margin: 0 0 18px; padding: 18px 0; border-bottom: 1px solid #ccc; }
     #coursesContainer > .row > div { padding: 0 15px; } #coursesContainer h3 { font-size: 20px; }
     #coursesContainer .btn { padding: 6px 10px; } #coursesContainer .form-control { max-width: 100%; padding: 6px; }
+    .form-control, select.input-sm { background: #fff; border: 1px solid #aaa; }
+    .form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control, select.input-sm[disabled] { background: #cdcfd2; }
     .bb-avatar-wrapper-medium { width: 48px; height: 48px; } .bb-avatar-image-medium { width: 48px; height: 48px; }
     .pull-left { float: left; } .clearfix { clear: both; }
-    [hidden]:not([data-native-course]):not([data-native-course-column]) { display: none !important; } app-root, sky-toolbar, sky-repeater, sky-repeater-item { display: block; }
+    [hidden] { display: none; } app-root, sky-toolbar, sky-repeater, sky-repeater-item { display: block; }
+    .assignment-center-left-block, .assignment-center-middle-block, .right-block { display: table-cell; }
+    .assignment-center-left-block { width: 10px; }
+    .assignment-center-middle-block { padding: 5px 10px; }
+    .right-block { width: 120px; padding: 20px 0 40px; }
+    .right-block button { min-height: 32px; }
+    .sky-font-deemphasized { color: #686c73; font: italic 15px/1.1 Arial,sans-serif; }
+    .assignment-details { padding-top: 5px; }
+    .assignment-details button.sky-btn-link-inline { display: inline-block; padding: 0; border: 0; background: transparent; color: #0974a1; font: inherit; white-space: nowrap; }
+    .assignment-details button.sky-btn-link-inline a { color: inherit; font: inherit; white-space: inherit; }
+    app-student-assignment-center { display: block; }
+    .padding-left-15.padding-top-20 { padding: 20px 0 0 15px; }
+    .padding-left-15.padding-top-20 > h3 { margin: 19px 0; font-size: 19px; line-height: 1.1; }
+    .sky-toolbar-section { display: flex; padding: 5px 10px 0; }
+    .sky-toolbar-section-items { display: flex; flex-wrap: wrap; gap: 5px; }
+    sky-split-view { display: block; border: 1px solid #ccc; }
+    .sky-repeater-item-collapsible { padding: 10px; }
+    .sky-repeater-item-collapsible h3 { display: inline; }
     @media (min-width: 992px) { #coursesContainer > .row > .col-md-3 { float: left; width: 25%; } #coursesContainer > .row > .col-md-2 { float: left; width: 16.666667%; } }
     @media (max-width: 700px) { #site-nav-container { display: none; } .ch.col-md-4 { width: 100%; } }
     @media (max-width: 991px) { #site-mobile-btn { display: block; } #site-user-nav, #site-nav-container, #site-nav-lower { display: none; } #site-top-spacer { height: 73px; } }
@@ -166,9 +185,17 @@ function nativeFixture(modern: boolean): string {
     </ul></div></nav>
     <nav id="site-nav-lower"><div class="${modern ? 'container' : 'res-container'}"><ul class="${modern ? '' : 'nav nav-pills'}">${lowerNavigation.map(([id, title, icon, href], index) => `<li${index === 0 ? ' class="active"' : ''}><a ${modern ? '' : `id="${id}"`} href="${href}"><i class="${icon}" aria-hidden="true"></i>${title}</a></li>`).join('')}</ul></div></nav>
     <div id="site-top-spacer" class="${modern ? 'white-bg site-top-spacer-lower-nav' : 'site-top-spacer'}"></div>
-    ${modern ? `<sky-toolbar><input aria-label="Search items"></sky-toolbar><sky-repeater><sky-repeater-item class="assignment-repeater-item">
-      <app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/123">Native assignment</a></app-assignment-title-link>
-      </sky-repeater-item></sky-repeater></app-root>` : `<main id="site-main"><div id="summary" class="row">${tile('performance', 'Performance')}${tile('attendance', 'Attendance')}</div><div id="coursesContainer">${progressCourses()}</div></main>`}
+    ${modern ? `<app-student-assignment-center><div><div class="hide-for-print">
+      <div class="padding-left-15 padding-top-20"><h3>1 Active assignment</h3></div>
+      <sky-toolbar><div class="sky-toolbar-container sky-toolbar-sectioned"><sky-toolbar-section><div class="sky-toolbar-section"><div class="sky-toolbar-section-items"><button id="metadata-add-task">Add task</button><input aria-label="Search items"></div></div></sky-toolbar-section><div class="sky-toolbar-items"></div></div></sky-toolbar></div>
+      <sky-split-view><sky-repeater><sky-repeater-item><div class="sky-repeater-item sky-repeater-item-collapsible"><div class="sky-repeater-item-right"><div class="sky-repeater-item-header"><div class="sky-repeater-item-title"><sky-repeater-item-title><h3 id="metadata-group-heading">Due tomorrow</h3></sky-repeater-item-title></div></div></div></div></sky-repeater-item>
+      <sky-repeater-item class="assignment-repeater-item">
+      <sky-repeater-item-title><div class="assignment-center-left-block"></div>
+      <div class="assignment-center-middle-block">
+      <div><app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/123">Native assignment</a></app-assignment-title-link></div>
+      <div id="assignment-metadata" class="assignment-details sky-font-deemphasized">Due: 11/2/2026 9:30 AM | Assigned: 10/26/2026 8:00 AM | 100 pts <span> | <button class="sky-btn sky-btn-link-inline"><a id="metadata-course-link" href="/app/student?svcid=edu#academicclass/123/0/bulletinboard">Interdisciplinary Studies: Reading, Research, and Community Practice with Independent Research</a></button></span><span> | Homework</span><span> | Assignment</span></div></div>
+      <div class="right-block"><div class="display-inline"><button>To do</button></div></div></sky-repeater-item-title>
+      </sky-repeater-item></sky-repeater></sky-split-view></div></app-student-assignment-center></app-root>` : `<main id="site-main"><div id="summary" class="row">${tile('performance', 'Performance')}${tile('attendance', 'Attendance')}</div><div id="coursesContainer">${progressCourses()}</div></main>`}
     <script>const mobileButton = document.querySelector('#site-mobile-btn button'); const drawer = document.getElementById('fixture-native-drawer');
     mobileButton.addEventListener('click', () => { drawer.hidden = !drawer.hidden; mobileButton.setAttribute('aria-expanded', String(!drawer.hidden)); document.body.dataset.drawerActions = String(Number(document.body.dataset.drawerActions || 0) + 1); });
     drawer.querySelector('button').addEventListener('click', () => { drawer.hidden = true; mobileButton.setAttribute('aria-expanded', 'false'); });
@@ -205,6 +232,8 @@ function nativeFixture(modern: boolean): string {
       document.body.dataset.nativeActions = String(Number(document.body.dataset.nativeActions || 0) + 1);
     }));
     const progressList = document.getElementById('coursesContainer');
+    document.querySelector('#metadata-course-link')?.addEventListener('click', event => { event.preventDefault(); document.body.dataset.metadataCourseActions = String(Number(document.body.dataset.metadataCourseActions || 0) + 1); });
+    document.querySelector('#metadata-add-task')?.addEventListener('click', () => { document.body.dataset.assignmentToolbarActions = String(Number(document.body.dataset.assignmentToolbarActions || 0) + 1); });
     if (progressList) {
       window.nativeProgressContent = { list: progressList,
         rows: [...progressList.children].map(row => ({ row, columns: [...row.children], text: row.textContent })),
@@ -1278,6 +1307,65 @@ async function preservedNativeProgressContent(page: Page): Promise<void> {
   assert.deepEqual(preserved, { list: true, rows: true, controls: true, count: true }, 'Cards preserve native content, column order, and control nodes');
 }
 
+async function nativeControlStates(page: Page, setAppearance: (enabled: boolean) => Promise<void>): Promise<void> {
+  await page.evaluate(() => {
+    const section = document.createElement('section');
+    section.id = 'native-state-controls';
+    section.innerHTML = `<input id="state-editable" class="form-control" aria-label="Editable field">
+      <input id="state-disabled" class="form-control" disabled aria-label="Disabled field">
+      <textarea id="state-readonly" class="form-control" readonly aria-label="Read-only field"></textarea>
+      <fieldset disabled><input id="state-fieldset" class="form-control" aria-label="Disabled fieldset field"></fieldset>
+      <select id="state-select" class="input-sm" disabled aria-label="Disabled selection"><option>Native option</option></select>
+      <div id="state-heading" class="bb-tile-title" hidden><div class="bb-tile-header-with-content"><h2 class="bb-tile-header">Native hidden heading</h2></div><div class="bb-tile-header-column-tools"><button type="button">Native action</button></div></div>`;
+    document.getElementById('site-main')!.append(section);
+  });
+  const read = () => page.evaluate(() => {
+    const section = document.getElementById('native-state-controls')!;
+    const fields = [...section.querySelectorAll<HTMLElement>('input,textarea,select')];
+    return {
+      backgrounds: fields.map((field) => getComputedStyle(field).backgroundColor),
+      disabled: fields.map((field) => field.matches(':disabled')),
+      readonly: (document.getElementById('state-readonly') as HTMLTextAreaElement).readOnly,
+      heading: getComputedStyle(document.getElementById('state-heading')!).display,
+    };
+  });
+  try {
+    await setAppearance(false);
+    const native = await read();
+    assert.equal(native.heading, 'none');
+    assert.notEqual(native.backgrounds[0], native.backgrounds[1], 'The fixture supplies a native disabled-state cue');
+    for (const width of [1280, 390]) {
+      await page.setViewport({ width, height: 900 });
+      await setAppearance(true);
+      assert.deepEqual(await read(), native, 'Appearance preserves native disabled/read-only cues and hidden headings');
+      await page.evaluate(() => {
+        (document.getElementById('state-editable') as HTMLInputElement).disabled = true;
+        (document.getElementById('state-disabled') as HTMLInputElement).disabled = false;
+        (document.getElementById('state-readonly') as HTMLTextAreaElement).readOnly = false;
+        document.getElementById('state-heading')!.hidden = false;
+      });
+      const changed = await read();
+      assert.equal(changed.backgrounds[0], native.backgrounds[1], 'Native disablement takes effect while appearance is active');
+      assert.equal(changed.backgrounds[1], native.backgrounds[0], 'Native enablement restores the editable appearance');
+      assert.equal(changed.backgrounds[2], native.backgrounds[0], 'Removing read-only restores the editable appearance');
+      assert.equal(changed.heading, 'grid', 'A revealed native heading receives its usual layout');
+      await page.evaluate(() => {
+        (document.getElementById('state-editable') as HTMLInputElement).disabled = false;
+        (document.getElementById('state-disabled') as HTMLInputElement).disabled = true;
+        (document.getElementById('state-readonly') as HTMLTextAreaElement).readOnly = true;
+        document.getElementById('state-heading')!.hidden = true;
+      });
+      assert.deepEqual(await read(), native, 'Native states restore without remounting appearance');
+      await setAppearance(false);
+      assert.deepEqual(await read(), native, 'Disabling appearance retains the native states');
+    }
+  } finally {
+    await page.evaluate(() => document.getElementById('native-state-controls')!.remove());
+    await page.setViewport({ width: 1280, height: 900 });
+    await setAppearance(true);
+  }
+}
+
 async function nativeProgressCourseActions(page: Page): Promise<void> {
   await page.bringToFront();
   const counts = () => page.evaluate(() => JSON.parse(document.body.dataset.progressActions || '{}') as Record<string, number>);
@@ -1459,6 +1547,106 @@ async function nativeSchedule(page: Page): Promise<void> {
   assert.deepEqual(await page.evaluate(() => ({ offset: document.body.dataset.scheduleOffset, actions: document.body.dataset.scheduleActions })), { offset: '0', actions: '2' }, 'Native day navigation handlers remain attached');
 }
 
+async function assignmentMetadata(page: Page, setAppearance: (enabled: boolean) => Promise<void>): Promise<void> {
+  const snapshot = () => page.$eval('#assignment-metadata', (element) => {
+    const style = getComputedStyle(element);
+    return { html: element.innerHTML, font: style.font, color: style.color, fontSize: parseFloat(style.fontSize) };
+  });
+  await setAppearance(false);
+  const native = await snapshot();
+  const nativeAlignment = await page.$eval('.assignment-center-middle-block', (element) => getComputedStyle(element).verticalAlign);
+  await setAppearance(true);
+  for (const width of [1280, 390, 320]) {
+    await page.setViewport({ width, height: 900 });
+    const layout = await page.$eval('#assignment-metadata', (element) => {
+      const style = getComputedStyle(element);
+      const button = element.querySelector('button')!;
+      const bounds = button.getBoundingClientRect();
+      return { fontSize: parseFloat(style.fontSize), fontStyle: style.fontStyle, color: style.color, linkColor: getComputedStyle(button.querySelector('a')!).color,
+        left: bounds.left, right: bounds.right, width: element.clientWidth, contentWidth: element.scrollWidth };
+    });
+    assert.ok(layout.left >= 0 && layout.right <= width && layout.contentWidth <= layout.width + 1, `Long native course links wrap within the metadata: ${JSON.stringify(layout)}`);
+    assert.ok(layout.fontSize < native.fontSize);
+    assert.equal(layout.fontStyle, 'normal');
+    assert.notEqual(layout.linkColor, layout.color, 'The course link remains visually distinct');
+    assert.equal((await snapshot()).html, native.html, 'Appearance keeps the native metadata, links, and text intact');
+    for (const extraDetails of [false, true]) {
+      await page.evaluate((extra) => {
+        const middle = document.querySelector('.assignment-center-middle-block')!;
+        middle.querySelector('[data-native-submission]')?.remove();
+        if (extra) {
+          const note = document.createElement('div'); note.className = 'assignment-details sky-font-deemphasized';
+          note.dataset.nativeSubmission = 'true'; note.textContent = 'On paper submission'; middle.append(note);
+        }
+      }, extraDetails);
+      const spacing = await page.$eval('.assignment-center-middle-block', (element) => {
+        const cell = element.getBoundingClientRect(), first = element.firstElementChild!.getBoundingClientRect(), last = element.lastElementChild!.getBoundingClientRect();
+        const status = element.parentElement!.querySelector('.right-block')!.firstElementChild!.getBoundingClientRect();
+        return { top: first.top - cell.top, bottom: cell.bottom - last.bottom, statusTop: status.top - first.top };
+      });
+      assert.ok(Math.abs(spacing.top - 16) < 1 && Math.abs(spacing.bottom - 16) < 1 && Math.abs(spacing.statusTop) < 1, `Native rows keep consistent padding and title/status alignment, including wrapped or additional details: ${JSON.stringify(spacing)}`);
+    }
+  }
+  await page.evaluate(() => {
+    const middle = document.querySelector('.assignment-center-middle-block')!;
+    (middle.firstElementChild as HTMLElement).hidden = true;
+    (middle.parentElement!.querySelector('.right-block')!.firstElementChild as HTMLElement).hidden = true;
+  });
+  assert.deepEqual(await page.$eval('.assignment-center-middle-block', (middle) => [middle.firstElementChild!, middle.parentElement!.querySelector('.right-block')!.firstElementChild!].map(element => element.getBoundingClientRect().height)), [0, 0], 'Native hidden title and status fields stay hidden');
+  await page.evaluate(() => {
+    const middle = document.querySelector('.assignment-center-middle-block')!;
+    (middle.firstElementChild as HTMLElement).hidden = false;
+    (middle.parentElement!.querySelector('.right-block')!.firstElementChild as HTMLElement).hidden = false;
+  });
+  await page.evaluate(() => document.querySelector('[data-native-submission]')?.remove());
+  await page.bringToFront();
+  await page.click('#metadata-course-link');
+  assert.equal(await page.$eval('body', (body) => (body as HTMLElement).dataset.metadataCourseActions), '1', 'Native course navigation keeps its handler');
+  await page.setViewport({ width: 1280, height: 900 });
+  await setAppearance(false);
+  assert.deepEqual(await snapshot(), native, 'Disabling appearance restores native metadata typography');
+  assert.equal(await page.$eval('.assignment-center-middle-block', (element) => getComputedStyle(element).verticalAlign), nativeAlignment, 'Disabling appearance restores native cell alignment');
+  await setAppearance(true);
+}
+
+async function assignmentPageSpacing(page: Page, setAppearance: (enabled: boolean) => Promise<void>, setPreferences: (preferences: Record<string, boolean>) => Promise<unknown>): Promise<void> {
+  await setPreferences({ assignmentShortcuts: true });
+  await page.waitForSelector('.bn-assignment-shortcuts');
+  await page.setViewport({ width: 1280, height: 900 });
+  const nativeSpacing = () => page.evaluate(() => [
+    'app-student-assignment-center .padding-left-15.padding-top-20',
+    'app-student-assignment-center .padding-left-15.padding-top-20 > h3',
+    'sky-toolbar .sky-toolbar-section', '.sky-repeater-item-collapsible', '.bn-assignment-shortcuts',
+  ].map((selector) => {
+    const style = getComputedStyle(document.querySelector(selector)!);
+    return { padding: style.padding, margin: style.margin };
+  }));
+  await setAppearance(false);
+  const native = await nativeSpacing();
+  await setAppearance(true);
+  for (const width of [1280, 390, 320]) {
+    await page.setViewport({ width, height: 900 });
+    await page.evaluate(() => scrollTo(0, 0));
+    const spacing = await page.evaluate(() => {
+      const heading = document.querySelector('app-student-assignment-center .padding-left-15.padding-top-20 > h3')!.getBoundingClientRect();
+      const headerBottom = Math.max(...['#site-header-parent-container', '#site-nav-container', '#site-nav-lower'].map((selector) => document.querySelector(selector)!.getBoundingClientRect()).filter(rect => rect.height > 0).map(rect => rect.bottom));
+      return { gap: heading.top - headerBottom, expectedGap: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bn-header-content-gap')), edges: [heading.left, ...['#metadata-add-task', '.bn-assignment-shortcuts button', '#metadata-group-heading'].map(selector => document.querySelector(selector)!.getBoundingClientRect().left)], viewport: innerWidth, documentWidth: document.documentElement.scrollWidth };
+    });
+    assert.ok(Math.abs(spacing.gap - spacing.expectedGap) < 1, `The heading uses the shared content gap below native navigation: ${JSON.stringify(spacing)}`);
+    assert.ok(Math.max(...spacing.edges) - Math.min(...spacing.edges) < 1, `Heading, actions, shortcuts, and section labels share a content edge: ${JSON.stringify(spacing)}`);
+    assert.ok(spacing.documentWidth <= spacing.viewport + 1, JSON.stringify(spacing));
+  }
+  await page.bringToFront();
+  await page.click('#metadata-add-task');
+  assert.equal(await page.$eval('body', body => (body as HTMLElement).dataset.assignmentToolbarActions), '1', 'Native toolbar actions keep their handlers');
+  await page.setViewport({ width: 1280, height: 900 });
+  await setAppearance(false);
+  assert.deepEqual(await nativeSpacing(), native, 'Disabling appearance restores native heading, toolbar, and group spacing');
+  await setAppearance(true);
+  await setPreferences({ assignmentShortcuts: false });
+  await page.waitForFunction(() => !document.querySelector('.bn-assignment-shortcuts'));
+}
+
 test('compiled appearance preserves native navigation/icons, responsive cards, actions, and reversible layout', { timeout: 120_000 }, async () => {
   const fixture = await mkdtemp(resolve(tmpdir(), 'blackbaud-next-appearance-'));
   let browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>> | undefined;
@@ -1496,6 +1684,9 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       if (enabled) await mounted(); else await unmounted();
     };
     await mounted();
+    await nativeControlStates(legacy, setAppearance);
+    await assignmentMetadata(modern, setAppearance);
+    await assignmentPageSpacing(modern, setAppearance, setPreferences);
     const logoNodes = new Map<Page, NativeSchoolLogo>();
     for (const page of [legacy, modern]) logoNodes.set(page, {
       image: (await page.$('#site-logo img')) as ElementHandle<HTMLImageElement>,

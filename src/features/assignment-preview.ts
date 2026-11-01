@@ -7,8 +7,14 @@ import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
 
 const panelId = 'blackbaud-next-assignment-preview';
+const titleLayoutSelector = 'app-assignment-title-link:not([hidden]):has(> a:first-child + button.bn-preview-button:last-child)';
 const styles = `
-.bn-preview-button { margin-left: 8px; min-height: 28px; padding: 4px 8px; vertical-align: middle; font-size: 12px; }
+${titleLayoutSelector} { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; max-width: 100%; vertical-align: middle; }
+${titleLayoutSelector} > a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+${titleLayoutSelector} > .bn-preview-button { margin-left: 0; flex: none; }
+.bn-button.bn-preview-button { margin-left: 8px; min-height: 28px; gap: 5px; padding: 4px 6px; vertical-align: middle; border-color: var(--bn-border-strong); background: var(--bn-surface); color: var(--bn-text); font: 500 12px/1.4 var(--bn-font); white-space: nowrap; }
+.bn-button.bn-preview-button > .bn-icon { width: 14px; height: 14px; }
+.bn-button.bn-preview-button:is(:hover, :focus-visible, [aria-expanded="true"]):not(:disabled) { border-color: var(--bn-border-strong); background: var(--bn-accent-soft); color: var(--bn-accent-hover); }
 .bn-preview-panel { position: fixed; inset: 0 0 0 auto; z-index: 100000; box-sizing: border-box; width: min(460px, 100vw); padding: 24px; overflow: auto; overscroll-behavior: contain; scroll-padding-block: 20px; border-left: 1px solid var(--bn-border); background: var(--bn-surface); color: var(--bn-text); box-shadow: -8px 0 32px #222a3514; font: 15px/1.6 var(--bn-font); }
 .bn-preview-panel * { box-sizing: border-box; }
 .bn-preview-panel > h2 { margin: 16px 0 8px; color: var(--bn-text); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
@@ -37,7 +43,7 @@ const styles = `
 .bn-preview-attachments li + li { margin-top: 8px; }
 .bn-preview-note { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--bn-border); color: var(--bn-muted); font-size: 12px; }
 @media (max-width: 480px) { .bn-preview-panel { padding: 16px; } .bn-preview-panel > h2 { font-size: 22px; } }
-@media (max-width: 480px), (pointer: coarse) { .bn-preview-button, .bn-preview-panel .bn-button { min-height: 44px; } }
+@media (max-width: 480px), (pointer: coarse) { .bn-button.bn-preview-button, .bn-preview-panel .bn-button { min-height: 44px; } }
 `;
 
 export const assignmentPreviewFeature: Feature = {
@@ -202,6 +208,9 @@ export const assignmentPreviewFeature: Feature = {
               if (currentTarget) open(currentTarget, button);
             };
             controlScope.listen(button, 'click', click);
+            controlScope.listen(button, 'keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+            });
             control = { root, button, dispose: controlScope.dispose };
             controls.set(link, control);
           }

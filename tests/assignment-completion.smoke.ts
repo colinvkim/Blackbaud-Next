@@ -110,7 +110,7 @@ async function startSave(page: Page, selector: string, id: number, status: numbe
   assert.deepEqual(JSON.parse(xhr.postData() ?? 'null'), { assignmentIndexId: id, assignmentStatus: status });
   await page.waitForFunction((id) => {
     const row = document.querySelector(`[data-assignment-id="${id}"]`);
-    return row?.querySelector<HTMLInputElement>('.bn-completion-control input')?.disabled && row.querySelector('.bn-completion-feedback')?.textContent === 'Saving…';
+    return row?.querySelector<HTMLInputElement>('.bn-completion-control input')?.disabled;
   }, { polling: 100 }, id);
   return xhr;
 }
@@ -122,8 +122,8 @@ async function respondSaved(page: Page, request: HTTPRequest, id: number, status
     return row?.querySelector('app-assignment-status-display button')?.textContent === status &&
       row.querySelector<HTMLInputElement>('.bn-completion-control input')?.disabled === false;
   }, { polling: 100 }, id, status);
-  await page.waitForSelector('.bn-completion-notice');
-  assert.match(await page.$eval('.bn-completion-notice', (element) => element.textContent ?? ''), /Marked (completed|to do)\./);
+  assert.equal(await page.$('.bn-completion-notice, .bn-completion-undo'), null, 'Successful saves add no notice or Undo');
+  assert.equal(await page.$('.bn-completion-control button'), null, 'The checkbox is the only completion action');
   assert.match(await page.$eval('body', (element) => (element as HTMLElement).dataset.statusSignals ?? ''), /ready,sent,saved$/);
 }
 
@@ -161,16 +161,17 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), true);
     await respondSaved(page, await startSave(page, checkbox(123), 123, -1), 123, 'To do');
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), false);
-    await respondSaved(page, await startSave(page, noticeAction, 123, 1), 123, 'Completed');
-    await respondSaved(page, await startSave(page, noticeAction, 123, -1), 123, 'To do');
 
     const failed = await startSave(page, checkbox(123), 123, 1);
+    assert.equal(await page.$eval(`${row(123)} .bn-completion-feedback`, (element) => element.textContent), '');
+    await page.waitForFunction(() => document.querySelector('[data-assignment-id="123"] .bn-completion-feedback')?.textContent === 'Saving…', { polling: 100 });
+    assert.equal(await page.$('.bn-completion-notice'), null, 'A visible slow save uses inline feedback');
     await failed.respond({ status: 503, contentType: 'application/json', body: '{}' });
     await page.waitForFunction(() => document.querySelector('.bn-completion-notice')?.textContent?.includes('Could not save'), { polling: 100 });
     assert.equal(await page.$eval(noticeAction, (element) => element.textContent), 'Retry');
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), false);
     await respondSaved(page, await startSave(page, noticeAction, 123, 1), 123, 'Completed');
-    await respondSaved(page, await startSave(page, noticeAction, 123, -1), 123, 'To do');
+    await respondSaved(page, await startSave(page, checkbox(123), 123, -1), 123, 'To do');
 
     await page.evaluate(() => [...document.querySelectorAll<HTMLButtonElement>('.bn-assignment-shortcuts button')].find((button) => button.textContent?.includes('Unfinished'))!.click());
     await page.waitForFunction(() => document.querySelector<HTMLButtonElement>('.bn-assignment-shortcuts button[aria-pressed="true"]')?.textContent?.includes('Unfinished'), { polling: 100 });
@@ -180,13 +181,18 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     await respondSaved(page, filtered, 123, 'Completed');
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-assignment-id="123"]')!).display === 'none', { polling: 100 });
     await page.waitForFunction((selector) => document.activeElement === document.querySelector(selector), { polling: 100 }, checkbox(234));
-    await respondSaved(page, await startSave(page, noticeAction, 123, -1), 123, 'To do');
+    await page.evaluate(() => [...document.querySelectorAll<HTMLButtonElement>('.bn-assignment-shortcuts button')].find((button) => button.textContent?.includes('All loaded'))!.click());
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-assignment-id="123"]')!).display !== 'none', { polling: 100 });
+    await respondSaved(page, await startSave(page, checkbox(123), 123, -1), 123, 'To do');
     await page.waitForFunction((selector) => document.activeElement === document.querySelector(selector), { polling: 100 }, checkbox(123));
     assert.equal(await page.$eval(row(123), (element) => getComputedStyle(element).display === 'none'), false);
 
     await page.setViewport({ width: 320, height: 800 });
     await respondSaved(page, await startSave(page, checkbox(234), 234, 1, true), 234, 'Completed');
-    const bounds = await page.$$eval('.bn-completion-control label, .bn-completion-notice', (elements) => elements.filter((element) => getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width > 0).map((element) => {
+    const narrowFailure = await startSave(page, checkbox(234), 234, 2, true);
+    await narrowFailure.respond({ status: 503, contentType: 'application/json', body: '{}' });
+    await page.waitForSelector('.bn-completion-notice[role="alert"]');
+    const bounds = await page.$$eval('.bn-completion-control label, .bn-completion-notice, .bn-completion-notice .bn-button', (elements) => elements.filter((element) => getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width > 0 && !element.closest('[data-blackbaud-next-shortcut-hidden]')).map((element) => {
       const { left, right, height } = element.getBoundingClientRect(); return { left, right, height };
     }));
     assert.ok(bounds.length >= 2);
@@ -197,18 +203,18 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
 
     await popup.waitForFunction(() => (document.getElementById('assignmentCompletion') as HTMLInputElement)?.checked === true, { polling: 100 });
     await togglePreference(popup, page, 'assignmentCompletion');
-    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, [data-blackbaud-next-completion-native]'), { polling: 100 });
+    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, [data-blackbaud-next-completion-native]'), { polling: 100 });
     assert.equal(await page.$eval(`${row(123)} app-assignment-status-display`, (element) => getComputedStyle(element).display === 'none'), false);
     await togglePreference(popup, page, 'assignmentCompletion');
     await page.waitForSelector(checkbox(123));
     const pending = await startSave(page, checkbox(123), 123, 1);
     const count = writes.length;
     await togglePreference(popup, page, 'enabled');
-    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-assignment-shortcuts, [data-blackbaud-next-completion-native]'), { polling: 100 });
+    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, .bn-assignment-shortcuts, [data-blackbaud-next-completion-native]'), { polling: 100 });
     assert.equal(writes.length, count);
     await pending.respond({ status: 200, contentType: 'application/json', body: '{}' });
     await page.waitForFunction(() => document.querySelector('[data-assignment-id="123"] app-assignment-status-display button')?.textContent === 'Completed', { polling: 100 });
-    assert.equal(await page.$('.bn-completion-notice'), null);
+    assert.equal(await page.$('.bn-completion-notice, .bn-completion-undo'), null);
     await togglePreference(popup, page, 'enabled');
     await page.waitForSelector(checkbox(123));
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), true);

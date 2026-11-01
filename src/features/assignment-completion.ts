@@ -1,6 +1,6 @@
 import { ASSIGNMENT_ROW_SELECTOR } from '../blackbaud/assignment-list.ts';
 import { AssignmentCompletionError, COMPLETION_NATIVE_ATTRIBUTE, completionSettledEvent, isAssignmentCompletionBusy, isAssignmentCompletionPage, readAssignmentCompletionTarget, setAssignmentCompletion } from '../blackbaud/assignment-status.ts';
-import type { AssignmentCompletionTarget, ManualAssignmentStatus } from '../blackbaud/assignment-status.ts';
+import type { AssignmentCompletionTarget } from '../blackbaud/assignment-status.ts';
 import { assignmentPreviewReturnFocus } from '../blackbaud/assignment-preview.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { createButton, isActionable, markOwned, observeElementContext, watchAddedElements } from '../shared/dom.ts';
@@ -49,6 +49,7 @@ export const assignmentCompletionFeature: Feature = {
     const updates = new Set<() => void>();
     const nativeOnly = new Set<string>();
     let noticeScope: ReturnType<typeof createScope> | null = null;
+    let slowAssignment: string | null = null;
     const current = () => !signal.aborted && window.location.href === url.href;
     const updateAll = () => { for (const update of updates) update(); };
     const findTarget = (id: string) => [...controls.values()].find((control) => control.target.assignmentIndexId === id);
@@ -72,6 +73,7 @@ export const assignmentCompletionFeature: Feature = {
         panel.append(actionButton);
       }
       const dismiss = createButton('Dismiss', 'x');
+      dismiss.setAttribute('aria-label', 'Dismiss');
       panelScope.listen(dismiss, 'click', clearNotice);
       panel.append(dismiss);
       (document.body ?? document.documentElement).append(panel);
@@ -86,35 +88,33 @@ export const assignmentCompletionFeature: Feature = {
       const next = [...ordered.slice(index + 1), ...ordered.slice(0, index)].find((control) => isActionable(control.input) && !control.input.disabled);
       (next?.input ?? assignmentPreviewReturnFocus(document))?.focus({ preventScroll: true });
     };
-    const changeStatus = async (target: AssignmentCompletionTarget, desired: 'unfinished' | ManualAssignmentStatus, undo = false) => {
+    const changeStatus = async (target: AssignmentCompletionTarget, desired: 'unfinished' | 'completed') => {
       if (!current() || isAssignmentCompletionBusy()) return;
       const row = target.row;
       const focused = document.activeElement;
-      const hadFocus = focused === controls.get(row)?.input || undo;
+      const hadFocus = focused === controls.get(row)?.input;
       const restoreFocus = () => hadFocus && (document.activeElement === focused ||
         document.activeElement === document.body || document.activeElement === document.documentElement);
       clearNotice();
+      const delayedFeedback = setTimeout(() => {
+        if (!current() || !isAssignmentCompletionBusy(target.assignmentIndexId)) return;
+        slowAssignment = target.assignmentIndexId;
+        updateAll();
+        const control = findTarget(target.assignmentIndexId);
+        if (!control || !isActionable(control.ui)) showNotice('Saving is taking longer than usual…');
+      }, 1000);
+      const stopFeedback = scope.add(() => { clearTimeout(delayedFeedback); slowAssignment = null; });
       try {
         const save = setAssignmentCompletion(target, desired, signal);
         updateAll();
-        const result = await save;
+        await save;
+        stopFeedback();
         if (!current()) return;
         updateAll();
-        const runUndo = () => {
-          const control = findTarget(target.assignmentIndexId);
-          const latest = control && readAssignmentCompletionTarget(control.target.row);
-          if (!latest) {
-            showNotice('Show this assignment in the native list to undo its status change.', { label: 'Undo', run: runUndo });
-          } else if (latest.status !== result.current) {
-            showNotice('The assignment status changed again. Use its current completion control.');
-          } else {
-            void changeStatus(latest, result.previous, true);
-          }
-        };
-        showNotice(result.current === 'completed' ? 'Marked completed.' : 'Marked to do.',
-          result.previous === result.current ? undefined : { label: 'Undo', run: runUndo });
+        clearNotice();
         if (restoreFocus()) queueMicrotask(() => { if (current() && restoreFocus()) focusAfterChange(target.assignmentIndexId); });
       } catch (error) {
+        stopFeedback();
         if (!current()) return;
         if (error instanceof AssignmentCompletionError && (error.kind === 'unsupported' || error.kind === 'unconfirmed')) {
           nativeOnly.add(target.assignmentIndexId);
@@ -128,12 +128,13 @@ export const assignmentCompletionFeature: Feature = {
           const retry = showNotice('Could not save the assignment status.', { label: 'Retry', run: () => {
             const control = findTarget(target.assignmentIndexId);
             const latest = control && readAssignmentCompletionTarget(control.target.row);
-            if (latest) void changeStatus(latest, desired, undo);
+            if (latest) void changeStatus(latest, desired);
             else showNotice('Show this assignment in the native list to retry its status change.', undefined, true);
           } }, true);
           if (restoreFocus()) retry?.focus({ preventScroll: true });
         }
       } finally {
+        stopFeedback();
         if (current()) updateAll();
       }
     };
@@ -191,7 +192,7 @@ export const assignmentCompletionFeature: Feature = {
         if (control.caption.textContent !== caption) control.caption.textContent = caption;
         const overdue = target.status === 'overdue';
         if (control.overdue.hidden === overdue) control.overdue.hidden = !overdue;
-        const saving = isAssignmentCompletionBusy(target.assignmentIndexId) ? 'Saving…' : '';
+        const saving = slowAssignment === target.assignmentIndexId && isAssignmentCompletionBusy(target.assignmentIndexId) ? 'Saving…' : '';
         if (control.feedback.textContent !== saving) control.feedback.textContent = saving;
       };
       const stopContext = observeElementContext(row, update, { subtree: true });

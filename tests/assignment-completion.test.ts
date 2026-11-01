@@ -167,7 +167,7 @@ function nativeButton(id = 123): HTMLButtonElement {
 }
 
 function button(label: string, selector = '.bn-completion-notice'): HTMLButtonElement {
-  const control = [...document.querySelectorAll<HTMLButtonElement>(`${selector} button`)].find((element) => element.textContent?.trim() === label);
+  const control = [...document.querySelectorAll<HTMLButtonElement>(`${selector} button`)].find((element) => (element.textContent?.trim() || element.getAttribute('aria-label')) === label);
   assert.ok(control, `Missing ${label} action`);
   return control;
 }
@@ -210,7 +210,7 @@ afterEach(async () => {
   restore = () => {};
 });
 
-test('completion checkbox uses native Save, confirms its result, and Undo restores To do without changing native ARIA', async () => {
+test('completion checkbox quietly saves and unchecking restores To do without changing native ARIA', async () => {
   const native = fixture();
   const component = document.querySelector('app-assignment-status-display')!;
   const original = nativeButton();
@@ -232,20 +232,22 @@ test('completion checkbox uses native Save, confirms its result, and Undo restor
   assert.equal(checkbox().disabled, false);
   assert.equal(document.querySelector('.bn-completion-control label span')!.textContent, 'Completed');
   assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  assert.equal(document.querySelector('.bn-completion-notice'), null, 'A successful save does not create a floating notice');
+  assert.equal(document.querySelector('.bn-completion-control button'), null, 'Success adds no Undo or dismiss actions');
+  assert.equal(document.querySelector('.bn-completion-undo'), null);
   assertNativeModalClosed(host);
   assert.deepEqual([original.getAttribute('aria-label'), original.getAttribute('aria-haspopup')], aria);
-  button('Undo').click();
+  checkbox().click();
   await flush();
   assertRequest(native.requests[1], 123, -1);
   assert.equal(nativeButton().textContent, 'To do');
   assert.equal(checkbox().checked, false);
   assertNativeModalClosed(host);
   assert.equal(host.querySelector('.sky-modal-backdrop'), backdrop);
-  button('Dismiss').click();
   assert.equal(document.querySelector('.bn-completion-notice'), null);
 });
 
-test('Undo restores original In progress status rather than collapsing it to To do', async () => {
+test('existing In progress stays unchecked and the checkbox switches between Completed and To do', async () => {
   const native = fixture(page(row(123, 'In progress')));
   mount();
   assert.equal(document.querySelector('.bn-completion-control label span')!.textContent, 'To do');
@@ -254,12 +256,38 @@ test('Undo restores original In progress status rather than collapsing it to To 
   await flush();
   assertRequest(native.requests[0], 123, 1);
   const host = nativeModalHost();
-  button('Undo').click();
+  checkbox().click();
   await flush();
-  assertRequest(native.requests[1], 123, 0);
-  assert.equal(nativeButton().textContent, 'In progress');
+  assertRequest(native.requests[1], 123, -1);
+  assert.equal(nativeButton().textContent, 'To do');
   assert.equal(checkbox().checked, false);
   assertNativeModalClosed(host);
+});
+
+test('quick saves cancel delayed feedback without shortening the next save delay', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const native = fixture();
+  mount();
+  checkbox().click();
+  await flush();
+  assert.equal(checkbox().checked, true);
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
+  t.mock.timers.tick(900);
+  native.setOutcome('deferred');
+  checkbox().click();
+  await flush();
+  t.mock.timers.tick(100);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  t.mock.timers.tick(900);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, 'Saving…');
+  native.requests[1]!.complete(200);
+  await flush();
+  assert.equal(checkbox().checked, false);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  t.mock.timers.tick(1000);
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  assert.equal(native.requests.length, 2);
 });
 
 test('Overdue remains a native unfinished status and unchecking Completed chooses the native Overdue option', async () => {
@@ -281,7 +309,8 @@ test('Overdue remains a native unfinished status and unchecking Completed choose
   assert.equal(badge.hidden, false);
 });
 
-test('pending and failed saves keep native status and Unfinished filtering unchanged, then Retry confirms once', async () => {
+test('pending and failed saves keep native status and Unfinished filtering unchanged, then Retry confirms once', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const native = fixture();
   native.setOutcome('deferred');
   mount(true);
@@ -297,14 +326,19 @@ test('pending and failed saves keep native status and Unfinished filtering uncha
   assert.equal(nativeButton().textContent, 'To do');
   assert.equal(checkbox().checked, false);
   assert.equal(checkbox().disabled, true);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  t.mock.timers.tick(999);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
+  t.mock.timers.tick(1);
   assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, 'Saving…');
   assert.equal(assignment.hasAttribute(hiddenAttribute), false);
-  assert.equal(document.querySelector('.bn-completion-notice'), null);
+  assert.match(document.querySelector('.bn-completion-notice[role="status"]')!.textContent!, /taking longer/);
   native.requests[0]!.complete(503);
   await flush();
   assert.equal(nativeButton().textContent, 'To do');
   assert.equal(checkbox().checked, false);
   assert.equal(checkbox().disabled, false);
+  assert.equal(document.querySelector('.bn-completion-feedback')!.textContent, '');
   assert.equal(assignment.hasAttribute(hiddenAttribute), false);
   assertNativeModalClosed(host);
   const retry = button('Retry');
@@ -317,7 +351,7 @@ test('pending and failed saves keep native status and Unfinished filtering uncha
   assert.equal(nativeButton().textContent, 'Completed');
   assert.equal(checkbox().checked, true);
   assert.equal(assignment.getAttribute(hiddenAttribute), 'true');
-  assert.ok(button('Undo').isConnected);
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
   assertNativeModalClosed(host);
   assert.equal(host.querySelector('.sky-modal-backdrop'), backdrop);
 });
@@ -339,7 +373,8 @@ for (const result of [{ label: 'successful save', status: 200 }, { label: 'faile
     assert.equal(document.activeElement, search);
     assert.equal(checkbox().checked, result.status === 200);
     assert.equal(checkbox().disabled, false);
-    assert.ok(button(result.status === 200 ? 'Undo' : 'Retry').isConnected);
+    if (result.status === 200) assert.equal(document.querySelector('.bn-completion-notice'), null);
+    else assert.ok(button('Retry').isConnected);
     assertNativeModalClosed();
     assert.equal(native.requests.length, 1);
   });
@@ -372,7 +407,7 @@ for (const externalFocus of [false, true]) {
   });
 }
 
-test('confirmed completion hides the last Unfinished row but global Undo restores its native status and checkbox focus', async () => {
+test('the last Unfinished row returns focus to its shortcut and can be unchecked after showing all loaded assignments', async () => {
   const native = fixture(page(row(123, 'In progress')));
   mount(true);
   await flush();
@@ -384,20 +419,23 @@ test('confirmed completion hides the last Unfinished row but global Undo restore
   await flush();
   assert.equal(assignment.getAttribute(hiddenAttribute), 'true');
   assert.equal(group.getAttribute(hiddenAttribute), 'true');
-  const undo = button('Undo');
-  assert.equal(undo.closest(`[${hiddenAttribute}]`), null);
-  undo.focus();
-  undo.click();
+  assert.equal(document.querySelector('.bn-completion-notice, .bn-completion-undo'), null);
+  assert.equal(document.activeElement, button('Unfinished', '.bn-assignment-shortcuts'));
+  button('All loaded', '.bn-assignment-shortcuts').click();
   await flush();
-  assertRequest(native.requests[1], 123, 0);
-  assert.equal(nativeButton().textContent, 'In progress');
+  assert.equal(checkbox().checked, true);
+  checkbox().focus();
+  checkbox().click();
+  await flush();
+  assertRequest(native.requests[1], 123, -1);
+  assert.equal(nativeButton().textContent, 'To do');
   assert.equal(assignment.hasAttribute(hiddenAttribute), false);
   assert.equal(group.hasAttribute(hiddenAttribute), false);
   assert.equal(checkbox().checked, false);
   assert.equal(document.activeElement, checkbox());
 });
 
-test('Undo returns focus to native Search when a native Completed filter removes the restored unfinished row', async (t) => {
+test('unchecking returns focus to native Search when a native Completed filter removes the unfinished row', async (t) => {
   const native = fixture();
   mount();
   checkbox().click();
@@ -409,9 +447,8 @@ test('Undo returns focus to native Search when a native Completed filter removes
   });
   nativeCompletedFilter.observe(original, { childList: true, subtree: true, characterData: true });
   t.after(() => nativeCompletedFilter.disconnect());
-  const undo = button('Undo');
-  undo.focus();
-  undo.click();
+  checkbox().focus();
+  checkbox().click();
   await flush();
   assert.equal(native.requests.length, 2);
   assertRequest(native.requests[1], 123, -1);
@@ -539,7 +576,19 @@ test('a native row replacement during Save receives the confirmed status without
   assert.equal(checkbox().checked, true);
   assert.equal(checkbox().disabled, false);
   assert.equal(native.requests.length, 1);
-  assert.ok(button('Undo').isConnected);
+  assert.equal(document.querySelector('.bn-completion-notice'), null);
+  document.querySelector<HTMLElement>(rowSelector)!.outerHTML = row(123, 'Completed');
+  native.bindNativeRows();
+  await flush();
+  assert.equal(document.querySelectorAll('.bn-completion-control').length, 1);
+  assert.equal(checkbox().checked, true);
+  assert.equal(document.querySelector('.bn-completion-control button'), null);
+  checkbox().click();
+  await flush();
+  assertRequest(native.requests[1], 123, -1);
+  native.requests[1]!.complete(200);
+  await flush();
+  assert.equal(checkbox().checked, false);
 });
 
 test('one pending native save disables other completion controls without creating another request', async () => {
@@ -577,7 +626,7 @@ test('native SkyModal masking preserves mounted pending controls and closing res
   assert.equal(document.querySelectorAll('.bn-completion-control').length, 2);
   assert.equal(checkbox(123).disabled, true);
   assert.equal(checkbox(456).disabled, true);
-  assert.equal(document.querySelector('[data-assignment-id="123"] .bn-completion-feedback')!.textContent, 'Saving…');
+  assert.equal(document.querySelector('[data-assignment-id="123"] .bn-completion-feedback')!.textContent, '');
   assert.equal(nativeButton(123).textContent, 'To do');
   assert.equal(nativeButton(456).textContent, 'In progress');
   native.requests[0]!.complete(200);
@@ -602,25 +651,26 @@ test('an already-hidden native background does not qualify for the owned modal m
   assert.equal(native.requests.length, 0);
 });
 
-test('disabling removes an existing Undo notice and its detached action cannot save after re-enabling', async () => {
+test('disabling removes an existing failure notice and its detached Retry cannot save after re-enabling', async () => {
   const native = fixture();
+  native.setOutcome('failure');
   const controller = mount();
   checkbox().click();
   await flush();
-  const oldUndo = button('Undo');
+  const oldRetry = button('Retry');
   controller.update(new URL(window.location.href), { ...DEFAULT_SETTINGS, assignmentCompletion: false });
   await flush();
   assert.equal(document.querySelector('.bn-completion-control, .bn-completion-notice'), null);
   assert.equal(document.querySelector('app-assignment-status-display')!.hasAttribute(COMPLETION_NATIVE_ATTRIBUTE), false);
   controller.update(new URL(window.location.href), DEFAULT_SETTINGS);
   await flush();
-  assert.equal(checkbox().checked, true);
+  assert.equal(checkbox().checked, false);
   assert.equal(document.querySelector('.bn-completion-notice'), null);
-  oldUndo.click();
+  oldRetry.click();
   await flush();
   assert.equal(native.requests.length, 1);
-  assert.equal(nativeButton().textContent, 'Completed');
-  assert.equal(checkbox().checked, true);
+  assert.equal(nativeButton().textContent, 'To do');
+  assert.equal(checkbox().checked, false);
 });
 
 const disableCases: Array<{ name: string; settings(settings: Settings): Settings }> = [
@@ -629,7 +679,8 @@ const disableCases: Array<{ name: string; settings(settings: Settings): Settings
   { name: 'legacy assignment mode', settings: (settings) => ({ ...settings, oldAssignmentCenter: true }) },
 ];
 for (const disabled of disableCases) {
-  test(`${disabled.name} restores native state and an already-sent save cannot recreate completion UI`, async () => {
+  test(`${disabled.name} restores native state and an already-sent save cannot recreate completion UI`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const native = fixture();
     native.setOutcome('deferred');
     const component = document.querySelector('app-assignment-status-display')!;
@@ -641,14 +692,16 @@ for (const disabled of disableCases) {
     assert.equal(native.requests.length, 1);
     controller.update(new URL(window.location.href), disabled.settings(DEFAULT_SETTINGS));
     await flush();
-    assert.equal(document.querySelector('.bn-completion-control, .bn-completion-notice'), null);
+    t.mock.timers.tick(1000);
+    await flush();
+    assert.equal(document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo'), null);
     assert.equal(document.querySelector('#blackbaud-next-assignment-completion'), null);
     assert.equal(component.getAttribute(COMPLETION_NATIVE_ATTRIBUTE), 'preexisting-native-value');
     assert.equal(nativeButton().getAttribute('aria-label'), nativeAria);
     native.requests[0]!.complete(200);
     await flush();
     assert.equal(nativeButton().textContent, 'Completed');
-    assert.equal(document.querySelector('.bn-completion-control, .bn-completion-notice'), null);
+    assert.equal(document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo'), null);
     assert.equal(component.getAttribute(COMPLETION_NATIVE_ATTRIBUTE), 'preexisting-native-value');
     assert.equal(native.requests.length, 1);
     assertNativeModalClosed();
@@ -688,18 +741,19 @@ test('pending completion observers yield to real timers and settle before the na
   observer.disconnect();
 });
 
-test('dismissing a completion notice disables its detached Undo action immediately', async () => {
+test('dismissing a failure notice disables its detached Retry immediately', async () => {
   const native = fixture();
+  native.setOutcome('failure');
   mount();
   checkbox().click();
   await flush();
-  const oldUndo = button('Undo');
+  const oldRetry = button('Retry');
   button('Dismiss').click();
   assert.equal(document.querySelector('.bn-completion-notice'), null);
-  oldUndo.click();
+  oldRetry.click();
   await flush();
   assert.equal(native.requests.length, 1);
-  assert.equal(nativeButton().textContent, 'Completed');
-  assert.equal(checkbox().checked, true);
+  assert.equal(nativeButton().textContent, 'To do');
+  assert.equal(checkbox().checked, false);
   assert.equal(document.querySelector('.bn-completion-notice'), null);
 });

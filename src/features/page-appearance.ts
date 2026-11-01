@@ -2,6 +2,7 @@ import { THEME_TOKENS } from '../shared/theme.ts';
 import { isSchoolPage } from '../blackbaud/routes.ts';
 import { addStyle } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
+import { ASSIGNMENT_RESPONSIVE_STYLES, ASSIGNMENT_STYLES } from './assignment-styles.ts';
 import { PROGRESS_STYLES } from './progress-styles.ts';
 
 const TOOL_STYLES = `
@@ -33,7 +34,7 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(.bb-tile, .wel
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title { border-radius: var(--bn-radius-lg) var(--bn-radius-lg) 0 0; border-top: 0; border-bottom: 1px solid var(--bn-border); padding: 18px 20px; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-header { font-size: 20px; font-weight: 600; letter-spacing: -.2px; line-height: 1.35; margin: 0; }
 /* Replace native floated title/tools only for the complete two-column header. */
-html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title:has(> .bb-tile-header-with-content:first-child + .bb-tile-header-column-tools:last-child) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title:not([hidden]):has(> .bb-tile-header-with-content:first-child + .bb-tile-header-column-tools:last-child) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title:has(> .bb-tile-header-with-content:first-child + .bb-tile-header-column-tools:last-child)::before,
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title:has(> .bb-tile-header-with-content:first-child + .bb-tile-header-column-tools:last-child)::after { display: none; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title:has(> .bb-tile-header-with-content:first-child + .bb-tile-header-column-tools:last-child) > :is(.bb-tile-header-with-content, .bb-tile-header-column-tools) { float: none; width: auto; min-width: 0; max-width: none !important; padding: 0; }
@@ -53,7 +54,7 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page] .btn-default:hover
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .btn-default:is(.active, [aria-pressed="true"]) { background: var(--bn-accent-soft); color: var(--bn-accent); border-color: var(--bn-accent); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .btn-primary { background: var(--bn-accent); border-color: var(--bn-accent); color: #fff; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .btn-primary:hover { background: var(--bn-accent-hover); border-color: var(--bn-accent-hover); }
-html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(input.form-control, select.form-control, textarea.form-control, select.input-sm) { background: var(--bn-surface); border-color: var(--bn-border-strong); color: var(--bn-text); }
+html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(input.form-control, select.form-control, textarea.form-control, select.input-sm):not(:disabled, [readonly]) { background: var(--bn-surface); border-color: var(--bn-border-strong); color: var(--bn-text); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .nav-tabs { border-bottom-color: var(--bn-border); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .nav-tabs > li > a { padding: 12px 16px; border-radius: var(--bn-radius) var(--bn-radius) 0 0; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] .nav-tabs > li.active > a { border-color: var(--bn-border) var(--bn-border) var(--bn-surface); background: var(--bn-surface); color: var(--bn-accent) !important; font-weight: 600; }
@@ -78,11 +79,7 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTo
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic :is(h3, .header) { font-family: var(--bn-font); }
 html[data-blackbaud-next-appearance] #site-login-box:has(#site-login-form #Username) { max-width: calc(100vw - 32px); border: 1px solid var(--bn-border); border-radius: var(--bn-radius-lg); box-shadow: var(--bn-shadow); }
 html[data-blackbaud-next-appearance] #site-login-input :is(input[type="text"], input[type="email"], input[type="password"]) { border-radius: var(--bn-radius); border-color: var(--bn-border-strong); }
-html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] { background: var(--bn-page); }
-html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] :is(sky-toolbar, sky-repeater-item.assignment-repeater-item) { font-family: var(--bn-font); }
-html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] sky-toolbar { border-color: var(--bn-border); background: var(--bn-surface); }
-html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] sky-repeater-item.assignment-repeater-item { border-color: var(--bn-border); background: var(--bn-surface); }
-html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] app-assignment-title-link a { color: var(--bn-accent); }
+${ASSIGNMENT_STYLES}
 @media (max-width: 700px) {
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title { padding: 16px; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-content { padding: 16px; }
@@ -93,6 +90,7 @@ html[data-blackbaud-next-appearance] body[data-bn-page="assignments"] app-assign
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic { max-width: calc(100% - 10px); }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic > .containerFull { max-width: 100%; }
 }
+${ASSIGNMENT_RESPONSIVE_STYLES}
 @media (forced-colors: active) {
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(.bb-tile, .well) { border-color: CanvasText; box-shadow: none; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(a, button, input, select, textarea):focus-visible { outline-color: Highlight; }
