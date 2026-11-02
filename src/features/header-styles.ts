@@ -120,6 +120,8 @@ ${primary} > li:has(> :is([data-bn-header-part="dropdown"], [data-bn-header-part
 ${primary} > li > a[data-bn-header-part="primary-item"][aria-expanded="true"] > .caret { border-top-color: var(--bn-header-blue); }
 
 ${tabs} { background: var(--bn-surface) !important; border-bottom: 1px solid var(--bn-header-line) !important; box-shadow: none; }
+/* Keep the divider inside the 44px bar without shrinking its tab controls. */
+${tabs}:has([data-bn-header-part="tabs-navigation"]) { border-bottom: 0 !important; box-shadow: inset 0 -1px 0 var(--bn-header-line); }
 /* A single row preserves the fixed stack; keyboard focus scrolls long tabs into view. */
 ${tabs} [data-bn-header-part="tabs-navigation"] { display: flex; align-items: stretch; flex-wrap: nowrap; gap: 8px; height: var(--bn-tabs-height); max-width: calc(100% + 8px); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; scroll-padding-inline: 4px; }
 ${tabs} [data-bn-header-part="tabs-navigation"]::-webkit-scrollbar { display: none; }

@@ -107,6 +107,8 @@ html[data-blackbaud-next-appearance][data-bn-portal-shell] #site-nav-container .
 html[data-blackbaud-next-appearance][data-bn-portal-shell] #site-nav-container .topnav > li > a[data-bn-header-part="primary-item"][aria-expanded="true"] > .caret { border-top-color: var(--bn-header-blue); }
 
 html[data-blackbaud-next-appearance][data-bn-portal-shell] :is(#site-nav-lower, #site-nav-bottom) { background: var(--bn-surface) !important; border-bottom: 1px solid var(--bn-header-line) !important; box-shadow: none; }
+/* Keep the divider inside the 44px bar without shrinking its tab controls. */
+html[data-blackbaud-next-appearance][data-bn-portal-shell] :is(#site-nav-lower, #site-nav-bottom):has([data-bn-header-part="tabs-navigation"]) { border-bottom: 0 !important; box-shadow: inset 0 -1px 0 var(--bn-header-line); }
 /* A single row preserves the fixed stack; keyboard focus scrolls long tabs into view. */
 html[data-blackbaud-next-appearance][data-bn-portal-shell] :is(#site-nav-lower, #site-nav-bottom) [data-bn-header-part="tabs-navigation"] { display: flex; align-items: stretch; flex-wrap: nowrap; gap: 8px; height: var(--bn-tabs-height); max-width: calc(100% + 8px); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; scroll-padding-inline: 4px; }
 html[data-blackbaud-next-appearance][data-bn-portal-shell] :is(#site-nav-lower, #site-nav-bottom) [data-bn-header-part="tabs-navigation"]::-webkit-scrollbar { display: none; }

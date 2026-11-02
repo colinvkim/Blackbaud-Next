@@ -137,7 +137,7 @@ function nativeFixture(modern: boolean): string {
     .topnav .subnav-multicol > ul.subnavfooter { clear: both; width: 100%; }
     .topnav .subnavtop { display: none; position: absolute; top: 100%; left: 20px; border: 9px solid transparent; border-bottom-color: #b97011; }
     #site-user-nav .subnav { left: auto; right: 0; }
-    #site-nav-lower { position: fixed; top: 100px; width: 100%; height: 52px; z-index: 10; }
+    #site-nav-lower { position: fixed; top: 100px; width: 100%; height: 52px; overflow: auto; z-index: 10; }
     #site-top-spacer { height: 180px; }
     #site-nav-lower ul { list-style: none; padding: 0; margin: 0; } #site-nav-lower li { display: inline-block; }
     #site-nav-lower a { display: inline-block; padding: 12px; } #site-nav-lower i { display: inline-block; width: 14px; height: 14px; border: 1px solid currentColor; vertical-align: middle; }
@@ -562,9 +562,10 @@ async function fixedHeaderGeometry(page: Page): Promise<void> {
       const { top, bottom, left, right, width, height } = element.getBoundingClientRect();
       return { top, bottom, left, right, width, height };
     };
-    const rows = ['site-header-parent-container', 'site-nav-container', 'site-nav-lower'].map((id) => ({
-      id, ...bounds(document.getElementById(id)!),
-    })).filter(({ width, height }) => width > 0 && height > 0);
+    const rows = ['site-header-parent-container', 'site-nav-container', 'site-nav-lower'].map((id) => {
+      const element = document.getElementById(id)!;
+      return { id, ...bounds(element), clientHeight: element.clientHeight, scrollHeight: element.scrollHeight };
+    }).filter(({ width, height }) => width > 0 && height > 0);
     const header = bounds(document.getElementById('site-header')!);
     const controls = [...document.querySelectorAll('[data-native-utility]')].map((control) => ({
       ...bounds(control), contents: [...control.querySelectorAll('[data-bn-header-part="tool-label"], .bn-header-search-label, [data-bn-header-part="account-name"], .bb-avatar-image-nav, :scope > .bn-icon, [data-bn-header-part="tool-count"]')]
@@ -597,6 +598,7 @@ async function fixedHeaderGeometry(page: Page): Promise<void> {
   const primary = state.rows.find(({ id }) => id === 'site-nav-container');
   if (primary) for (const link of state.navigation) assert.ok(link.top >= primary.top - 1 && link.bottom <= primary.bottom + 1, `Primary links fit their resized native row: ${JSON.stringify(state)}`);
   const lower = state.rows.find(({ id }) => id === 'site-nav-lower');
+  if (lower) assert.equal(lower.scrollHeight, lower.clientHeight, 'The page-tab bar has no vertical overflow');
   if (lower) for (const link of state.tabs) assert.ok(link.top >= lower.top - 1 && link.bottom <= lower.bottom + 1, `Secondary links fit their resized native row: ${JSON.stringify(state)}`);
   assert.ok([...state.navigation, ...state.tabs].every(({ height }) => height >= 44), 'Compact navigation retains 44px click targets');
   assert.ok(state.content.top >= Math.max(...state.rows.map(({ bottom }) => bottom)) - 1, `The native spacer must keep content below the fixed navigation: ${JSON.stringify(state)}`);
@@ -889,11 +891,13 @@ async function longSecondaryNavigation(page: Page, setAppearance: (enabled: bool
       await page.bringToFront();
       const state = await page.evaluate(() => {
         const list = document.querySelector<HTMLElement>('[data-bn-header-part="tabs-navigation"]')!;
+        const row = document.getElementById('site-nav-lower')!;
         const controls = [...list.querySelectorAll<HTMLAnchorElement>(':scope > li > a')];
         const style = getComputedStyle(list);
         return {
           height: list.getBoundingClientRect().height, rowHeight: document.getElementById('site-nav-lower')!.getBoundingClientRect().height,
           overflow: style.overflowX, scrollWidth: list.scrollWidth, clientWidth: list.clientWidth,
+          verticalOverflow: row.scrollHeight - row.clientHeight,
           controls: controls.map((control) => {
             const { top, bottom } = control.getBoundingClientRect();
             const text = document.createRange(); text.selectNodeContents(control);
@@ -905,6 +909,7 @@ async function longSecondaryNavigation(page: Page, setAppearance: (enabled: bool
       assert.equal(state.rowHeight, 44, `Long secondary labels retain the compact third-bar height: ${evidence}`);
       assert.equal(state.height, 44, `Secondary controls remain in a single row: ${evidence}`);
       assert.ok(/auto|scroll/.test(state.overflow) && state.scrollWidth > state.clientWidth, `Overflowing labels use an internal horizontal scroller: ${evidence}`);
+      assert.equal(state.verticalOverflow, 0, `Long tabs scroll only horizontally: ${evidence}`);
       assert.ok(state.controls.every((control) => control.whiteSpace === 'nowrap' && Math.abs(control.top - state.controls[0]!.top) < 1 && control.bottom - control.top <= 44), `Long labels do not wrap or grow the bar: ${evidence}`);
       await page.focus('#site-nav-lower ul > li:first-child > a');
       for (let index = 0; index < 3; index += 1) await page.keyboard.press('Tab');
