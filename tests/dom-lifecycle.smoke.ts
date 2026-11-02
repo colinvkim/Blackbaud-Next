@@ -14,6 +14,7 @@ const origin = 'https://dom-fixture.myschoolapp.com';
 const source = origin + '/app/student#resourceboard';
 const nativeFixture = `<!doctype html><html><head><title>Native resources</title><style>
   .board-container { display: flex; } .boxTopic { width: 240px; }
+  input::placeholder { font-style: italic; }
 </style></head><body><main id="site-main">
   <button id="progress">Progress</button><button id="resources">Resources</button>
   <div id="board-container"><div class="board-container isotope" style="--blackbaud-next-resource-column-width:180px!important">
@@ -87,10 +88,19 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
     };
     await page.goto(source, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.bn-resource-search');
+    assert.deepEqual(await page.$eval('.bn-resource-search input', element => {
+      const input = element as HTMLInputElement;
+      const toolbar = input.parentElement!;
+      return { label: input.getAttribute('aria-label'), placeholder: input.placeholder,
+        placeholderStyle: getComputedStyle(input, '::placeholder').fontStyle,
+        countDisplay: getComputedStyle(toolbar.querySelector('[role="status"]')!).display,
+        clearDisplay: getComputedStyle(toolbar.querySelector('button')!).display };
+    }), { label: 'Search resources', placeholder: 'Search resources…', placeholderStyle: 'normal', countDisplay: 'none', clearDisplay: 'none' });
     assert.equal((await timers(page)).filter((delay) => delay === 2_000).length, 1);
     assert.equal((await timers(page)).includes(300), false);
     await page.type('.bn-resource-search input', 'Alpha');
     await page.waitForFunction(() => document.querySelector('.bn-resource-search [role="status"]')?.textContent === '1 of 2 resources');
+    assert.notEqual(await page.$eval('.bn-resource-search [role="status"]', element => getComputedStyle(element).display), 'none');
     assert.equal(await page.$eval('#beta', (element) => getComputedStyle(element).visibility), 'hidden');
     await page.evaluate(() => {
       const foreign = new CSSStyleSheet();

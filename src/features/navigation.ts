@@ -3,7 +3,6 @@ import { isLmsPage } from '../blackbaud/routes.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { createButton, markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
 import { createScope } from '../shared/scope.ts';
-import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const resourceHiddenAttribute = 'data-blackbaud-next-resource-hidden';
@@ -11,18 +10,17 @@ const resourceFilteredAttribute = 'data-blackbaud-next-resource-filtered';
 const resourceColumnProperty = '--blackbaud-next-resource-column-width';
 const RESOURCE_SEARCH_STYLES = `
 .bn-resource-search { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 12px 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--bn-border); color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
-.bn-resource-search label { margin: 0; font-size: 13px; font-weight: 600; }
 .bn-resource-search input { box-sizing: border-box; min-height: 40px; flex: 1 1 200px; min-width: 0; max-width: 360px; padding: 8px 12px; border: 1px solid var(--bn-border-strong); border-radius: var(--bn-radius); color: var(--bn-text); background: var(--bn-surface); font: inherit; }
+.bn-resource-search input::placeholder { color: var(--bn-muted); font-style: normal; opacity: 1; }
 .bn-resource-search .bn-button { min-height: 40px; }
 .bn-resource-search input:focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
-.bn-resource-search button[hidden] { display: none !important; }
+.bn-resource-search [hidden] { display: none !important; }
 #board-container .board-container[${resourceFilteredAttribute}] { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(${resourceColumnProperty}, 277px)), 1fr)); align-items: start; gap: 16px; height: auto !important; overflow: visible !important; }
 #board-container .board-container[${resourceFilteredAttribute}] > .container-container.boxTopic.isotope-item { position: static !important; transform: none !important; }
 #board-container .board-container[${resourceFilteredAttribute}] > .container-container.boxTopic.isotope-item[${resourceHiddenAttribute}] { visibility: hidden !important; position: absolute !important; pointer-events: none !important; }
-@media (max-width: 480px) { .bn-resource-search { gap: 8px; } .bn-resource-search label { width: 100%; } .bn-resource-search input { max-width: none; } .bn-resource-search .bn-tool-status { flex-basis: 100%; } }
+@media (max-width: 480px) { .bn-resource-search { gap: 8px; } .bn-resource-search input { max-width: none; } .bn-resource-search .bn-tool-status { flex-basis: 100%; } }
 @media (max-width: 480px), (pointer: coarse) { .bn-resource-search :is(input, .bn-button) { min-height: 44px; } }
 `;
-let searchNumber = 0;
 
 export const helpfulTabTitlesFeature: Feature = {
   id: 'helpful-tab-titles',
@@ -82,16 +80,11 @@ export const resourceSearchFeature: Feature = {
       toolbar.className = 'bn-resource-search';
       toolbar.setAttribute('role', 'search');
       toolbar.setAttribute('aria-label', 'Resource Board');
-      const label = document.createElement('label');
       const input = document.createElement('input');
-      input.id = `blackbaud-next-resource-search-${++searchNumber}`;
       input.type = 'search';
       input.autocomplete = 'off';
-      input.placeholder = 'Names or descriptions';
-      label.htmlFor = input.id;
-      label.textContent = 'Search resources';
-      label.className = 'bn-icon-label';
-      label.prepend(createIcon('search'));
+      input.placeholder = 'Search resources…';
+      input.setAttribute('aria-label', 'Search resources');
       const clear = createButton('Clear', 'x');
       clear.hidden = true;
       const status = document.createElement('span');
@@ -99,7 +92,7 @@ export const resourceSearchFeature: Feature = {
       status.setAttribute('role', 'status');
       status.setAttribute('aria-live', 'polite');
       status.setAttribute('aria-atomic', 'true');
-      toolbar.append(label, input, clear, status);
+      toolbar.append(input, clear, status);
       board.before(toolbar);
       let layout: HTMLElement | null = null;
       const restoreLayout = (element: HTMLElement) => {
@@ -148,8 +141,9 @@ export const resourceSearchFeature: Feature = {
         if (clear.hidden !== hideClear) clear.hidden = hideClear;
         const message = terms.length
           ? matches ? `${matches} of ${total} resources` : `No resources match your search (0 of ${total}).`
-          : `${total} ${total === 1 ? 'resource' : 'resources'}`;
+          : '';
         if (status.textContent !== message) status.textContent = message;
+        status.hidden = !message;
       };
       const clearSearch = () => { input.value = ''; update(); input.focus(); };
       const preventSubmit = (event: KeyboardEvent) => { if (event.key === 'Enter') event.preventDefault(); };
