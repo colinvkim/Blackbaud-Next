@@ -57,7 +57,8 @@ function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('The assignment change was canceled.', 'AbortError');
 }
 
-function nativeAvailable(element: HTMLElement, component?: HTMLElement): boolean {
+/** Native visibility, excluding the extension's temporary row/modal masks. */
+export function isNativeAssignmentStatusAvailable(element: HTMLElement, component?: HTMLElement): boolean {
   if (!element.isConnected) return false;
   const page = element.ownerDocument;
   const mask = operations.get(page)?.backgroundMask;
@@ -89,7 +90,7 @@ export function readAssignmentCompletionTarget(row: HTMLElement): AssignmentComp
   const buttons = component.querySelectorAll('button');
   const button = buttons[0];
   const Button = page.defaultView?.HTMLButtonElement;
-  if (buttons.length !== 1 || !Button || !(button instanceof Button) || !nativeAvailable(button, component)) return null;
+  if (buttons.length !== 1 || !Button || !(button instanceof Button) || !isNativeAssignmentStatusAvailable(button, component)) return null;
   const status = statuses.find((candidate) => candidate.label.toLowerCase() === label(button).toLowerCase())?.status;
   return status ? { assignmentIndexId, row, component, button, status, title: parsed.title } : null;
 }

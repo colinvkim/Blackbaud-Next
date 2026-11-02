@@ -31,6 +31,24 @@ export function isFinishedAssignmentStatus(status: string): boolean {
   return /^(?:completed|submitted|graded)$/i.test(status.trim());
 }
 
+/** Only the native, non-interactive Graded icon/label pair is cosmetic. */
+export function readAssignmentGradedStatus(row: HTMLElement): { container: HTMLElement; icon: HTMLElement; caption: HTMLElement } | null {
+  if (!row.matches(ASSIGNMENT_ROW_SELECTOR)) return null;
+  const components = [...row.querySelectorAll('app-assignment-status-display')].filter((element) => element.closest(ASSIGNMENT_ROW_SELECTOR) === row);
+  if (components.length !== 1) return null;
+  const component = components[0]!;
+  const container = component.firstElementChild;
+  if (component.children.length !== 1 ||
+    !container?.matches('span.display-flex') ||
+    component.matches('[role], [tabindex], [onclick], [contenteditable]') ||
+    component.querySelector('a, button, input, select, textarea, [role], [tabindex], [onclick], [contenteditable], [aria-label], [aria-labelledby]')) return null;
+  const children = [...container.children].filter((element) => !element.hasAttribute('data-bn-owned'));
+  const [icon, caption] = children;
+  if (children.length !== 2 || icon?.tagName !== 'SKY-ICON' || caption?.tagName !== 'SPAN' || caption.children.length ||
+    component.textContent?.replace(/\s+/g, ' ').trim() !== 'Graded') return null;
+  return { container: container as HTMLElement, icon: icon as HTMLElement, caption: caption as HTMLElement };
+}
+
 export function readAssignmentRow(element: HTMLElement): NativeAssignmentRow | null {
   if (!element.matches(ASSIGNMENT_ROW_SELECTOR)) return null;
   const links = [...element.querySelectorAll<HTMLAnchorElement>(ASSIGNMENT_LINK_SELECTOR)].filter((link) =>
@@ -42,7 +60,8 @@ export function readAssignmentRow(element: HTMLElement): NativeAssignmentRow | n
   // Assigned dates and other metadata share this block. Only its labeled Due
   // field is a source; missing/unsupported dates remain unknown.
   const dueText = details?.textContent?.split('|').map((field) => field.trim()).find((field) => /^Due:\s*/i.test(field));
-  const status = element.querySelector('app-assignment-status-display button')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const status = element.querySelector('app-assignment-status-display button')?.textContent?.replace(/\s+/g, ' ').trim() ??
+    (readAssignmentGradedStatus(element) ? 'Graded' : '');
   return {
     element,
     group: element.parentElement?.closest<HTMLElement>('sky-repeater-item') ?? null,

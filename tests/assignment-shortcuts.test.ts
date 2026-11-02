@@ -137,10 +137,11 @@ test('shortcuts preserve native controls and restore filtered rows and groups on
   const { cleanup } = mount();
   const toolbar = document.querySelector('.bn-assignment-shortcuts')!;
   assert.equal(toolbar.previousElementSibling?.tagName, 'SKY-TOOLBAR');
+  assert.equal(toolbar.querySelector('.bn-tool-status')!.textContent, '');
+  assert.equal(toolbar.querySelector<HTMLElement>('.bn-tool-status')!.hidden, true);
   assert.equal(click('Unfinished').getAttribute('aria-pressed'), 'true');
   assert.equal(document.querySelector('#done')!.getAttribute(hiddenAttribute), 'true');
   assert.equal(document.querySelector('#todo')!.getAttribute(hiddenAttribute), null);
-  assert.match(toolbar.textContent ?? '', /Showing 1 of 2 loaded assignments/);
   assert.equal(document.querySelector('app-assignment-status-display button')!.textContent, 'Completed');
   click('All loaded');
   assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
@@ -157,15 +158,17 @@ test('late native controls, rows and toolbar replacements retain the active shor
   document.querySelector('main')!.innerHTML = nativeToolbar() + group('native', row(123, '10/7/2026', 'Completed'));
   await flush();
   click('Unfinished');
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 1 loaded assignments\. No matches/);
+  assert.equal(document.querySelector('.bn-tool-status')!.textContent, 'No matches; native filters still apply.');
+  assert.equal(document.querySelector<HTMLElement>('.bn-tool-status')!.hidden, false);
   document.querySelector('.sky-repeater-item-body')!.insertAdjacentHTML('beforeend', row(456, '10/8/2026'));
   await flush();
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 2 loaded assignments/);
+  assert.equal(document.querySelector<HTMLElement>('.bn-tool-status')!.hidden, true);
+  assert.deepEqual([...document.querySelectorAll('.assignment-repeater-item')].map(element => element.getAttribute(hiddenAttribute)), ['true', null]);
   document.querySelector('main')!.innerHTML = nativeToolbar() + group('replacement', row(789, '10/9/2026') + row(999, '10/9/2026', 'Completed'));
   await flush();
   assert.equal(document.querySelectorAll('.bn-assignment-shortcuts').length, 1);
   assert.equal(document.querySelector('.bn-assignment-shortcuts button[aria-pressed="true"]')!.textContent, 'Unfinished');
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 2 loaded assignments/);
+  assert.deepEqual([...document.querySelectorAll('.assignment-repeater-item')].map(element => element.getAttribute(hiddenAttribute)), [null, 'true']);
   controller.abort();
   assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
   assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
@@ -178,7 +181,7 @@ test('native hidden rows and collapsed groups stay hidden when shortcuts change'
   fixture(nativeToolbar() + group('open', row(123, '10/7/2026') + row(456, '10/7/2026', 'To do', 'style="display:none"')) + group('collapsed', row(789, '10/8/2026'), 'hidden'));
   mount();
   click('Unfinished');
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 1 loaded assignments/);
+  assert.equal(document.querySelector('#open .assignment-repeater-item')!.getAttribute(hiddenAttribute), null);
   click('All loaded');
   assert.ok(document.querySelector('#collapsed')!.hasAttribute('hidden'));
   assert.equal(document.querySelectorAll<HTMLElement>('.assignment-repeater-item')[1]!.style.display, 'none');
@@ -199,9 +202,9 @@ test('native status changes and local midnight refresh the chosen shortcut', asy
   click('Unfinished');
   document.querySelector('#tomorrow app-assignment-status-display button')!.firstChild!.nodeValue = 'To do';
   await flush();
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 2 of 2 loaded assignments/);
+  assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
   click('Due tomorrow');
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 2 loaded assignments\. No matches/);
+  assert.equal(document.querySelector('.bn-tool-status')!.textContent, 'No matches; native filters still apply.');
 });
 
 test('unrelated page updates do not reread assignment metadata, while changed rows still refresh', async (t) => {
@@ -218,14 +221,14 @@ test('unrelated page updates do not reread assignment metadata, while changed ro
   document.body.insertAdjacentHTML('beforeend', '<aside>Unrelated status</aside>');
   await flush();
   assert.equal(reads, 0);
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 1 loaded assignments/);
+  assert.equal(assignment.getAttribute(hiddenAttribute), 'true');
   assignment.querySelector('app-assignment-status-display button')!.firstChild!.nodeValue = 'To do';
   await flush();
   assert.ok(reads > 0);
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 1 loaded assignments/);
+  assert.equal(assignment.getAttribute(hiddenAttribute), null);
 });
 
-test('delayed toolbar controls and multiple toolbars share one filter and accurate native totals', async () => {
+test('delayed toolbar controls and multiple toolbars share the chosen filter', async () => {
   fixture('<sky-toolbar></sky-toolbar>' + group('done', row(123, '10/7/2026', 'Completed')) + group('todo', row(456, '10/8/2026')));
   mount();
   assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
@@ -236,8 +239,9 @@ test('delayed toolbar controls and multiple toolbars share one filter and accura
   click('Unfinished');
   for (const toolbar of document.querySelectorAll('.bn-assignment-shortcuts')) {
     assert.equal(toolbar.querySelector('button[aria-pressed="true"]')!.textContent, 'Unfinished');
-    assert.match(toolbar.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 1 of 2 loaded assignments/);
   }
+  assert.equal(document.querySelector('#done')!.getAttribute(hiddenAttribute), 'true');
+  assert.equal(document.querySelector('#todo')!.getAttribute(hiddenAttribute), null);
 });
 
 test('native group moves update row ownership and hidden ancestors without replacing the assignment', async () => {
@@ -252,7 +256,7 @@ test('native group moves update row ownership and hidden ancestors without repla
   const second = document.querySelector<HTMLElement>('#second')!;
   second.hidden = true;
   await flush();
-  assert.match(document.querySelector('.bn-tool-status')!.textContent ?? '', /Showing 0 of 0 loaded assignments/);
+  assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
 });
 
 test('shortcut cleanup restores original markers and preserves newer native values', () => {
@@ -284,5 +288,5 @@ test('toolbar matching follows changes to native search accessibility labels and
   toolbar.remove();
   await flush();
   assert.equal(document.querySelector('.bn-assignment-shortcuts'), toolbar);
-  assert.match(toolbar.textContent ?? '', /Showing 1 of 1 loaded assignments/);
+  assert.equal(toolbar.querySelector('button[aria-pressed="true"]')!.textContent, 'All loaded');
 });

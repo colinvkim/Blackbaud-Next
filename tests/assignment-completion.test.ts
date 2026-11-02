@@ -479,6 +479,62 @@ test('locked, graded, static, unknown and foreign assignment controls remain ent
   assert.equal(native.requests.length, 0);
 });
 
+test('static Graded status stays read-only, follows native changes, filters as finished, and restores on switches', async () => {
+  const markup = '<span class="display-flex"><sky-icon iconsize="m"></sky-icon><span>Graded</span></span>';
+  const native = fixture(page(row(125, 'Graded', markup)));
+  const controller = mount(true);
+  const assignment = document.querySelector<HTMLElement>(rowSelector)!;
+  const component = assignment.querySelector('app-assignment-status-display')!;
+  const container = component.querySelector<HTMLElement>('span.display-flex')!;
+  const caption = container.lastElementChild!;
+  assert.equal(container.getAttribute('data-bn-graded-status'), 'true');
+  assert.equal(container.querySelectorAll('svg[data-bn-owned]').length, 1);
+  assert.equal(container.textContent, 'Graded');
+  assert.equal(assignment.querySelector('input, button'), null);
+  container.click();
+  await flush();
+  assert.equal(native.nativeOpens, 0);
+  assert.equal(native.requests.length, 0);
+  (caption as HTMLElement).hidden = true;
+  await flush();
+  assert.equal(container.hasAttribute('data-bn-graded-status'), false, 'Hidden native labels are not enhanced');
+  (caption as HTMLElement).hidden = false;
+  button('Unfinished', '.bn-assignment-shortcuts').click();
+  await flush();
+  assert.equal(assignment.getAttribute(hiddenAttribute), 'true');
+  button('All loaded', '.bn-assignment-shortcuts').click();
+  await flush();
+  assert.equal(container.querySelectorAll('svg[data-bn-owned]').length, 1);
+  caption.firstChild!.nodeValue = 'Submitted';
+  await flush();
+  assert.equal(container.hasAttribute('data-bn-graded-status'), false);
+  assert.equal(component.querySelector('[data-bn-graded-native-icon], svg[data-bn-owned]'), null);
+  caption.firstChild!.nodeValue = 'Graded';
+  await flush();
+  assert.equal(container.getAttribute('data-bn-graded-status'), 'true');
+  container.insertAdjacentHTML('beforeend', '<button id="native-grade-action">View grade</button>');
+  await flush();
+  assert.equal(container.hasAttribute('data-bn-graded-status'), false, 'Additional native controls retain their original presentation');
+  document.querySelector('#native-grade-action')!.remove();
+  await flush();
+  component.outerHTML = '<app-assignment-status-display><button type="button">Completed</button></app-assignment-status-display>';
+  native.bindNativeRows();
+  await flush();
+  assert.equal(component.innerHTML, markup, 'Detached native components are restored');
+  assert.equal(checkbox(125).checked, true);
+  assignment.querySelector('app-assignment-status-display')!.outerHTML = `<app-assignment-status-display>${markup}</app-assignment-status-display>`;
+  await flush();
+  assert.equal(assignment.querySelector('.bn-completion-control'), null);
+  assert.equal(assignment.querySelectorAll('[data-bn-graded-status]').length, 1);
+  for (const key of ['assignmentCompletion', 'enabled'] as const) {
+    controller.update(new URL(sourceUrl), { ...DEFAULT_SETTINGS, [key]: false });
+    assert.equal(assignment.querySelector('app-assignment-status-display')!.innerHTML, markup);
+    controller.update(new URL(sourceUrl), DEFAULT_SETTINGS);
+    assert.equal(assignment.querySelectorAll('[data-bn-graded-status]').length, 1);
+  }
+  assert.equal(native.requests.length, 0);
+});
+
 test('delayed native buttons, replaced components and whole-row rerenders mount one completion control and restore detached state', async () => {
   const native = fixture(page(row(123, 'To do', '')));
   mount();

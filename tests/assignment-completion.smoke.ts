@@ -18,8 +18,8 @@ const checkbox = (id: number) => `${row(id)} .bn-completion-control input[type="
 const noticeAction = '.bn-completion-notice button:first-of-type';
 
 function nativeFixture(): string {
-  const rows = [[123, 'To do'], [234, 'Overdue'], [345, 'Completed'], [456, 'Submitted'], [567, 'Graded']]
-    .map(([id, status]) => `<sky-repeater-item class="assignment-repeater-item" data-assignment-id="${id}"><div class="sky-repeater-item" role="row"><div class="sky-repeater-item-header"><app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/${id}">Synthetic assignment ${id}</a></app-assignment-title-link><div class="assignment-center-middle-block"><div class="assignment-details sky-font-deemphasized">Due: 10/13/2026 8:30 AM | Assigned: 10/1/2026 | 10 pts | Class</div><app-assignment-status-display><button type="button" aria-label="Native assignment status" aria-haspopup="dialog">${status}</button></app-assignment-status-display></div></div></div></sky-repeater-item>`).join('');
+  const rows = [[123, 'To do'], [234, 'Overdue'], [345, 'Completed'], [456, 'Submitted'], [567, 'Graded'], [678, 'Graded']]
+    .map(([id, status]) => `<sky-repeater-item class="assignment-repeater-item" data-assignment-id="${id}"><div class="sky-repeater-item" role="row"><div class="sky-repeater-item-header"><app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/${id}">Synthetic assignment ${id}</a></app-assignment-title-link><div class="assignment-center-middle-block"><div class="assignment-details sky-font-deemphasized">Due: 10/13/2026 8:30 AM | Assigned: 10/1/2026 | 10 pts | Class</div><app-assignment-status-display>${id === 678 ? '<span class="display-flex"><sky-icon iconsize="m"></sky-icon><span>Graded</span></span>' : `<button type="button" aria-label="Native assignment status" aria-haspopup="dialog">${status}</button>`}</app-assignment-status-display></div></div></div></sky-repeater-item>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Native assignment fixture</title><style>
     * { box-sizing: border-box; } body { margin: 0; font: 16px/1.5 Arial,sans-serif; }
     app-root, sky-toolbar, sky-repeater-item, app-assignment-status-display, app-assignment-title-link { display: block; }
@@ -27,6 +27,7 @@ function nativeFixture(): string {
     .assignment-repeater-item { padding: 12px; border-bottom: 1px solid #ddd; overflow-wrap: anywhere; }
     .assignment-center-middle-block { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
     .assignment-details { flex-basis: 100%; font-size: 13px; } button { padding: 8px 12px; }
+    .display-flex { display: flex; } [hidden] { display: none; }
     sky-modal-host { position: fixed; inset: 0; z-index: 100000; background: #0004; display: grid; place-items: center; }
     app-status-change-modal { display: block; padding: 20px; background: white; } sky-radio { display: block; }
   </style></head><body><app-root><main><sky-toolbar><input aria-label="Search items"></sky-toolbar><sky-repeater-item id="native-group"><div class="sky-repeater-item-header">Native date group</div><div class="sky-repeater-item-body">${rows}</div></sky-repeater-item></main></app-root><script>
@@ -155,6 +156,12 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     assert.equal(await page.$(`${row(567)} .bn-completion-control`), null);
     for (const nativeId of [456, 567]) await page.click(`${row(nativeId)} app-assignment-status-display button`);
     assert.equal(await page.$eval('body', (element) => (element as HTMLElement).dataset.nativeActions), '2');
+    await page.waitForSelector(`${row(678)} [data-bn-graded-status]`);
+    assert.equal(await page.$eval(`${row(678)} [data-bn-graded-status]`, element => element.textContent), 'Graded');
+    assert.equal(await page.$(`${row(678)} input, ${row(678)} button`), null, 'Static Graded remains non-interactive with Page appearance off');
+    assert.equal(await page.$eval(`${row(678)} sky-icon`, element => getComputedStyle(element).display), 'none');
+    assert.equal(await page.$eval(`${row(678)} svg[data-bn-owned]`, element => element.getBoundingClientRect().width), 18);
+    await page.click(`${row(678)} [data-bn-graded-status]`);
     assert.equal(writes.length, 0);
 
     await respondSaved(page, await startSave(page, checkbox(123), 123, 1), 123, 'Completed');
@@ -192,7 +199,8 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     const narrowFailure = await startSave(page, checkbox(234), 234, 2, true);
     await narrowFailure.respond({ status: 503, contentType: 'application/json', body: '{}' });
     await page.waitForSelector('.bn-completion-notice[role="alert"]');
-    const bounds = await page.$$eval('.bn-completion-control label, .bn-completion-notice, .bn-completion-notice .bn-button', (elements) => elements.filter((element) => getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width > 0 && !element.closest('[data-blackbaud-next-shortcut-hidden]')).map((element) => {
+    await page.waitForSelector(`${row(678)} [data-bn-graded-status]`);
+    const bounds = await page.$$eval('.bn-completion-control label, [data-bn-graded-status], .bn-completion-notice, .bn-completion-notice .bn-button', (elements) => elements.filter((element) => getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width > 0 && !element.closest('[data-blackbaud-next-shortcut-hidden]')).map((element) => {
       const { left, right, height } = element.getBoundingClientRect(); return { left, right, height };
     }));
     assert.ok(bounds.length >= 2);
@@ -203,14 +211,15 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
 
     await popup.waitForFunction(() => (document.getElementById('assignmentCompletion') as HTMLInputElement)?.checked === true, { polling: 100 });
     await togglePreference(popup, page, 'assignmentCompletion');
-    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, [data-blackbaud-next-completion-native]'), { polling: 100 });
+    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, [data-blackbaud-next-completion-native], [data-bn-graded-status], [data-bn-graded-native-icon]'), { polling: 100 });
     assert.equal(await page.$eval(`${row(123)} app-assignment-status-display`, (element) => getComputedStyle(element).display === 'none'), false);
+    assert.notEqual(await page.$eval(`${row(678)} sky-icon`, element => getComputedStyle(element).display), 'none');
     await togglePreference(popup, page, 'assignmentCompletion');
     await page.waitForSelector(checkbox(123));
     const pending = await startSave(page, checkbox(123), 123, 1);
     const count = writes.length;
     await togglePreference(popup, page, 'enabled');
-    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, .bn-assignment-shortcuts, [data-blackbaud-next-completion-native]'), { polling: 100 });
+    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, .bn-assignment-shortcuts, [data-blackbaud-next-completion-native], [data-bn-graded-status], [data-bn-graded-native-icon]'), { polling: 100 });
     assert.equal(writes.length, count);
     await pending.respond({ status: 200, contentType: 'application/json', body: '{}' });
     await page.waitForFunction(() => document.querySelector('[data-assignment-id="123"] app-assignment-status-display button')?.textContent === 'Completed', { polling: 100 });

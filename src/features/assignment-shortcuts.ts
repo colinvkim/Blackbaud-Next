@@ -61,7 +61,7 @@ export const assignmentShortcutsFeature: Feature = {
         if (row.group) groups.set(row.group, (groups.get(row.group) ?? false) || matches);
       }
       for (const [group, hasMatches] of groups) if (!hasMatches && selected !== 'all') hide(group);
-      const message = `Showing ${count} of ${rows.length} loaded assignments${count === 0 && rows.length > 0 ? '. No matches; native filters still apply.' : '.'}`;
+      const message = count === 0 && rows.length > 0 ? 'No matches; native filters still apply.' : '';
       for (const [nativeToolbar, { toolbar, status, controls }] of toolbars) {
         if (toolbar.previousElementSibling !== nativeToolbar) nativeToolbar.insertAdjacentElement('afterend', toolbar);
         for (const { key, button } of controls) {
@@ -69,6 +69,7 @@ export const assignmentShortcutsFeature: Feature = {
           if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed);
         }
         if (status.textContent !== message) status.textContent = message;
+        status.hidden = !message;
       }
     };
     let queued = false;
