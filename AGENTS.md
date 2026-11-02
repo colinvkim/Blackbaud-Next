@@ -35,7 +35,7 @@ Blackbaud Next is a TypeScript Manifest V3 Chrome extension that improves Blackb
 
 ## Build and verify
 
-Use Node.js 24+ and pnpm 11. For code changes, run:
+Use Node.js 24.15+ (24.x) or 26+, and pnpm 12. For code changes, run:
 
 ```sh
 pnpm check

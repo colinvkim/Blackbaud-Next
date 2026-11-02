@@ -138,7 +138,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           if (!isCurrent() || controller.signal.aborted || revision !== acquisitionRevision || !lease.root.isConnected || lease.signal.aborted) { lease.release(); restoreNotice(); return; }
           acquisition = null;
           clearNotice();
-          const dispose = buildDirectoryView({ lease, target: target!, url, settings, signal, isCurrent, returnToNative, fetchSnapshot: dependencies.fetchDirectorySnapshot });
+          const dispose = buildDirectoryView({ lease, target: target!, url, settings, signal, isCurrent, fetchSnapshot: dependencies.fetchDirectorySnapshot });
           const currentLease = lease;
           const unexpectedRelease = () => {
             if (mounted?.lease !== currentLease) return;

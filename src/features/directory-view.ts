@@ -20,7 +20,6 @@ interface DirectoryViewOptions {
   settings: Settings;
   signal: AbortSignal;
   isCurrent(): boolean;
-  returnToNative(): void;
   fetchSnapshot: typeof fetchDirectorySnapshot;
 }
 
@@ -58,21 +57,21 @@ function initials(name: string): string {
 }
 
 export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
-  const { lease, target, url, settings, signal, isCurrent, returnToNative, fetchSnapshot } = options;
+  const { lease, target, url, settings, signal, isCurrent, fetchSnapshot } = options;
   const header = lease.root.querySelector<HTMLElement>(':scope > #overview');
   if (!header) throw new Error('The native directory heading changed.');
   let alive = true;
   let snapshot: DirectorySnapshot = lease.searchOnly ? { entries: [], totalCount: 0, complete: false } : lease.snapshot;
   let query = '';
   let displayedQuery = '';
-  let serverSearch = lease.searchOnly === true || snapshot.complete === false;
+  const serverSearch = lease.searchOnly === true || snapshot.complete === false;
   let grade = '';
   let sort: 'first' | 'last' = 'last';
   let page = 1;
   let renderRevision = 0;
   let readRevision = 0;
   let read: AbortController | null = null;
-  let readKind: 'search' | 'refresh' | null = null;
+  let searching = false;
   let searchTimer: number | undefined;
   let clearReadDeadline: Cleanup = () => {};
   const current = () => alive && isCurrent() && lease.root.isConnected && !lease.signal.aborted;
@@ -82,15 +81,6 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   heading.className = 'bn-directory-heading';
   const title = document.createElement('h2');
   title.textContent = 'Browse people';
-  const actions = document.createElement('div');
-  actions.className = 'bn-directory-actions';
-  const refreshButton = createButton('Refresh', 'refresh');
-  const cancelRefresh = createButton('Cancel refresh', 'x');
-  cancelRefresh.hidden = true;
-  const nativeButton = createButton('Use original directory', 'arrow-left');
-  nativeButton.title = 'Use Blackbaud’s original filters and additional contact details.';
-  actions.append(refreshButton, cancelRefresh, nativeButton);
-  heading.append(title, actions);
 
   const controls = document.createElement('div');
   controls.className = 'bn-directory-controls';
@@ -104,6 +94,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   const order = document.createElement('select');
   order.append(option('last', 'Last name'), option('first', 'First name'));
   controls.append(labelControl('Search people', search, 'search'), gradeField, labelControl('Sort by', order));
+  heading.append(title, controls);
   const count = document.createElement('p');
   count.className = 'bn-directory-count';
   count.setAttribute('role', 'status');
@@ -131,7 +122,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   feedback.className = 'bn-directory-feedback';
   feedback.setAttribute('role', 'status');
   feedback.setAttribute('aria-live', 'polite');
-  section.append(heading, controls, count, limit, list, empty, pagination, feedback);
+  section.append(heading, count, limit, list, empty, pagination, feedback);
 
   let derived: {
     snapshot: DirectorySnapshot;
@@ -161,7 +152,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     const hasGrades = counts.length > 0;
     const moveFocus = !hasGrades && gradeField.contains(document.activeElement);
     gradeField.hidden = !hasGrades;
-    grades.disabled = !hasGrades || readKind === 'search';
+    grades.disabled = !hasGrades || searching;
     controls.classList.toggle('bn-directory-controls-no-grades', !hasGrades);
     grades.replaceChildren(option('', 'All grades'), ...counts.map((item) => option(item.grade, `${item.grade} (${searchCounts.get(item.grade) ?? 0})`)));
     grades.value = grade;
@@ -237,7 +228,6 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   };
   const renderResults = () => {
     if (!current()) return;
-    const searching = readKind === 'search';
     const inviteSearch = serverSearch && !displayedQuery.trim() && snapshot.totalCount === 0 && (lease.searchOnly === true || snapshot.complete === false);
     list.hidden = searching;
     pagination.hidden = searching;
@@ -270,12 +260,10 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     next.disabled = page >= resultPage.pageCount;
     pageText.textContent = `Page ${page} of ${resultPage.pageCount}`;
   };
-  const setPending = (kind: 'search' | 'refresh' | null) => {
-    readKind = kind;
-    refreshButton.disabled = kind !== null;
-    cancelRefresh.hidden = kind !== 'refresh';
-    grades.disabled = gradeField.hidden || kind === 'search';
-    section.setAttribute('aria-busy', String(kind !== null));
+  const setPending = (pending: boolean) => {
+    searching = pending;
+    grades.disabled = Boolean(gradeField.hidden) || pending;
+    section.setAttribute('aria-busy', String(pending));
   };
   const cancelPendingRead = () => {
     readRevision += 1;
@@ -285,9 +273,9 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     clearReadDeadline = () => {};
     read?.abort();
     read = null;
-    setPending(null);
+    setPending(false);
   };
-  const requestResults = async (kind: 'search' | 'refresh', requestedQuery: string, revision: number) => {
+  const requestResults = async (requestedQuery: string, revision: number) => {
     if (!current() || revision !== readRevision) return;
     const controller = new AbortController();
     const timeout = new AbortController();
@@ -295,35 +283,29 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     const clearDeadline = () => window.clearTimeout(deadline);
     clearReadDeadline = clearDeadline;
     read = controller;
-    setPending(kind);
-    feedback.textContent = kind === 'refresh' ? 'Refreshing directory…' : '';
+    setPending(true);
+    feedback.textContent = '';
     renderResults();
-    let followUpSearch = false;
     try {
       const updated = await fetchSnapshot(target, AbortSignal.any([controller.signal, timeout.signal, signal, lease.signal]), lease.photoBaseUrl, requestedQuery);
       if (!current() || controller.signal.aborted || readRevision !== revision) return;
-      const wasServerSearch = serverSearch;
-      if (updated.complete === false) serverSearch = true;
-      else if (!lease.searchOnly && kind === 'refresh' && requestedQuery === '' && updated.complete === true) serverSearch = false;
       snapshot = updated;
       displayedQuery = requestedQuery;
-      followUpSearch = !wasServerSearch && serverSearch && query !== requestedQuery;
-      setPending(null);
+      setPending(false);
       renderGrades();
       renderResults();
-      feedback.textContent = kind === 'refresh' ? 'Directory refreshed.' : '';
+      feedback.textContent = '';
     } catch {
       if (!current() || controller.signal.aborted || readRevision !== revision) return;
-      setPending(null);
+      setPending(false);
       renderGrades();
       renderResults();
-      feedback.textContent = kind === 'refresh' ? 'Could not refresh. Showing the previous directory results.' : 'Could not search. Showing previous results. Try another name or Refresh to retry.';
+      feedback.textContent = 'Could not search. Showing previous results. Try another name.';
     } finally {
       clearDeadline();
       if (clearReadDeadline === clearDeadline) clearReadDeadline = () => {};
-      if (current() && readRevision === revision) { read = null; setPending(null); }
+      if (current() && readRevision === revision) { read = null; setPending(false); }
     }
-    if (followUpSearch && current() && readRevision === revision) scheduleSearch();
   };
   const showSearchInvitation = () => {
     snapshot = { entries: [], totalCount: 0, complete: false };
@@ -340,18 +322,13 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     const revision = readRevision;
     const requestedQuery = query;
     page = 1;
-    setPending('search');
+    setPending(true);
     feedback.textContent = '';
     renderResults();
     searchTimer = window.setTimeout(() => {
       searchTimer = undefined;
-      void requestResults('search', requestedQuery, revision);
+      void requestResults(requestedQuery, revision);
     }, DIRECTORY_SEARCH_DELAY);
-  };
-  const refreshResults = () => {
-    cancelPendingRead();
-    if (lease.searchOnly && !query.trim()) { showSearchInvitation(); return; }
-    void requestResults('refresh', serverSearch ? query : '', readRevision);
   };
   search.addEventListener('input', () => {
     query = search.value;
@@ -370,9 +347,6 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   });
   previous.addEventListener('click', () => { page -= 1; renderResults(); });
   next.addEventListener('click', () => { page += 1; renderResults(); });
-  refreshButton.addEventListener('click', refreshResults);
-  cancelRefresh.addEventListener('click', () => { cancelPendingRead(); renderGrades(); renderResults(); feedback.textContent = 'Refresh canceled. Showing the previous directory results.'; });
-  nativeButton.addEventListener('click', returnToNative);
   const previousNativeAttribute = lease.root.getAttribute(DIRECTORY_NATIVE_ATTRIBUTE);
   const nativeAttributeValue = `enhanced-${directoryNumber}`;
   renderGrades();

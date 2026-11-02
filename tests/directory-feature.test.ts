@@ -373,7 +373,7 @@ test('partial directories debounce names, abort earlier reads immediately, and k
   assert.deepEqual(requests.map((request) => request.query), ['ab', 'abc', 'next']);
 });
 
-test('server search failures retain explicit previous results, zero matches are accurate, and only a full blank refresh enables local search', async (t) => {
+test('server search failures retain explicit previous results and complete matches keep server search', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture('Alumni Directory');
   const requests: { query: string; result: ReturnType<typeof deferred<DirectorySnapshot>> }[] = [];
@@ -392,7 +392,6 @@ test('server search failures retain explicit previous results, zero matches are 
   assert.match(document.querySelector('.bn-directory-count')!.textContent!, /^Previous results:/);
   assert.match(feedback(), /Could not search.*previous results/);
   assert.equal(field<HTMLInputElement>('Search people').value, 'failed name');
-  assert.equal(button('Refresh').disabled, false);
   input('retry');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   requests[1]!.result.resolve(remoteSnapshot(1));
@@ -421,16 +420,9 @@ test('server search failures retain explicit previous results, zero matches are 
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   requests[5]!.result.resolve(partialSnapshot());
   await flush();
-  button('Refresh').click();
-  assert.equal(requests[6]!.query, '');
-  requests[6]!.result.resolve(snapshot(5));
-  await flush();
-  input('sunny');
-  assert.equal(rows().length, 1);
-  assert.equal(requests.length, 7);
 });
 
-test('server refresh uses the active name, preserves grade and sort, and new input cancels its stale response', async (t) => {
+test('server search preserves grade and sort and new input cancels its stale response', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const requests: { query: string; signal: AbortSignal; result: ReturnType<typeof deferred<DirectorySnapshot>> }[] = [];
@@ -446,14 +438,16 @@ test('server refresh uses the active name, preserves grade and sort, and new inp
   await flush();
   select('Grade', '10');
   select('Sort by', 'first');
-  button('Refresh').click();
-  assert.equal(requests[1]!.query, 'active name');
+  input('updated name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
+  assert.equal(requests[1]!.query, 'updated name');
   requests[1]!.result.resolve(remoteSnapshot(4));
   await flush();
   assert.equal(field<HTMLSelectElement>('Grade').value, '10');
   assert.equal(field<HTMLSelectElement>('Sort by').value, 'first');
   assert.equal(rows().length, 2);
-  button('Refresh').click();
+  input('superseded name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   input('new name');
   assert.equal(requests[2]!.signal.aborted, true);
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
@@ -489,7 +483,7 @@ test('a stalled server read times out, restores usable previous results, and per
   assert.equal(requestSignal?.aborted, true);
   assert.match(feedback(), /Could not search/);
   assert.equal(document.querySelector<HTMLElement>('.bn-directory-list')!.hidden, false);
-  assert.equal(button('Refresh').disabled, false);
+  assert.equal(field<HTMLSelectElement>('Grade').disabled, false);
   input('recovered');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   await flush();
@@ -498,7 +492,7 @@ test('a stalled server read times out, restores usable previous results, and per
   assert.equal(feedback(), '');
 });
 
-test('disabling or returning to native cancels debounce and owned server requests without late UI changes', async (t) => {
+test('disabling cancels debounce and owned server requests without late UI changes', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const result = deferred<DirectorySnapshot>();
@@ -518,13 +512,11 @@ test('disabling or returning to native cancels debounce and owned server request
   input('pending read');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   assert.equal(reads, 1);
-  button('Use original directory').click();
+  second.controller.abort();
   assert.equal(requestSignal?.aborted, true);
   result.resolve(remoteSnapshot(9));
   await flush();
   assert.equal(document.querySelector('.bn-directory'), null);
-  assert.ok(button('Use enhanced directory'));
-  second.controller.abort();
   assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);
 });
 
@@ -541,7 +533,6 @@ test('search-first directories invite a name, never issue blank reads, and keep 
   assert.equal(field<HTMLSelectElement>('Grade').parentElement!.hidden, true);
   assert.equal(document.querySelector('.bn-directory-empty p')!.textContent, 'Search by name to find people in this directory.');
   assert.equal(document.querySelector<HTMLElement>('.bn-directory-count')!.hidden, true);
-  button('Refresh').click();
   assert.deepEqual(queries, []);
   input('name');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
@@ -552,7 +543,6 @@ test('search-first directories invite a name, never issue blank reads, and keep 
   assert.equal(rows().length, 0);
   assert.deepEqual(queries, ['name']);
   assert.match(document.querySelector('.bn-directory-empty p')!.textContent!, /Search by name/);
-  button('Refresh').click();
   input('different name');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   await flush();
@@ -576,11 +566,12 @@ test('published multi-grade faculty rows use grade membership rather than a sing
   assert.equal(rows().length, 1);
 });
 
-test('refresh adds and removes available grade controls while preserving search and sort and clearing a vanished grade', async () => {
+test('server results update grade controls while preserving search and sort and clearing a vanished grade', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture('Staff Directory');
   const withGrades = snapshot(DIRECTORY_PAGE_SIZE + 13);
   const withoutGrades: DirectorySnapshot = { ...withGrades, entries: withGrades.entries.map((person) => ({ ...person, grade: '' })) };
-  const currentLease = lease(root, withoutGrades, 'Staff Directory');
+  const currentLease = lease(root, { ...withoutGrades, complete: false }, 'Staff Directory');
   let updated = withGrades;
   mount({ acquireDirectory: async () => currentLease.value, fetchDirectorySnapshot: async () => updated });
   await flush();
@@ -588,11 +579,9 @@ test('refresh adds and removes available grade controls while preserving search 
   const order = field<HTMLSelectElement>('Sort by');
   const grade = field<HTMLSelectElement>('Grade');
   assert.equal(grade.parentElement!.hidden, true);
-  input('Student');
   select('Sort by', 'first');
-  button('Next').click();
-  assert.equal(rows().length, 13);
-  button('Refresh').click();
+  input('Student');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   await flush();
   assert.equal(grade.parentElement!.hidden, false);
   assert.equal(grade.disabled, false);
@@ -601,23 +590,25 @@ test('refresh adds and removes available grade controls while preserving search 
   assert.equal(field('Grade'), grade);
   assert.equal(search.value, 'Student');
   assert.equal(order.value, 'first');
-  assert.equal(rows().length, 13);
+  assert.equal(rows().length, DIRECTORY_PAGE_SIZE);
   select('Grade', '10');
   assert.equal(rows().length, 31);
   grade.focus();
   updated = withoutGrades;
-  button('Refresh').click();
+  input('updated name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   await flush();
   assert.equal(grade.parentElement!.hidden, true);
   assert.equal(grade.disabled, true);
   assert.equal(grade.value, '');
   assert.equal(document.activeElement, search);
-  assert.equal(search.value, 'Student');
+  assert.equal(search.value, 'updated name');
   assert.equal(order.value, 'first');
   assert.equal(rows().length, DIRECTORY_PAGE_SIZE);
   assert.match(document.querySelector('.bn-directory-count')!.textContent!, /Showing 1–50 of 63 people/);
   updated = { ...withGrades, entries: withGrades.entries.map((person) => ({ ...person, grade: '7' })) };
-  button('Refresh').click();
+  input('another name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   await flush();
   assert.equal(grade.parentElement!.hidden, false);
   assert.equal(grade.disabled, false);
@@ -693,77 +684,34 @@ test('email copy reports success and failure and ignores completion for replaced
   await flush();
   assert.equal(feedback(), before);
 });
-
-test('refresh preserves old results on failure, cancels requests, and ignores stale responses', async () => {
-  const root = fixture();
-  const currentLease = lease(root);
-  const requests: { pending: ReturnType<typeof deferred<DirectorySnapshot>>; signal: AbortSignal }[] = [];
-  mount({
-    acquireDirectory: async () => currentLease.value,
-    fetchDirectorySnapshot: async (target, signal, prefix) => {
-      assert.equal(target.directoryId, '123');
-      assert.equal(prefix, photoBaseUrl);
-      const pending = deferred<DirectorySnapshot>();
-      requests.push({ pending, signal });
-      return pending.promise;
-    },
-  });
-  await flush();
-  button('Refresh').click();
-  assert.equal(rows().length, 3);
-  assert.equal(button('Refresh').disabled, true);
-  requests[0]!.pending.reject(new Error('Incomplete response'));
-  await flush();
-  assert.equal(rows().length, 3);
-  assert.match(feedback(), /previous directory results/);
-  assert.equal(button('Refresh').disabled, false);
-  button('Refresh').click();
-  button('Cancel refresh').click();
-  assert.equal(requests[1]!.signal.aborted, true);
-  button('Refresh').click();
-  requests[2]!.pending.resolve(snapshot(4));
-  await flush();
-  assert.equal(rows().length, 4);
-  assert.equal(feedback(), 'Directory refreshed.');
-  requests[1]!.pending.resolve(snapshot(9));
-  await flush();
-  assert.equal(rows().length, 4);
-  assert.equal(feedback(), 'Directory refreshed.');
-  input('Student 004');
-  select('Grade', '10');
-  button('Refresh').click();
-  requests[3]!.pending.resolve(snapshot(2));
-  await flush();
-  assert.equal(field<HTMLInputElement>('Search people').value, 'Student 004');
-  assert.equal(field<HTMLSelectElement>('Grade').value, '10');
-  assert.equal(rows().length, 0);
-});
-
-test('returning to native restores the page, cancels refresh, and permits a fresh lease', async () => {
+test('disabling restores the native page, cancels search, and re-enabling acquires a fresh lease', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const leases: ReturnType<typeof lease>[] = [];
   const pending = deferred<DirectorySnapshot>();
-  let refreshSignal: AbortSignal | undefined;
-  mount({
-    acquireDirectory: async () => { const next = lease(root); leases.push(next); return next.value; },
-    fetchDirectorySnapshot: async (_target, signal) => { refreshSignal = signal; return pending.promise; },
-  });
+  let searchSignal: AbortSignal | undefined;
+  const dependencies: Partial<DirectoryFeatureDependencies> = {
+    acquireDirectory: async () => { const next = lease(root, partialSnapshot()); leases.push(next); return next.value; },
+    fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; },
+  };
+  const first = mount(dependencies);
   await flush();
-  button('Refresh').click();
-  button('Use original directory').click();
-  assert.equal(refreshSignal?.aborted, true);
+  input('pending name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
+  first.controller.abort();
+  assert.equal(searchSignal?.aborted, true);
   assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
   assert.equal(document.querySelector('.bn-directory'), null);
   assert.equal(leases[0]!.releases(), 1);
-  assert.match(document.querySelector('.bn-directory-notice')!.textContent!, /full search, filters, and contact details/);
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+  assert.notEqual(window.getComputedStyle(document.getElementById('directory-results')!).display, 'none');
   pending.resolve(snapshot(8));
   await flush();
   assert.equal(document.querySelector('.bn-directory'), null);
-  button('Use enhanced directory').click();
+  mount(dependencies);
   await flush();
   assert.equal(leases.length, 2);
   assert.equal(rows().length, 3);
-  assert.equal(document.activeElement, field('Search people'));
 });
 
 test('asynchronous native root replacement retains the enhanced switch and permits a fresh lease', async () => {
@@ -774,13 +722,16 @@ test('asynchronous native root replacement retains the enhanced switch and permi
   const nativeRead = deferred<void>();
   const replacement = nativeRead.promise.then(() => main.replaceChildren(nativeRoot));
   const firstLease = lease(root);
+  const pending = deferred<DirectoryLease>();
   let acquisitions = 0;
   mount({ acquireDirectory: async () => {
     acquisitions += 1;
-    return acquisitions === 1 ? firstLease.value : lease(nativeRoot).value;
+    return acquisitions === 1 ? pending.promise : lease(nativeRoot).value;
   } });
   await flush();
   button('Use original directory').click();
+  pending.resolve(firstLease.value);
+  await flush();
   const switchControl = button('Use enhanced directory');
   const notice = switchControl.closest('.bn-directory-notice');
   assert.ok(notice);
@@ -801,9 +752,13 @@ test('asynchronous native root replacement retains the enhanced switch and permi
 
 test('a native rerender inside the same root retains its enhanced switch and cleanup stops reattachment', async () => {
   const root = fixture();
-  const mounted = mount({ acquireDirectory: async () => lease(root).value });
+  const pending = deferred<DirectoryLease>();
+  let acquisitions = 0;
+  const mounted = mount({ acquireDirectory: async () => ++acquisitions === 1 ? pending.promise : lease(root).value });
   await flush();
   button('Use original directory').click();
+  pending.resolve(lease(root).value);
+  await flush();
   const switchControl = button('Use enhanced directory');
   root.innerHTML = '<header id="overview"><h1>Rerendered directory</h1></header><div id="directory-results">Native results</div>';
   await flush();
@@ -812,14 +767,13 @@ test('a native rerender inside the same root retains its enhanced switch and cle
   switchControl.click();
   await flush();
   assert.equal(rows().length, 3);
-  button('Use original directory').click();
   mounted.controller.abort();
   root.innerHTML = '<header id="overview"><h1>Native after disabling</h1></header>';
   await flush();
   assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);
 });
 
-test('pagination and refresh feedback reuse unchanged directory filters and sort order', async () => {
+test('pagination reuses unchanged directory filters and sort order', async () => {
   const root = fixture();
   const data = snapshot(103);
   let nameReads = 0;
@@ -827,16 +781,11 @@ test('pagination and refresh feedback reuse unchanged directory filters and sort
     const lastName = entry.lastName;
     Object.defineProperty(entry, 'lastName', { get: () => { nameReads += 1; return lastName; } });
   }
-  mount({ acquireDirectory: async () => lease(root, data).value, fetchDirectorySnapshot: async () => { throw new Error('Refresh unavailable'); } });
+  mount({ acquireDirectory: async () => lease(root, data).value });
   await flush();
   assert.ok(nameReads > 0);
   nameReads = 0;
   button('Next').click();
-  assert.equal(rows()[0]!.dataset.bnDirectoryUser, '51');
-  assert.equal(nameReads, 0);
-  button('Refresh').click();
-  await flush();
-  assert.match(feedback(), /Could not refresh/);
   assert.equal(rows()[0]!.dataset.bnDirectoryUser, '51');
   assert.equal(nameReads, 0);
   input('No matching name');
@@ -854,8 +803,9 @@ test('fallback notice observation disconnects on cleanup and cannot recreate UI 
     disconnections += 1;
     disconnect.call(this);
   });
+  const pending = deferred<DirectoryLease>();
   let acquisitions = 0;
-  const mounted = mount({ acquireDirectory: async () => { acquisitions += 1; return lease(root).value; } });
+  const mounted = mount({ acquireDirectory: async () => { acquisitions += 1; return pending.promise; } });
   await flush();
   button('Use original directory').click();
   const oldSwitch = button('Use enhanced directory');
@@ -864,6 +814,7 @@ test('fallback notice observation disconnects on cleanup and cannot recreate UI 
   assert.ok(disconnections > beforeCleanup);
   main.replaceChildren(nativeRoot);
   await flush();
+  pending.resolve(lease(root).value);
   oldSwitch.click();
   await flush();
   assert.equal(acquisitions, 1);
@@ -914,6 +865,7 @@ test('the enhanced view has no redundant directory selector and keeps the global
   const currentLease = lease(root);
   mount({ acquireDirectory: async () => currentLease.value });
   await flush();
+  assert.equal([...document.querySelectorAll('.bn-directory button')].some((button) => ['Refresh', 'Cancel refresh', 'Use original directory'].includes(button.textContent ?? '')), false);
   const controls = [...document.querySelectorAll('.bn-directory-field > span')].map((control) => control.textContent);
   assert.deepEqual(controls, ['Search people', 'Grade', 'Sort by']);
   const nativeNavigation = document.getElementById('topnav-containter')!;
@@ -975,19 +927,21 @@ test('global native directory navigation releases the enhanced view without repl
   assert.equal(document.querySelector('.bn-directory'), null);
 });
 
-test('unexpected native release removes the enhanced UI, aborts refresh and offers a native retry', async () => {
+test('unexpected native release removes the enhanced UI, aborts search and offers a native retry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
-  const currentLease = lease(root);
-  let refreshSignal: AbortSignal | undefined;
+  const currentLease = lease(root, partialSnapshot());
+  let searchSignal: AbortSignal | undefined;
   const pending = deferred<DirectorySnapshot>();
-  mount({ acquireDirectory: async () => currentLease.value, fetchDirectorySnapshot: async (_target, signal) => { refreshSignal = signal; return pending.promise; } });
+  mount({ acquireDirectory: async () => currentLease.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; } });
   await flush();
-  button('Refresh').click();
+  input('pending name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   currentLease.controller.abort();
   // Model the page adapter's synchronous teardown after it emits released.
   currentLease.value.release();
   await flush();
-  assert.equal(refreshSignal?.aborted, true);
+  assert.equal(searchSignal?.aborted, true);
   assert.equal(currentLease.releases(), 1);
   assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
   assert.equal(document.querySelector('.bn-directory'), null);
@@ -997,7 +951,8 @@ test('unexpected native release removes the enhanced UI, aborts refresh and offe
   assert.equal(document.querySelector('.bn-directory'), null);
 });
 
-test('feature abort during acquisition or refresh leaves no owned UI and ignores later responses', async () => {
+test('feature abort during acquisition or search leaves no owned UI and ignores later responses', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const pending = deferred<DirectoryLease>();
   let acquireSignal: AbortSignal | undefined;
@@ -1010,15 +965,16 @@ test('feature abort during acquisition or refresh leaves no owned UI and ignores
   assert.equal(late.releases(), 1);
   assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);
   assert.equal(document.querySelector('#blackbaud-next-directory'), null);
-  const active = lease(root);
-  const refresh = deferred<DirectorySnapshot>();
-  let refreshSignal: AbortSignal | undefined;
-  const next = mount({ acquireDirectory: async () => active.value, fetchDirectorySnapshot: async (_target, signal) => { refreshSignal = signal; return refresh.promise; } });
+  const active = lease(root, partialSnapshot());
+  const searchResult = deferred<DirectorySnapshot>();
+  let searchSignal: AbortSignal | undefined;
+  const next = mount({ acquireDirectory: async () => active.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return searchResult.promise; } });
   await flush();
-  button('Refresh').click();
+  input('pending name');
+  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
   next.controller.abort();
-  assert.equal(refreshSignal?.aborted, true);
-  refresh.resolve(snapshot(20));
+  assert.equal(searchSignal?.aborted, true);
+  searchResult.resolve(snapshot(20));
   await flush();
   assert.equal(active.releases(), 1);
   assert.equal(document.querySelector(`[${DIRECTORY_UI_ATTRIBUTE}]`), null);

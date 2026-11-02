@@ -14,7 +14,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const origin = 'https://directory-startup-fixture.myschoolapp.com';
 const directoryUrl = `${origin}/app/student?svcid=edu#directory/438`;
 
-const nativeFixture = `<!doctype html><html><head><meta charset="utf-8"><title>Directory fixture</title></head><body>
+const nativeFixture = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Directory fixture</title><style>
+  * { box-sizing: border-box; } body { margin: 0; }
+  #site-main { max-width: 1200px; margin: auto; padding: 0 16px; }
+  label { font-weight: bold; } input::placeholder { font-style: italic; }
+</style></head><body>
   <main id="site-main"></main><button id="progress" type="button">Go to Progress</button>
   <script>
     const state = window.fixtureState = { started: false, nativeStarts: 0, metadataReads: 0, metadataCompletions: 0, aborts: 0 };
@@ -96,7 +100,10 @@ async function syntheticDirectory(browser: Browser, holdMetadata = false) {
     const body = url.pathname === '/api/directory/directoryget'
       ? { DirectoryID: 438, DirectoryName: 'Students', DefaultResults: true }
       : url.pathname === '/api/directory/directoryresultsget'
-        ? [{ UserID: 41, FirstName: 'Alex', LastName: 'Example', PublishUserProfile: true, PublishEmail: false, TotalCount: 1 }]
+        ? [
+          { UserID: 41, FirstName: 'Alex', LastName: 'Example', GradeDisplay: '9', PublishUserProfile: true, PublishEmail: true, EmailBad: false, Email: 'alex.example@example.test', TotalCount: 2 },
+          { UserID: 42, FirstName: 'Casey', LastName: 'Sample', GradeDisplay: '10', PublishUserProfile: true, PublishEmail: false, TotalCount: 2 },
+        ]
         : {};
     void request.respond(url.pathname === '/app/student'
       ? { status: 200, contentType: 'text/html', body: nativeFixture }
@@ -150,6 +157,36 @@ test('compiled Chrome catches the initial directory route before DOM readiness a
         assert.match(await frame.page.$eval('.bn-directory-row', (row) => row.textContent ?? ''), /Alex Example/);
         assert.deepEqual(frame.reads.sort(), ['/api/directory/directoryget', '/api/directory/directoryresultsget']);
         assert.equal(await frame.page.evaluate(() => Reflect.get(window, 'fixtureState').nativeStarts), 0);
+        for (const width of [1280, 992, 700, 390]) {
+          await frame.page.setViewport({ width, height: 900 });
+          const layout = await frame.page.evaluate(() => {
+            const bounds = (selector: string) => {
+              const { top, bottom, left, right, width } = document.querySelector(selector)!.getBoundingClientRect();
+              return { top, bottom, left, right, width };
+            };
+            const input = document.querySelector('.bn-directory input')!;
+            const rows = [...document.querySelectorAll('.bn-directory-person')].map((row) => row.getBoundingClientRect().top);
+            return { overflow: document.documentElement.scrollWidth - innerWidth,
+              search: bounds('.bn-directory input'), grade: bounds('.bn-directory select'), sort: bounds('.bn-directory-field:last-child select'),
+              firstRow: bounds('.bn-directory-row'), rows,
+              placeholder: getComputedStyle(input, '::placeholder').fontStyle,
+              weight: getComputedStyle(input).fontWeight };
+          });
+          const evidence = JSON.stringify({ width, ...layout });
+          assert.equal(layout.overflow, 0, `Directory controls fit the viewport: ${evidence}`);
+          assert.equal(layout.placeholder, 'normal', 'Native placeholder italics do not leak into directory search');
+          assert.equal(layout.weight, '400', 'Directory field values use regular weight despite native label styling');
+          assert.ok(layout.firstRow.top >= Math.max(layout.search.bottom, layout.sort.bottom), `The toolbar clears the results: ${evidence}`);
+          if (width === 1280) {
+            assert.ok(Math.abs(layout.search.bottom - layout.sort.bottom) < 1, `Desktop search and filters share one control row: ${evidence}`);
+            assert.ok(layout.grade.width <= 160, `Grade filtering does not consume a quarter of the page: ${evidence}`);
+            assert.ok(Math.abs(layout.rows[0]! - layout.rows[1]!) < 1, `Result names align even when only one entry has an email: ${evidence}`);
+          }
+          if (width === 390) {
+            assert.ok(layout.search.width >= 300, `Phone search uses the available row: ${evidence}`);
+            assert.ok(Math.abs(layout.grade.top - layout.sort.top) < 1, `Phone filters share a row below search: ${evidence}`);
+          }
+        }
       } finally { await frame.page.close(); }
     });
 
