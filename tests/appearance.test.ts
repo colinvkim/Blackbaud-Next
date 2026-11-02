@@ -86,6 +86,7 @@ test('appearance scopes only known root routes on authenticated school pages', (
     ['/app/faculty#directory/456?sort=name', 'directory'],
     ['/app/student#resourceboard/?category=school', 'resources'],
     ['/lms-assignment/assignment-center/student?svcid=edu', 'assignments'],
+    ['/lms-assignment/assignment/assignment-student-view/123?svcid=edu', 'assignment'],
   ]);
   for (const [path, kind] of routes) assert.equal(nativeAppearancePageKind(new URL(`${origin}${path}`)), kind);
   for (const path of [
@@ -594,7 +595,7 @@ function modernShellHtml(href = '/app/student#studentmyday'): string {
   return `<app-root><header id="site-header"></header><nav id="site-nav-container"><ul class="topnav"><li><a href="${href}">My Day</a></li></ul></nav><section id="modern-content"><button type="button">Native page action</button></section></app-root>`;
 }
 
-test('calendar and full assignment routes share only verified modern navigation styling', () => {
+test('calendar and full assignment routes share verified modern navigation while unknown content stays native', () => {
   const routes = [
     { path: '/sis-scheduling/user-calendar?date=2026-10-09', kind: 'calendar' },
     { path: '/lms-assignment/assignment/assignment-student-view/123?svcid=edu', kind: 'assignment' },
@@ -605,7 +606,7 @@ test('calendar and full assignment routes share only verified modern navigation 
     try {
       assert.equal(nativeModernAppearanceRoute(url), kind);
       assert.equal(nativeModernAppearanceShell(url, view.window.document), view.window.document.documentElement);
-      assert.equal(nativeAppearancePageKind(url), null);
+      assert.equal(nativeAppearancePageKind(url), kind === 'assignment' ? 'assignment' : null);
       assert.equal(nativeAppearancePage(url, view.window.document), null);
       assert.equal(view.window.document.getElementById('site-main'), null);
       assert.equal(view.window.document.getElementById('site-nav-lower'), null);

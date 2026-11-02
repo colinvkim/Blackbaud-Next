@@ -4,6 +4,7 @@ import { addStyle } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 import { ASSIGNMENT_RESPONSIVE_STYLES, ASSIGNMENT_STYLES } from './assignment-styles.ts';
 import { PROGRESS_STYLES } from './progress-styles.ts';
+import { ASSIGNMENT_DETAIL_STYLES } from './assignment-detail-styles.ts';
 
 const TOOL_STYLES = `
 ${THEME_TOKENS}
@@ -80,6 +81,7 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTo
 html[data-blackbaud-next-appearance] #site-login-box:has(#site-login-form #Username) { max-width: calc(100vw - 32px); border: 1px solid var(--bn-border); border-radius: var(--bn-radius-lg); box-shadow: var(--bn-shadow); }
 html[data-blackbaud-next-appearance] #site-login-input :is(input[type="text"], input[type="email"], input[type="password"]) { border-radius: var(--bn-radius); border-color: var(--bn-border-strong); }
 ${ASSIGNMENT_STYLES}
+${ASSIGNMENT_DETAIL_STYLES}
 @media (max-width: 700px) {
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-title { padding: 16px; }
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] .bb-tile-content { padding: 16px; }

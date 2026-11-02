@@ -40,7 +40,7 @@ export const appearanceLayoutFeature: Feature = {
     const shellRoot = (element: HTMLElement) => element.tagName === 'APP-ROOT' ||
       ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom', 'site-top-spacer'].includes(element.id);
     const contentRoot = (element: HTMLElement) => element.id === 'site-main' ||
-      ['SKY-TOOLBAR', 'SKY-REPEATER', 'SKY-REPEATER-ITEM'].includes(element.tagName);
+      ['SKY-TOOLBAR', 'SKY-REPEATER', 'SKY-REPEATER-ITEM', 'APP-ASSIGNMENT-STUDENT-VIEW', 'APP-ASSIGNMENT-VIEW'].includes(element.tagName);
     const queueUpdate = (content: boolean, shell: boolean) => {
       if (signal.aborted) return;
       contentDirty ||= content;

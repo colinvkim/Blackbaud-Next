@@ -3,8 +3,9 @@ import { directoryTargetFromUrl } from './directory.ts';
 import { isResourceBoard } from './navigation.ts';
 import { assignmentTitleLinkUrl, ASSIGNMENT_LINK_SELECTOR, ASSIGNMENT_ROW_SELECTOR, ASSIGNMENT_TOOLBAR_SELECTOR } from './assignment-list.ts';
 import { isLmsPage } from './routes.ts';
+import { assignmentBreadcrumbLinks, ASSIGNMENT_DETAILS_SELECTOR } from './assignment-navigation.ts';
 
-export type NativeAppearancePageKind = 'progress' | 'schedule' | 'class' | 'directory' | 'resources' | 'assignments';
+export type NativeAppearancePageKind = 'progress' | 'schedule' | 'class' | 'directory' | 'resources' | 'assignments' | 'assignment';
 
 export interface NativeAppearancePage {
   element: HTMLElement;
@@ -24,6 +25,7 @@ export function nativeModernAppearanceRoute(url: URL): 'assignments' | 'calendar
 export function appearanceObservationSelector(url: URL): string {
   const modern = nativeModernAppearanceRoute(url);
   if (modern === 'assignments') return `#site-header, #site-nav-container, #site-nav-lower, #site-top-spacer, sky-toolbar, sky-repeater, ${ASSIGNMENT_ROW_SELECTOR}`;
+  if (modern === 'assignment') return '#site-header, #site-nav-container, #site-top-spacer, app-root, app-assignment-student-view, app-assignment-view';
   if (modern) return '#site-header, #site-nav-container, #site-top-spacer, app-root';
   return '#site-main, #site-header, #site-nav-container, #site-nav-lower, #site-nav-bottom, #site-top-spacer';
 }
@@ -31,6 +33,7 @@ export function appearanceObservationSelector(url: URL): string {
 export function nativeAppearancePageKind(url: URL): NativeAppearancePageKind | null {
   if (!isLmsPage(url) || url.username || url.password) return null;
   if (nativeModernAppearanceRoute(url) === 'assignments') return 'assignments';
+  if (nativeModernAppearanceRoute(url) === 'assignment') return 'assignment';
   if (!/^\/app\/[^/]+\/?$/i.test(url.pathname)) return null;
   if (directoryTargetFromUrl(url)) return 'directory';
   if (isResourceBoard(url) && /^#resourceboard\/?(?:\?.*)?$/i.test(url.hash)) return 'resources';
@@ -46,6 +49,19 @@ export function nativeAppearancePageKind(url: URL): NativeAppearancePageKind | n
 export function nativeAppearancePage(url: URL, page: Document = document): NativeAppearancePage | null {
   const kind = nativeAppearancePageKind(url);
   if (!kind) return null;
+  if (kind === 'assignment') {
+    const roots = page.querySelectorAll<HTMLElement>('app-assignment-view');
+    if (roots.length !== 1 || roots[0]!.parentElement?.tagName !== 'APP-ASSIGNMENT-STUDENT-VIEW') return null;
+    const root = roots[0]!;
+    const details = root.querySelectorAll<HTMLElement>(ASSIGNMENT_DETAILS_SELECTOR);
+    if (details.length !== 1 || root.querySelector(':scope > div > div > app-assignment-view-details') !== details[0]) return null;
+    const links = assignmentBreadcrumbLinks(details[0]!);
+    const title = links[0]?.parentElement;
+    if (links.length !== 1 || title?.children.length !== 2 || title.firstElementChild !== links[0] ||
+      title.lastElementChild?.tagName !== 'SPAN' || !title.matches('.header > div > h1') ||
+      !details[0]!.querySelector(':scope > .header > div > sky-fluid-grid .sky-description-list-content > dt + dd')) return null;
+    return { element: root, kind };
+  }
   if (kind === 'assignments') {
     const toolbars = page.querySelectorAll<HTMLElement>(ASSIGNMENT_TOOLBAR_SELECTOR);
     const rows = page.querySelectorAll<HTMLElement>(ASSIGNMENT_ROW_SELECTOR);
