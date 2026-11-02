@@ -42,7 +42,7 @@ function nativeMenu(id: string, modern: boolean): string {
     return `<div class="subnavtop"></div><div class="subnav sec-75-bordercolor white-bgc sky-nav subnav-multicol" data-native-menu="${id}">${column(0)}${column(20)}<ul class="subnavfooter"><li class="divider"></li>${item('View Other Classes', '/app/student?svcid=edu#otherclasses')}</ul></div>`;
   }
   if (id === 'myday') return menu(lowerNavigation.map(([, label, , href]) => item(label, href)).join(''));
-  if (id === 'group-header-Groups') return menu(item('Student Council', '/app/student?svcid=edu#communitygroup/201/0/bulletinboard') + item('Robotics club', '/app/student?svcid=edu#communitygroup/202/0/bulletinboard') + '<li class="divider"></li>' + item('View Other Groups', '/app/student?svcid=edu#othergroups'));
+  if (id === 'group-header-Groups') return menu('<li class="divider-label first"><h6>Teams</h6></li>' + item('Student Council', '/app/student?svcid=edu#communitygroup/201/0/bulletinboard') + '<li class="divider-label"><h6>Other</h6></li>' + item('Robotics club', '/app/student?svcid=edu#communitygroup/202/0/bulletinboard') + '<li class="divider"></li>' + item('View Other Groups', '/app/student?svcid=edu#othergroups'));
   if (id === 'group-header-News') return menu('<li class="divider-label"><h6>School news</h6></li>' + item('Recent Activity', '/app/student?svcid=edu#news') + item('Announcements', '/app/student?svcid=edu#news/announcements'));
   if (id === 'directory-subnav') return menu(['Students', 'Parents and guardians', 'Faculty', 'Alumni', 'Staff'].map((label, index) => item(label, `/app/student?svcid=edu#directory/${index + 1}`)).join('') + '<li class="divider"></li>' + item('My Contacts', '/app/student?svcid=edu#mycontacts'));
   return '';
@@ -86,7 +86,7 @@ function utilityHeader(modern: boolean): string {
     ? `<div class="desc"><div class="title"><div>${text}</div></div></div>`
     : `<span class="desc"><span class="title">${text}</span></span>`;
   const list = `<ul class="topnav${modern ? ' user-nav' : ''}">
-    <li><a href="${studentPage}#searchresults" data-native-utility="search">${modern ? '<span class="search"><sky-icon iconname="search"></sky-icon></span><sky-icon iconname="caret-down"></sky-icon>' : '<i class="topnav-icon p3icon-search"></i><span class="caret for-search"></span>'}</a><div class="subnavtop"></div><div class="subnav" data-native-menu="search"><div><input id="site-search-input" type="text" aria-label="Search the portal"></div></div></li>
+    <li><a href="${studentPage}#searchresults" data-native-utility="search">${modern ? '<span class="search"><sky-icon iconname="search"></sky-icon></span><sky-icon iconname="caret-down"></sky-icon>' : '<i class="topnav-icon p3icon-search"></i><span class="caret for-search"></span>'}</a><div class="subnavtop"></div><div class="subnav" data-native-menu="search"><div><input id="site-search-input" type="text" placeholder="search" aria-label="Search the portal"></div></div></li>
     <li><a ${modern ? 'id="official-notes"' : ''} href="${modern ? studentPage : ''}#message/officialnotes" data-native-utility="notes"><span class="site-badge ${modern ? 'site-badge-message' : 'site-badge-official-notes'}">2</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Official Notes')}</a></li>
     <li><a id="inbox-link" href="${modern ? studentPage : ''}#message/inbox" data-native-utility="messages"><span class="site-badge site-badge-message">0</span>${modern ? '' : '&nbsp;&nbsp;'}${description('Messages')}</a></li>
     <li><a id="account-nav" href="#" data-native-utility="account"><div class="bb-avatar-wrapper-nav"><img class="bb-avatar-image-nav" src="${origin}/fixture-avatar.svg" alt=""></div>${description(modern ? 'Alex</div><div>Student' : 'Alex<br>Student')}${modern ? '<sky-icon iconname="caret-down"></sky-icon>' : '<span class="caret"></span>'}</a><div class="subnavtop"></div><div class="subnav" data-native-menu="account"><ul><li><a href="/app/student?svcid=edu#profile">Profile</a></li><li><a href="/app/student?svcid=edu#settings">Settings</a></li><li class="${modern ? 'sep' : 'divider'}"></li><li><a href="/app/SignOut">Sign out</a></li></ul></div></li>
@@ -133,6 +133,8 @@ function nativeFixture(modern: boolean): string {
     .topnav .subnav { display: none; position: absolute; top: 100%; left: 0; width: 260px; height: auto; padding: 12px; margin: 0; border: 1px solid #b97011; background: white; list-style: none; z-index: 40; }
     .topnav .subnav ul { padding: 0; margin: 0; } .topnav .subnav li { list-style: none; } .topnav .subnav a { display: block; padding: 4px; font-size: 16px; color: #111; text-decoration: none; }
     .topnav .subnav .divider { margin: 8px 0; border-top: 1px solid #bbb; }
+    .subnav .divider-label h6 { text-shadow: 0 1px #a5a5a5; }
+    input::placeholder { font-style: italic; }
     .topnav .subnav-multicol { width: 900px; } .topnav .subnav-multicol > ul { float: left; width: 50%; padding: 0; margin: 0; }
     .topnav .subnav-multicol > ul.subnavfooter { clear: both; width: 100%; }
     .topnav .subnavtop { display: none; position: absolute; top: 100%; left: 20px; border: 9px solid transparent; border-bottom-color: #b97011; }
@@ -1100,10 +1102,14 @@ async function nativeDropdowns(page: Page, enhanced: boolean): Promise<void> {
             viewport: { width: innerWidth, height: innerHeight },
             pointer: getComputedStyle(pointer).display,
             firstLink: label && { left: label.left, right: label.right, height: label.height },
+            headingShadows: [...menu.querySelectorAll('h6')].map((heading) => getComputedStyle(heading).textShadow),
+            searchPlaceholder: menuId === 'search' ? getComputedStyle(menu.querySelector('input')!, '::placeholder').fontStyle : null,
             scrollable: scrollable.length,
           };
         }, id);
         const evidence = `${id}: ${JSON.stringify(state)}`;
+        for (const shadow of state.headingShadows) assert.equal(shadow, enhanced ? 'none' : 'rgb(165, 165, 165) 0px 1px 0px', `Menu headings lose the native text shadow only while appearance is enabled: ${evidence}`);
+        if (state.searchPlaceholder) assert.equal(state.searchPlaceholder, enhanced ? 'normal' : 'italic', `Search placeholder styling follows the appearance switch: ${evidence}`);
         if (enhanced) {
           assert.equal(state.marker, id === 'group-header-Classes' ? 'dropdown-classes' : 'dropdown', `Verified native menu is enhanced: ${evidence}`);
           assert.ok(state.left >= -1 && state.right <= state.viewport.width + 1 && state.top >= -1 && state.bottom <= state.viewport.height + 1, `Open dropdown stays inside a short viewport: ${evidence}`);
@@ -1234,6 +1240,7 @@ async function unfamiliarDropdownFallback(page: Page): Promise<void> {
     document.querySelector('[data-native-menu="group-header-Groups"] > ul')!.append(row);
   });
   await page.waitForFunction(() => !document.querySelector('[data-native-menu="group-header-Groups"]')!.hasAttribute('data-bn-header-part'), { polling: 50 });
+  assert.equal(await page.$eval('[data-native-menu="group-header-Groups"] h6', (heading) => getComputedStyle(heading).textShadow), 'rgb(165, 165, 165) 0px 1px 0px', 'Unfamiliar menu markup keeps its native heading style');
   assert.equal(await page.$eval('#site-top-spacer', (spacer) => spacer.getAttribute('data-bn-header-part')), 'spacer', 'An unfamiliar menu does not remove the independently verified header layout');
   assert.equal(await page.$eval('[data-native-menu="directory-subnav"]', (menu) => menu.getAttribute('data-bn-header-part')), 'dropdown', 'Other verified dropdowns keep their appearance');
   await openNativeMenu(page, 'account');
@@ -1251,6 +1258,7 @@ async function classSearchMenu(page: Page): Promise<void> {
   await openNativeMenu(page, 'group-header-Classes');
   const input = '[data-native-menu="group-header-Classes"] .bn-class-search input';
   await page.waitForSelector(input);
+  assert.equal(await page.$eval(input, (element) => getComputedStyle(element, '::placeholder').fontStyle), 'normal', 'Native placeholder italics do not leak into class search');
   await page.click(input);
   await page.type(input, 'cafe studies');
   await page.waitForFunction(() => document.querySelector('[data-native-menu="group-header-Classes"] .bn-tool-status')!.textContent === '1 of 40 classes', { polling: 50 }).catch(async (error: unknown) => {
@@ -1738,6 +1746,9 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     }
     await setPreferences({ classSwitching: true });
     for (const page of [legacy, modern]) await classSearchMenu(page);
+    await setAppearance(false);
+    for (const page of [legacy, modern]) assert.equal(await page.$eval('.bn-class-search input', (input) => getComputedStyle(input, '::placeholder').fontStyle), 'normal', 'Class search retains its own placeholder style with appearance off');
+    await setAppearance(true);
     await setPreferences({ classSwitching: false });
     for (const page of [legacy, modern]) {
       await page.waitForFunction(() => !document.querySelector('.bn-class-search, [data-blackbaud-next-class-hidden], [data-blackbaud-next-class-menu]'), { polling: 50 });

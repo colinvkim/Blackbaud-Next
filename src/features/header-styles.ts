@@ -149,12 +149,13 @@ ${menus} [data-bn-header-part="dropdown-link"] :is(.desc, .title, b, strong) { d
 ${menus} [data-bn-header-part="dropdown-link"]:is(:hover, :focus-visible) { color: var(--bn-header-blue) !important; background: var(--bn-header-hover) !important; }
 ${menus} [data-bn-header-part="dropdown-link"]:focus-visible { outline: 2px solid var(--bn-header-blue); outline-offset: -2px; }
 ${menus} [data-bn-header-part="dropdown-divider"] { height: 1px; margin: 6px 4px !important; width: auto !important; background: var(--bn-header-line); }
-${menus} [data-bn-header-part="dropdown-heading"] > h6 { margin: 8px 12px 4px; padding: 0; border: 0; background: transparent !important; color: var(--bn-header-muted); font: 600 11px/1.4 var(--bn-font); letter-spacing: .06em; text-transform: uppercase; }
+${menus} [data-bn-header-part="dropdown-heading"] > h6 { margin: 8px 12px 4px; padding: 0; border: 0; background: transparent !important; color: var(--bn-header-muted); font: 600 11px/1.4 var(--bn-font); letter-spacing: .06em; text-transform: uppercase; text-shadow: none; }
 ${menus} > [data-bn-header-part="dropdown-footer"] { margin-top: 6px !important; border-top: 1px solid var(--bn-header-line); padding-top: 6px !important; }
 ${menus} > [data-bn-header-part="dropdown-footer"] > [data-bn-header-part="dropdown-divider"] { display: none; }
 ${menus} [data-bn-header-part="dropdown-footer"] [data-bn-header-part="dropdown-link"] { color: var(--bn-header-blue) !important; font-weight: 500 !important; }
 ${menus} [data-bn-header-part="dropdown-search"] { padding: 6px !important; }
 ${menus} #site-search-input { width: 100%; margin: 0; background: #f8fafc; }
+${menus} #site-search-input::placeholder { color: var(--bn-header-muted); font-style: normal; opacity: 1; }
 ${menus} #site-search-input:focus-visible { outline: 2px solid var(--bn-header-blue); outline-offset: 2px; }
 ${shell} #site-nav-container [data-bn-header-part="dropdown-classes"] { width: 480px !important; padding-top: 0 !important; scroll-padding-top: var(--bn-class-search-clearance); }
 ${menus} > .bn-class-search { position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--bn-class-search-gap); margin: 0 0 var(--bn-menu-padding); padding: var(--bn-class-search-inset) var(--bn-menu-padding); border-bottom: 1px solid var(--bn-header-line); background: #fff; border-radius: 0; }

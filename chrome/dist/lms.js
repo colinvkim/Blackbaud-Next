@@ -99,6 +99,7 @@ app-assignment-status-display:has(> [data-bn-graded-status="true"]) { font: inhe
 [${dr}] .bn-class-search { display: flex; flex-wrap: wrap; align-items: center; clear: both; box-sizing: border-box; width: 100%; gap: 8px; padding: 12px; border-bottom: 1px solid var(--bn-border); background: var(--bn-surface); color: var(--bn-text); font: 14px/1.5 var(--bn-font); }
 .bn-class-search label { margin: 0; color: var(--bn-text); font-size: 13px; font-weight: 600; }
 .bn-class-search input { box-sizing: border-box; min-height: 36px; flex: 1 1 160px; min-width: 0; padding: 6px 10px; border: 1px solid var(--bn-border-strong); border-radius: var(--bn-radius); background: var(--bn-surface); color: var(--bn-text); font: inherit; }
+.bn-class-search input::placeholder { color: var(--bn-muted); font-style: normal; opacity: 1; }
 .bn-class-search input:focus-visible { outline: 2px solid var(--bn-accent); outline-offset: 3px; }
 .bn-class-search [hidden] { display: none !important; }
 [${dr}] li[${ur}] { display: none !important; }
