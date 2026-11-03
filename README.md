@@ -9,14 +9,14 @@ Blackbaud Next is a Chrome extension that improves Blackbaud LMS. It adds cleane
 
 ## Highlights
 
-| Area                        | Improvements                                                                                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **UI & page layout**        | Clearer, cleaner, and more refined navigation and pages. Consistent controls and design, a cleaner Assignment Center, and polished styling, including a better Classes menu.                           |
-| **Assignments**             | Preview instructions and attachments beside the list, and mark completed work more quickly.                                                                                                            |
-| **Performance**             | Smoother navigation between pages using caching, prerendering, and other performance techniques.                                                                                                       |
-| **Directories and rosters** | Browse directories in columns or rows, with staff titles and expandable contact details. Copy roster names or emails, and open full-size profile photos.                                                 |
-| **Sign-in**                 | Tired of logging to Blackbaud LMS every day after being signed out automatically? Skip having to log into Blackbaud LMS every day. Sign in with one button, without wasting time on repetitive clicks. |
-| **Everyday details**        | Useful tab titles that make sense, a recognizable tab icon, and more.                                                                                                                                  |
+| Area                        | Improvements                                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **UI & page layout**        | Clearer, cleaner, and more refined navigation and pages. Consistent controls and design, a cleaner Assignment Center, and polished styling, including a better Classes menu.           |
+| **Assignments**             | Preview instructions and attachments beside the list, and mark completed work more quickly.                                                                                            |
+| **Performance**             | Smoother navigation between pages using caching, prerendering, and other performance techniques.                                                                                       |
+| **Directories and rosters** | A redesigned, faster directory layout and convenient roster tools. Copy roster names or emails, and open full-size profile photos.                                                     |
+| **Sign-in**                 | Tired of logging to Blackbaud LMS every day after being signed out automatically? Skip having to log in every day. Sign in with one button, without wasting time on repetitive clicks. |
+| **Everyday details**        | Useful tab titles that make sense, a recognizable tab icon, and more.                                                                                                                  |
 
 ## Install
 

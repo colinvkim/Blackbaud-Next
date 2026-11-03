@@ -9,7 +9,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', group: 'assignments', defaultValue: true },
   { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do in one click.', group: 'assignments', defaultValue: true },
   { key: 'prepareAssignmentCenter', label: 'Faster Assignment Center', description: 'Prepare Assignment Center on Schedule or when you hover over or focus its link.', group: 'assignments', defaultValue: true },
-  { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'Simpler sign-in', description: 'Add a direct Google sign-in option on the school login page.', group: 'login', defaultValue: true },
+  { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'Simpler sign-in', description: 'A clean school welcome page with one sign-in button.', group: 'login', defaultValue: true },
   { key: 'automaticLogin', label: 'Automatic login', description: 'Continue through Blackbaud and select your school Google account.', group: 'login', defaultValue: true },
   { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in progress', description: 'Show a dismissible status while automatic login runs.', group: 'login', defaultValue: true },
   { key: 'fixFavicon', label: 'Tab icon', description: 'Give Blackbaud tabs a recognizable icon.', group: 'tools', defaultValue: true },

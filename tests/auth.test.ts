@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import type { Settings } from '../src/shared/settings.ts';
 import { createCoordinator } from '../src/background/coordinator.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
+import { schoolLoginHtml } from './fixtures/login.ts';
 
 test('school account matching requires the complete email or domain', () => {
   assert.equal(accountMatchesPreference('student@students.polytechnic.org', 'students.polytechnic.org'), true);
@@ -186,6 +187,53 @@ function loginFixture(url: string, html: string, settings: Partial<Settings> = {
 const settle = () => new Promise<void>((resolve) => setImmediate(() => setImmediate(resolve)));
 const after = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const googleUrl = `https://accounts.google.com/v3/signin/accountchooser?redirect_uri=${encodeURIComponent('https://id.blackbaud.com/bbid.onmicrosoft.com/oauth2/authresp')}`;
+
+test('custom school sign-in restores native controls when preparing the flow fails', async () => {
+  const fixture = loginFixture('https://polytechnic.myschoolapp.com/app#login', schoolLoginHtml, { automaticLogin: false });
+  try {
+    await settle();
+    assert.ok(fixture.document.querySelector('#blackbaud-next-login'));
+    fixture.rejectWrites();
+    fixture.document.querySelector<HTMLButtonElement>('#blackbaud-next-login button')!.click();
+    await settle();
+    assert.equal(fixture.document.querySelector('#blackbaud-next-login'), null);
+    assert.equal(fixture.document.querySelector('#app')!.hasAttribute('inert'), false);
+    assert.equal(fixture.document.querySelector('[data-bn-login-native]'), null);
+    assert.match(fixture.document.querySelector('.bn-login-option small')!.textContent!, /could not start/);
+    assert.equal(fixture.document.querySelector<HTMLInputElement>('#Username')!.value, 'student@example.test');
+  } finally { fixture.dispose(); }
+});
+
+test('a replaced custom sign-in view cannot navigate when its pending preparation finishes', async () => {
+  const fixture = loginFixture('https://polytechnic.myschoolapp.com/app#login', schoolLoginHtml, { automaticLogin: false });
+  try {
+    const nativeWindow = globalThis.window;
+    const navigations: string[] = [];
+    globalThis.window = new Proxy(nativeWindow, { get(target, key) {
+      return key === 'location' ? { href: nativeWindow.location.href, assign: (url: string) => navigations.push(url) } : Reflect.get(target, key);
+    } });
+    await settle();
+    const gate = fixture.delayNextWrite();
+    const old = fixture.document.querySelector('#blackbaud-next-login')!;
+    old.querySelector<HTMLButtonElement>('button')!.click();
+    await gate.started;
+    const native = fixture.document.querySelector('#app')!;
+    const replacement = native.cloneNode(true) as HTMLElement;
+    replacement.removeAttribute('inert');
+    replacement.removeAttribute('aria-hidden');
+    replacement.removeAttribute('data-bn-login-native');
+    native.replaceWith(replacement);
+    await settle();
+    const next = fixture.document.querySelector('#blackbaud-next-login')!;
+    assert.ok(next && next !== old);
+    gate.release();
+    await settle();
+    assert.equal(fixture.document.querySelector('#blackbaud-next-login'), next);
+    assert.equal(next.querySelector<HTMLButtonElement>('button')!.disabled, false);
+    assert.equal(fixture.document.querySelectorAll('#blackbaud-next-login').length, 1);
+    assert.deepEqual(navigations, [], 'Obsolete preparation cannot send the replacement page to Blackbaud');
+  } finally { fixture.dispose(); }
+});
 
 test('native lowercase redirect identifies a school and rejects conflicting or unsafe values', () => {
   const school = 'https://polytechnic.myschoolapp.com/app/student';

@@ -7,6 +7,43 @@ export function findSchoolSigninAnchor(): Element | null {
   return document.querySelector('#nextBtn');
 }
 
+/** Only replace the observed first step; password, errors and new fields stay native. */
+export function findSchoolLoginPage(): HTMLElement | null {
+  for (const id of ['app', 'site-login', 'site-login-box', 'site-login-form', 'Username', 'nextBtn', 'divPassword', 'areaNext']) {
+    if (document.querySelectorAll(`#${id}`).length !== 1) return null;
+  }
+  const root = document.querySelector<HTMLElement>('#app')!;
+  const login = root.querySelector('#site-login > #site-login-box');
+  const form = login?.querySelector<HTMLFormElement>('form#site-login-form');
+  const username = form?.querySelector<HTMLInputElement>('#site-login-input input#Username');
+  const next = form?.querySelector<HTMLInputElement>('#areaNext > input#nextBtn');
+  const password = form?.querySelector<HTMLElement>('#divPassword');
+  const view = document.defaultView;
+  if (!login || !username || !['text', 'email'].includes(username.type) || !next || next.type !== 'submit' || next.disabled || !password || !view ||
+    view.getComputedStyle(password).display !== 'none' || view.getComputedStyle(next.parentElement!).display === 'none') return null;
+  const controls = [...root.querySelectorAll('input:not([type="hidden"]), button, select, textarea, a[href], iframe')]
+    .filter((element) => !element.closest('[data-bn-owned]'));
+  if (controls.some((element) => element.tagName !== 'INPUT' || !['Username', 'Password', 'remember', 'nextBtn', 'loginBtn', 'cancelBtn'].includes(element.id))) return null;
+  if ([...login.querySelectorAll('#site-login-alert, #site-login-browser, [role="alert"]')].some((element) => element.textContent?.trim())) return null;
+  return root;
+}
+
+export function findSchoolLoginBrand(root: HTMLElement): { source: string; background: string; alt: string } | null {
+  const headers = root.querySelectorAll<HTMLElement>('#site-login-header');
+  const logos = root.querySelectorAll<HTMLImageElement>('#site-login-logo > img#img-login-logo');
+  if (headers.length !== 1 || logos.length !== 1 || !headers[0]!.contains(logos[0]!) || !logos[0]!.getAttribute('src')?.trim()) return null;
+  try {
+    const source = new URL(logos[0]!.getAttribute('src')!, root.ownerDocument.baseURI);
+    if (source.protocol !== 'https:' || source.username || source.password) return null;
+    const background = root.ownerDocument.defaultView?.getComputedStyle(headers[0]!).backgroundColor;
+    return {
+      source: source.href,
+      background: background && !['transparent', 'rgba(0, 0, 0, 0)'].includes(background) ? background : '#152b43',
+      alt: logos[0]!.alt.trim() || 'School logo',
+    };
+  } catch { return null; }
+}
+
 export function findAuthenticatedSchoolRoot(): HTMLElement | null {
   const roots = document.querySelectorAll<HTMLElement>('#site-main');
   const headers = document.querySelectorAll<HTMLElement>('#site-header');

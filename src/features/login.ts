@@ -1,11 +1,12 @@
 import { THEME_TOKENS } from '../shared/theme.ts';
 import { accountPreferenceForSchool, canAttempt, hasSigninRedirect, schoolFromSigninUrl, selectAuthContext, uniqueMatchingAccount } from '../blackbaud/auth.ts';
 import type { AuthContext } from '../blackbaud/auth.ts';
-import { accountChoices, findAuthenticatedSchoolRoot, findBlackbaudGoogleButton, findGoogleAccount, findSchoolSigninAnchor } from '../blackbaud/auth-dom.ts';
+import { accountChoices, findAuthenticatedSchoolRoot, findBlackbaudGoogleButton, findGoogleAccount } from '../blackbaud/auth-dom.ts';
 import { blackbaudSigninUrl, isBlackbaudSignin, isGoogleOAuth, isLmsPage, isSchoolPage, isStudentPortal } from '../blackbaud/routes.ts';
 import { markOwned, addStyle, createButton, observeDom, waitForReadyElement } from '../shared/dom.ts';
 import { claimAuthAttempt, createAuthFlow, pauseAuthFlow, readAuthContexts, recoverAuthFlow, removeAuthFlow, waitForAuthClaim } from '../shared/auth-flow.ts';
 import type { Cleanup, Feature, FeatureContext } from '../shared/types.ts';
+import { mountSchoolSignin } from './login-page.ts';
 
 const providerFlows = new WeakMap<Document, string>();
 const LOGIN_STYLE = `
@@ -69,7 +70,7 @@ function mountLogin(context: FeatureContext): Cleanup {
   const page = document;
   const controller = new AbortController();
   const signal = controller.signal;
-  const dispose: Cleanup[] = [addStyle('login', `${isSchoolPage(url) ? '' : THEME_TOKENS}\n${LOGIN_STYLE}`)];
+  const dispose: Cleanup[] = [addStyle('auth', `${isSchoolPage(url) ? '' : THEME_TOKENS}\n${LOGIN_STYLE}`)];
   const abort = () => controller.abort();
   context.signal.addEventListener('abort', abort, { once: true });
   if (context.signal.aborted) abort();
@@ -144,36 +145,9 @@ function mountLogin(context: FeatureContext): Cleanup {
 
   const installDirectSignin = () => {
     if (!settings.optimizeLoginPage) return;
-    const added = new Map<Element, HTMLElement>();
-    const stop = observeDom(() => {
-      for (const [anchor, element] of added) {
-        if (!anchor.isConnected || !element.isConnected || anchor.parentElement !== element.parentElement) { element.remove(); added.delete(anchor); }
-      }
-      const anchor = findSchoolSigninAnchor();
-      if (!anchor || added.has(anchor)) return;
-      const option = markOwned(document.createElement('div'));
-      option.className = 'bn-login-option';
-      const button = createButton('Sign in with Google');
-      const explanation = document.createElement('small');
-      explanation.textContent = 'Continue with your school Google account.';
-      button.addEventListener('click', async () => {
-        if (context.signal.aborted) return;
-        button.disabled = true;
-        try {
-          if (!flow || flow.hostname !== url.hostname || !canAttempt(flow, 'blackbaud')) {
-            flow = await newContext(url.hostname);
-          }
-          if (!context.signal.aborted) window.location.assign(blackbaudSigninUrl(url.hostname));
-        } catch {
-          button.disabled = false;
-          explanation.textContent = 'Google sign-in could not start. Use the sign-in controls above.';
-        }
-      });
-      option.append(button, explanation);
-      anchor.insertAdjacentElement('afterend', option);
-      added.set(anchor, option);
-    }, signal);
-    dispose.push(() => { stop(); for (const element of added.values()) element.remove(); });
+    dispose.push(mountSchoolSignin(url, signal, async () => {
+      if (!flow || flow.hostname !== url.hostname || !canAttempt(flow, 'blackbaud')) flow = await newContext(url.hostname);
+    }));
   };
 
   const run = async () => {
