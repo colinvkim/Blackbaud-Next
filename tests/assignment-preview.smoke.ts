@@ -73,6 +73,8 @@ test('Chrome preview actions stay secondary, support keyboard activation inside 
     }, FEATURE_DEFINITIONS.map(({ key }) => key));
     const page = await browser.newPage();
     page.setDefaultTimeout(5_000);
+    let holdDetails = false;
+    const pendingReplies: Array<(status?: number) => Promise<void>> = [];
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       if (request.url().startsWith('chrome-extension:')) { void request.continue(); return; }
@@ -83,11 +85,13 @@ test('Chrome preview actions stay secondary, support keyboard activation inside 
       } else if (url.pathname === '/api/webapp/context') {
         void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } }) });
       } else if (url.pathname === '/api/assignment2/UserAssignmentDetailsGetAllStudentData') {
-        void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        const respond = (status = 200) => request.respond({ status, contentType: 'application/json', body: JSON.stringify({
           AssignmentIndexId: Number(url.searchParams.get('assignmentIndexId')), ShortDescription: 'Short assignment',
           LongDescription: '<p>Read the chapter and write a reflection.</p>', GroupName: 'Example class',
           DueDate: '11/2/2026 8:30 AM', LinkItems: [], DownloadItems: [],
         }) });
+        if (holdDetails) pendingReplies.push(respond);
+        else void respond();
       } else void request.respond({ status: 404 });
     });
     await page.setViewport({ width: 1280, height: 900 });
@@ -111,6 +115,45 @@ test('Chrome preview actions stay secondary, support keyboard activation inside 
       assert.equal(await page.$eval(trigger, (button) => document.activeElement === button && button.matches(':focus-visible')), true);
       assert.equal(await page.$eval(trigger, (button) => getComputedStyle(button).outlineStyle), 'solid');
     }
+    holdDetails = true;
+    const loadingRequest = page.waitForRequest(request => request.url().includes('UserAssignmentDetailsGetAllStudentData'));
+    const initialLoading = await page.$eval(trigger, button => {
+      (button as HTMLButtonElement).click();
+      const skeleton = document.querySelector('.bn-preview-skeleton')!;
+      return { visible: skeleton.checkVisibility({ visibilityProperty: true }), decorative: skeleton.getAttribute('aria-hidden') };
+    });
+    await loadingRequest;
+    assert.deepEqual(initialLoading, { visible: true, decorative: 'true' }, 'Skeletons appear immediately and are hidden from assistive technology');
+    assert.equal(await page.$eval(`${panel} [role="status"]`, element => element.textContent), 'Loading preview…');
+    await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    await page.waitForFunction(() => document.querySelector('.bn-preview-skeleton')?.checkVisibility({ visibilityProperty: true }));
+    assert.equal(await page.$eval('.bn-preview-skeleton', element => element.getAnimations().some(animation => animation.effect?.getTiming().iterations === Infinity)), false, 'Reduced motion stops the pulse');
+    for (const width of [1280, 390, 320]) {
+      await page.setViewport({ width, height: 900 });
+      const loadingLayout = await page.$eval(panel, element => {
+        const bounds = element.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, overflow: element.scrollWidth - element.clientWidth,
+          barsFit: [...element.querySelectorAll('.bn-preview-skeleton-line')].every(line => { const rect = line.getBoundingClientRect(); return rect.width > 0 && rect.left >= bounds.left && rect.right <= bounds.right; }) };
+      });
+      assert.ok(loadingLayout.left >= 0 && loadingLayout.right <= width && loadingLayout.barsFit, JSON.stringify(loadingLayout));
+      assert.equal(loadingLayout.overflow, 0);
+    }
+    await pendingReplies.shift()!(503);
+    await page.waitForFunction(() => document.querySelector('.bn-preview-panel [role="status"]')?.textContent?.includes('could not be loaded'));
+    assert.equal(await page.$('.bn-preview-skeleton'), null, 'Errors replace the loading placeholders');
+    assert.equal(await page.$eval(`${panel} [role="status"]`, element => element.checkVisibility({ visibilityProperty: true })), true);
+    const retryRequest = page.waitForRequest(request => request.url().includes('UserAssignmentDetailsGetAllStudentData'));
+    await page.$$eval(`${panel} button`, buttons => buttons.find(button => button.textContent === 'Retry preview')!.click());
+    await retryRequest;
+    await page.waitForFunction(() => document.querySelector('.bn-preview-skeleton')?.checkVisibility({ visibilityProperty: true }));
+    assert.equal(await page.$$eval('.bn-preview-skeleton', elements => elements.length), 1);
+    await pendingReplies.shift()!();
+    await page.waitForSelector(`${panel} .bn-preview-instructions`);
+    assert.equal(await page.$('.bn-preview-skeleton'), null, 'Content replaces the skeleton after a successful retry');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.bn-preview-panel'));
+    await page.emulateMediaFeatures([]);
+    holdDetails = false;
     for (const width of [1280, 390, 320]) {
       await page.setViewport({ width, height: 900 });
       await previewLayout(page, width);

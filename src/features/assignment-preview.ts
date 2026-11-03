@@ -24,6 +24,17 @@ ${titleLayoutSelector} > .bn-preview-button { margin-left: 0; flex: none; }
 .bn-preview-actions > a.bn-button { background: var(--bn-accent); border-color: var(--bn-accent); color: #fff; }
 .bn-preview-actions > a.bn-button:hover { background: var(--bn-accent-hover); border-color: var(--bn-accent-hover); color: #fff; }
 .bn-preview-meta { color: var(--bn-muted); margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
+.bn-preview-loading-status { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; margin: -1px; clip-path: inset(50%); white-space: nowrap; }
+.bn-preview-skeleton { margin-top: 4px; animation: bn-preview-pulse 2s ease-in-out infinite; }
+.bn-preview-skeleton-line { display: block; height: 12px; border-radius: 4px; background: var(--bn-border); }
+.bn-preview-skeleton-meta { width: 64%; height: 10px; margin-bottom: 24px; }
+.bn-preview-skeleton-paragraph { display: grid; gap: 10px; margin-bottom: 20px; }
+.bn-preview-skeleton-paragraph:last-child { margin-bottom: 0; }
+.bn-preview-skeleton-paragraph > :nth-child(2) { width: 92%; }
+.bn-preview-skeleton-paragraph > :last-child { width: 72%; }
+.bn-preview-skeleton-paragraph:last-child > :last-child { width: 54%; }
+@keyframes bn-preview-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .bn-preview-skeleton { animation: none; } }
 .bn-preview-instructions { overflow-wrap: anywhere; }
 .bn-preview-instructions :is(p, ul, ol, blockquote, pre, table) { margin: 0 0 12px; }
 .bn-preview-instructions :is(ul, ol) { padding-left: 20px; }
@@ -45,6 +56,26 @@ ${titleLayoutSelector} > .bn-preview-button { margin-left: 0; flex: none; }
 @media (max-width: 480px) { .bn-preview-panel { padding: 16px; } .bn-preview-panel > h2 { font-size: 22px; } }
 @media (max-width: 480px), (pointer: coarse) { .bn-button.bn-preview-button, .bn-preview-panel .bn-button { min-height: 44px; } }
 `;
+
+function previewSkeleton(): HTMLElement {
+  const skeleton = markOwned(document.createElement('div'));
+  skeleton.className = 'bn-preview-skeleton';
+  skeleton.setAttribute('aria-hidden', 'true');
+  const metadata = document.createElement('span');
+  metadata.className = 'bn-preview-skeleton-line bn-preview-skeleton-meta';
+  skeleton.append(metadata);
+  for (let paragraph = 0; paragraph < 2; paragraph += 1) {
+    const block = document.createElement('div');
+    block.className = 'bn-preview-skeleton-paragraph';
+    for (let line = 0; line < 3; line += 1) {
+      const bar = document.createElement('span');
+      bar.className = 'bn-preview-skeleton-line';
+      block.append(bar);
+    }
+    skeleton.append(block);
+  }
+  return skeleton;
+}
 
 export const assignmentPreviewFeature: Feature = {
   id: 'assignment-previews',
@@ -131,9 +162,10 @@ export const assignmentPreviewFeature: Feature = {
         const currentRequest = createScope(currentScope.signal);
         request = currentRequest;
         const status = document.createElement('p');
+        status.className = 'bn-preview-loading-status';
         status.setAttribute('role', 'status');
         status.textContent = 'Loading preview…';
-        content.replaceChildren(status);
+        content.replaceChildren(status, previewSkeleton());
         const isCurrent = () => !currentRequest.signal.aborted &&
           panel === currentPanel && request === currentRequest && window.location.href === url.href;
         try {
@@ -169,10 +201,11 @@ export const assignmentPreviewFeature: Feature = {
           }
         } catch {
           if (!isCurrent()) return;
+          status.classList.remove('bn-preview-loading-status');
           status.textContent = 'The preview could not be loaded. You can retry or open the full assignment.';
           const retry = createButton('Retry preview', 'refresh');
           currentRequest.listen(retry, 'click', () => { closeButton.focus(); void load(); });
-          content.append(retry);
+          content.replaceChildren(status, retry);
         }
       };
       void load();

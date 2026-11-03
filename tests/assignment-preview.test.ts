@@ -377,9 +377,11 @@ test('rerendered links get one current preview button and feature teardown abort
   const button = win.document.querySelector<HTMLButtonElement>('[data-blackbaud-next-preview]')!;
   assert.equal(button.getAttribute('aria-label'), 'Preview New assignment');
   button.click();
+  assert.equal(win.document.querySelector('.bn-preview-skeleton')?.getAttribute('aria-hidden'), 'true');
   controller.abort();
   assert.equal(requestSignal?.aborted, true);
   assert.equal(win.document.querySelector('[role="dialog"]'), null);
+  assert.equal(win.document.querySelector('.bn-preview-skeleton'), null);
   assert.equal(win.document.querySelector('[data-blackbaud-next-preview]'), null);
   assert.equal(win.document.querySelector('#blackbaud-next-assignment-previews'), null);
   resolveRequest?.(new Response(JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } })));
