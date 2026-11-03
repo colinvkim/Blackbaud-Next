@@ -57,20 +57,23 @@ function tile(id: string, title: string): string {
   </section></div></div>`;
 }
 
-function progressCourse(id: string, title: string, grade: string, options: { hidden?: boolean; hiddenColumn?: boolean; disabled?: boolean } = {}): string {
+function progressCourse(id: string, title: string, grade: string, options: { hidden?: boolean; hiddenColumn?: boolean; disabled?: boolean; description?: boolean; unpublished?: boolean; headingInsideLink?: boolean } = {}): string {
+  const link = `id="${id}-course" href="/app/student?svcid=edu#academicclass/123/0/bulletinboard" data-native-course-action="course"`;
+  const heading = options.headingInsideLink ? `<a ${link}><h3>${title}</h3></a>` : `<h3><a ${link}>${title}</a></h3>`;
   return `<div id="${id}" class="row" data-native-course${options.hidden ? ' hidden' : ''}>
-    <div class="col-md-3" data-native-course-column><h3><a id="${id}-course" href="/app/student?svcid=edu#academicclass/123/0/bulletinboard" data-native-course-action="course">${title}</a></h3><h5>Native section and reporting information</h5></div>
-    <div class="col-md-2" data-native-course-column${options.hiddenColumn ? ' hidden' : ''}><button id="${id}-grade" class="btn btn-default" type="button" data-native-course-action="grade">View grade details</button></div>
-    <div class="col-md-2" data-native-course-column><h5>Reporting term</h5><select id="${id}-term" class="form-control" aria-label="${title} reporting term" data-native-course-action="term"><option value="fall">Fall semester</option><option value="spring">Spring semester</option></select></div>
-    <div class="col-md-2" data-native-course-column><div class="showGrade">${grade}</div><h5>Native grade description</h5></div>
+    <div class="col-md-3" data-native-course-column>${heading}<h5>Native section and reporting information</h5>${options.description ? `<button id="${id}-description" class="btn btn-default btn-sm accordion-toggle" type="button" data-toggle="collapse" data-target="#${id}-description-content" aria-expanded="false" aria-controls="${id}-description-content" data-native-course-action="description">Read Course Description</button><div id="${id}-description-content" class="collapse" hidden><p>Native course description with enough detail to expand the header and move the remaining content without clipping.</p></div>` : ''}</div>
+    <div class="col-md-2" data-native-course-column${options.hiddenColumn ? ' hidden' : ''}>${options.unpublished ? ' ' : `<button id="${id}-grade" class="btn btn-default" type="button" data-native-course-action="grade">View grade details</button>`}</div>
+    <div class="col-md-2" data-native-course-column>${options.unpublished ? '<h4 class="assignments-header">Assignments</h4><table class="table-condensed"><tbody><tr><td class="inner-condensed-table"><span class="badge">0</span></td><td class="inner-condensed-table">Due Today</td></tr><tr><td class="inner-condensed-table"><span class="badge badge-danger">1</span></td><td class="inner-condensed-table">Assigned Today</td></tr><tr><td class="inner-condensed-table"><span class="badge badge-danger">2</span></td><td class="inner-condensed-table">Active</td></tr></tbody></table>' : `<h5>Reporting term</h5><select id="${id}-term" class="form-control" aria-label="${title} reporting term" data-native-course-action="term"><option value="fall">Fall semester</option><option value="spring">Spring semester</option></select>`}</div>
+    <div class="col-md-2" data-native-course-column>${options.unpublished ? '<h3 class="showGrade" style="visibility:hidden">--</h3>' : `<div class="showGrade">${grade}</div><h5>Native grade description</h5>`}</div>
     <div class="col-md-3" data-native-course-column><div class="bb-avatar-wrapper-medium pull-left"><img class="bb-avatar-image-medium" src="${origin}/fixture-avatar.svg" alt="Example teacher"></div><div class="clearfix"></div><h4 class="group-owner-name">Example teacher with a long family name</h4><p><a id="${id}-email" href="mailto:teacher.with.a.long.address@example.edu" data-native-course-action="email">teacher.with.a.long.address@example.edu</a></p><button id="${id}-message" class="btn btn-default sendmessage" type="button" data-native-course-action="message"${options.disabled ? ' disabled' : ''}>Send message</button></div>
   </div>`;
 }
 
 function progressCourses(): string {
-  return progressCourse('course-one', 'Interdisciplinary Studies: Reading, Research, and Community Practice', 'A− (92.8%)') +
+  return progressCourse('course-one', 'Interdisciplinary Studies: Reading, Research, and Community Practice', 'A− (92.8%)', { description: true, headingInsideLink: true }) +
     progressCourse('course-two', 'Studio Practice', 'Not yet published for this reporting term', { hiddenColumn: true }) +
     progressCourse('course-three', 'Independent Research', 'Satisfactory — Credit only', { disabled: true }) +
+    progressCourse('course-four', 'Geometry', '', { unpublished: true }) +
     progressCourse('course-hidden', 'Native hidden course', 'B+', { hidden: true });
 }
 
@@ -153,6 +156,7 @@ function nativeFixture(modern: boolean): string {
     #coursesContainer > .row { margin: 0 0 18px; padding: 18px 0; border-bottom: 1px solid #ccc; }
     #coursesContainer > .row > div { padding: 0 15px; } #coursesContainer h3 { font-size: 20px; }
     #coursesContainer .btn { padding: 6px 10px; } #coursesContainer .form-control { max-width: 100%; padding: 6px; }
+    #coursesContainer a { text-decoration: none; }
     .form-control, select.input-sm { background: #fff; border: 1px solid #aaa; }
     .form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control, select.input-sm[disabled] { background: #cdcfd2; }
     .bb-avatar-wrapper-medium { width: 48px; height: 48px; } .bb-avatar-image-medium { width: 48px; height: 48px; }
@@ -244,6 +248,7 @@ function nativeFixture(modern: boolean): string {
         if (control.tagName === 'A') event.preventDefault();
         const actions = JSON.parse(document.body.dataset.progressActions || '{}'); const action = control.dataset.nativeCourseAction;
         actions[action] = (actions[action] || 0) + 1; document.body.dataset.progressActions = JSON.stringify(actions);
+        if (action === 'description') { const content = document.getElementById(control.getAttribute('aria-controls')); content.hidden = !content.hidden; control.setAttribute('aria-expanded', String(!content.hidden)); }
       }));
     }</script>
   </body></html>`;
@@ -1445,6 +1450,9 @@ async function progressCourseGeometry(page: Page, columns: number): Promise<void
     const style = getComputedStyle(list);
     return {
       display: style.display, columns: style.gridTemplateColumns.split(' ').length, cards: rows.map(bounds),
+      sections: rows.map(row => [row.children[0]!, row.children[2]!, row.children[4]!].map(bounds)),
+      contacts: rows.map(row => ({ email: bounds(row.querySelector('a[href^="mailto:"]')!), message: bounds(row.querySelector('button.sendmessage')!) })),
+      summaryInset: bounds(document.querySelector('#course-four .assignments-header')!).left - bounds(document.getElementById('course-four')!).left,
       hiddenRow: bounds(document.getElementById('course-hidden')!).height,
       hiddenColumn: bounds(document.querySelector('#course-two > [hidden]')!).height,
       disabled: (document.getElementById('course-three-message') as HTMLButtonElement).disabled,
@@ -1453,22 +1461,32 @@ async function progressCourseGeometry(page: Page, columns: number): Promise<void
   });
   assert.equal(layout.display, 'grid');
   assert.equal(layout.columns, columns, JSON.stringify(layout));
-  assert.equal(layout.cards.length, 3);
+  assert.equal(layout.cards.length, 4);
   assert.equal(layout.hiddenRow, 0, 'Native hidden rows must stay hidden');
   assert.equal(layout.hiddenColumn, 0, 'Native hidden columns must stay hidden');
   assert.equal(layout.disabled, true);
   assert.deepEqual(layout.overflow, [], `Native course contents must wrap without clipping: ${JSON.stringify(layout)}`);
   assert.deepEqual(layout.outside, [], `All native controls and labels must fit inside their card: ${JSON.stringify(layout)}`);
   assert.ok(layout.documentWidth <= layout.viewport + 1, JSON.stringify(layout));
+  for (const contact of layout.contacts) {
+    if (layout.viewport >= 850) assert.ok(contact.message.left > contact.email.right && contact.message.top < contact.email.bottom, `Message sits beside the teacher details on wide cards: ${JSON.stringify(contact)}`);
+    else assert.ok(contact.message.top >= contact.email.bottom, `Narrow cards keep Message below the teacher details: ${JSON.stringify(contact)}`);
+    if (layout.viewport <= 480) assert.ok(contact.message.height >= 44, 'Compact Message buttons retain their mobile touch target');
+  }
+  assert.ok(layout.summaryInset <= 24, `Empty grade columns must not push assignment information into the middle of the card: ${JSON.stringify(layout)}`);
   if (columns === 2) {
     assert.ok(Math.abs(layout.cards[0]!.top - layout.cards[1]!.top) < 1, JSON.stringify(layout));
     assert.ok(layout.cards[1]!.left >= layout.cards[0]!.right, JSON.stringify(layout));
+    for (let row = 0; row < layout.sections.length; row += 2) {
+      for (let section = 0; section < 3; section += 1) assert.ok(Math.abs(layout.sections[row]![section]!.top - layout.sections[row + 1]![section]!.top) < 1, `Neighboring course headers, summaries, and teacher details align: ${JSON.stringify(layout)}`);
+    }
   } else assert.ok(layout.cards[1]!.top >= layout.cards[0]!.bottom, JSON.stringify(layout));
   await preservedNativeProgressContent(page);
 }
 
 async function nativeProgressCards(page: Page): Promise<void> {
   await page.waitForSelector('#coursesContainer[data-bn-progress-courses="cards"]');
+  assert.equal(await page.$eval('#course-one-description', button => button.checkVisibility({ visibilityProperty: true })), false, 'Enhanced course cards omit the native description control');
   for (const width of [1280, 1100, 1099, 850, 390, 320]) {
     await page.setViewport({ width, height: 900 });
     await progressCourseGeometry(page, width >= 1100 ? 2 : 1);
@@ -1480,13 +1498,20 @@ async function nativeProgressCards(page: Page): Promise<void> {
   });
   await page.waitForFunction(() => !document.getElementById('coursesContainer')!.hasAttribute('data-bn-progress-courses'), { polling: 50 });
   assert.notEqual(await page.$eval('#coursesContainer', (list) => getComputedStyle(list).display), 'grid', 'Unknown direct native content returns to the native list layout');
-  assert.equal(await page.$$eval('#coursesContainer > [data-bn-course-row="true"]', (rows) => rows.length), 4, 'Known rows retain their individual markers during list fallback');
+  assert.equal(await page.$$eval('#coursesContainer > [data-bn-course-row="true"]', (rows) => rows.length), 5, 'Known rows retain their individual markers during list fallback');
   await preservedNativeProgressContent(page);
   await page.evaluate(() => document.getElementById('unexpected-course-content')!.remove());
   await page.waitForSelector('#coursesContainer[data-bn-progress-courses="cards"]');
   await progressCourseGeometry(page, 1);
   await page.setViewport({ width: 1280, height: 900 });
   await progressCourseGeometry(page, 2);
+  for (const selector of ['#course-one-course', '#course-two-course']) {
+    await page.hover(selector);
+    assert.equal(await page.$eval(selector, link => getComputedStyle(link).textDecorationLine), 'underline', 'Both native course-title structures indicate hover');
+    await page.mouse.move(0, 0);
+    await keyboardFocusStyle(page, selector);
+    assert.equal(await page.$eval(selector, link => getComputedStyle(link).textDecorationLine), 'underline', 'Keyboard focus also underlines the native course title');
+  }
 }
 
 async function summaryBounds(page: Page) {
@@ -1834,6 +1859,11 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       await unmounted();
       await preservedNativeProgressContent(legacy);
       await nativeProgressCourseActions(legacy);
+      assert.equal(await legacy.$eval('#course-one-description', button => button.checkVisibility({ visibilityProperty: true })), true, 'Disabling appearance restores course descriptions');
+      await legacy.$eval('#course-one-description', button => { if (button.getAttribute('aria-expanded') === 'true') (button as HTMLButtonElement).click(); });
+      await legacy.focus('#course-one-description');
+      await legacy.keyboard.press('Enter');
+      assert.equal(await legacy.$eval('#course-one-description-content', content => content.checkVisibility({ visibilityProperty: true })), true, 'The restored description control retains its native handler');
       const native = await summaryBounds(legacy);
       assert.ok(native.cards.reduce((sum, card) => sum + card.width, 0) < native.row.width * .75, 'Disabling restores native summary geometry');
       for (const card of await cardContentBounds(legacy)) assert.ok(card.body - card.heading > 15, 'Cleanup restores the native nested content indentation');
@@ -1857,6 +1887,8 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       await nativeCollapse(legacy);
       await setPreferences({ enabled: true, pageAppearance: true });
       await mounted();
+      assert.equal(await legacy.$eval('#course-one-description', button => button.checkVisibility({ visibilityProperty: true })), false);
+      assert.equal(await legacy.$eval('#course-one-description-content', content => content.checkVisibility({ visibilityProperty: true })), false, 'Enhanced cards also hide descriptions that were already expanded');
       await progressCourseGeometry(legacy, 2);
       const restored = await summaryBounds(legacy);
       assert.ok(Math.abs(restored.cards[0]!.width - desktop.cards[0]!.width) < 2, 'Reenabling restores the enhanced summary layout');
