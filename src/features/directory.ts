@@ -32,6 +32,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
       scope.style('directory', directoryStyles);
       let acquisition: AbortController | null = null;
       let acquisitionRevision = 0;
+      let automaticRetryUsed = false;
       let detachPendingNative: Cleanup = () => {};
       let notice: HTMLElement | null = null;
       let noticeScope: ReturnType<typeof createScope> | null = null;
@@ -143,9 +144,16 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           const currentLease = lease;
           const unexpectedRelease = () => {
             if (mounted?.lease !== currentLease) return;
+            const revision = acquisitionRevision;
             clearMounted();
             queueMicrotask(() => {
-              if (isCurrent() && !mounted && !acquisition) showNotice('The original directory is available. The enhanced view stopped when Blackbaud updated.', 'Try enhanced directory', () => { void prepare(true); }, 'users');
+              if (!isCurrent() || mounted || acquisition || revision !== acquisitionRevision) return;
+              if (!automaticRetryUsed) {
+                automaticRetryUsed = true;
+                void prepare();
+                return;
+              }
+              showNotice('The enhanced directory was interrupted. You can use the original directory or try again.', 'Try enhanced directory', () => { void prepare(true); }, 'users');
             });
           };
           lease.signal.addEventListener('abort', unexpectedRelease, { once: true });

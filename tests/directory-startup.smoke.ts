@@ -368,6 +368,35 @@ test('compiled Chrome catches the initial directory route before DOM readiness a
       } finally { await frame.page.close(); }
     });
 
+    await t.test('a native directory rerender recovers automatically once and retains manual retry', async () => {
+      const frame = await syntheticDirectory(activeBrowser);
+      try {
+        await frame.parser.respond({ status: 200, contentType: 'text/javascript', body: '' });
+        assert.equal(await frame.navigation, null);
+        await frame.page.waitForSelector('.bn-directory-name');
+        assert.equal(frame.reads.length, 2);
+        const rerender = () => frame.page.evaluate(() => {
+          Reflect.get(window, 'p3')._modules['shared/directory'].Us.renderDirectory('438');
+        });
+        await rerender();
+        await frame.page.waitForSelector('.bn-directory-name');
+        assert.equal(frame.reads.length, 4, 'One automatic retry reads the replacement directory');
+        assert.equal(await frame.page.$('.bn-directory-notice'), null);
+        await rerender();
+        await frame.page.waitForSelector('.bn-directory-notice');
+        assert.equal(frame.reads.length, 4, 'A second interruption does not start more reads');
+        assert.equal(await frame.page.$eval('.bn-directory-notice p', (notice) => notice.textContent), 'The enhanced directory was interrupted. You can use the original directory or try again.');
+        await frame.page.click('.bn-directory-notice button');
+        await frame.page.waitForSelector('.bn-directory-name');
+        assert.equal(frame.reads.length, 6, 'An explicit retry is still available');
+        assert.equal(frame.page.url(), directoryUrl);
+        assert.equal(await frame.page.evaluate(() => Reflect.get(window, 'fixtureState').nativeStarts), 0);
+        await frame.page.click('#progress');
+        await frame.page.waitForSelector('#native-progress');
+        assert.equal(await frame.page.$('.bn-directory'), null);
+      } finally { await frame.page.close(); }
+    });
+
     await t.test('pending original fallback cannot overwrite a later native route', async () => {
       const frame = await syntheticDirectory(activeBrowser, { holdMetadata: true });
       try {

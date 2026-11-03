@@ -333,10 +333,10 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     rowsScope = createScope(signal);
     const inviteSearch = serverSearch && !displayedQuery.trim() && snapshot.totalCount === 0 && (lease.searchOnly === true || snapshot.complete === false);
     list.hidden = searching;
-    pagination.hidden = searching;
     limit.hidden = searching || inviteSearch || snapshot.complete !== false;
     count.hidden = !searching && inviteSearch;
     if (searching) {
+      pagination.hidden = true;
       renderRevision += 1;
       count.textContent = 'Searching directory…';
       empty.hidden = true;
@@ -345,6 +345,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     const revision = ++renderRevision;
     const resultPage = directoryPage(results().entries, page, DIRECTORY_PAGE_SIZE);
     page = resultPage.page;
+    pagination.hidden = resultPage.pageCount <= 1;
     list.replaceChildren(...resultPage.entries.map((entry) => row(entry, revision)));
     const first = (page - 1) * DIRECTORY_PAGE_SIZE + 1;
     const last = first + resultPage.entries.length - 1;

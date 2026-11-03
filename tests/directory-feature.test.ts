@@ -254,8 +254,11 @@ test('instant name and grade filtering, live grade counts, sorting, pagination a
   assert.equal(rows().length, DIRECTORY_PAGE_SIZE);
   assert.equal(rows()[0]!.querySelector('.bn-directory-name')!.textContent, 'Zelda Alpha');
   assert.equal(button('Previous').disabled, true);
+  const pagination = document.querySelector<HTMLElement>('.bn-directory-pagination')!;
+  assert.equal(pagination.hidden, false);
   button('Next').click();
   assert.equal(rows().length, 13);
+  assert.equal(pagination.hidden, false, 'A short final page still needs navigation back');
   assert.equal(button('Next').disabled, true);
   assert.match(document.querySelector('.bn-directory-count')!.textContent!, /Showing 51–63 of 63/);
   select('Sort by', 'first');
@@ -267,11 +270,13 @@ test('instant name and grade filtering, live grade counts, sorting, pagination a
   assert.equal(field('Search people'), search);
   assert.equal(document.activeElement, search);
   assert.equal(rows().length, 1);
+  assert.equal(pagination.hidden, true, 'Single-page results do not need pagination');
   assert.equal(rows()[0]!.querySelector('.bn-directory-name')!.textContent, 'Zelda Alpha');
   const grades = field<HTMLSelectElement>('Grade');
   assert.deepEqual([...grades.options].map((item) => item.textContent), ['All grades', '9 (1)', '10 (0)']);
   select('Grade', '10');
   assert.equal(rows().length, 0);
+  assert.equal(pagination.hidden, true, 'Empty results do not need pagination');
   assert.equal(grades.value, '10');
   assert.equal(document.querySelector<HTMLElement>('.bn-directory-empty')!.hidden, false);
   assert.match(document.querySelector('.bn-directory-count')!.textContent!, /0 people match your filters/);
@@ -280,6 +285,7 @@ test('instant name and grade filtering, live grade counts, sorting, pagination a
   assert.equal(grades.options.length, 3);
   button('Clear filters').click();
   assert.equal(rows().length, DIRECTORY_PAGE_SIZE);
+  assert.equal(pagination.hidden, false, 'Clearing filters restores pagination for multiple pages');
   assert.equal(search.value, '');
   assert.equal(grades.value, '');
   assert.equal(document.activeElement, search);
@@ -1034,13 +1040,15 @@ test('global native directory navigation releases the enhanced view without repl
   assert.equal(document.querySelector('.bn-directory'), null);
 });
 
-test('unexpected native release removes the enhanced UI, aborts search and offers a native retry', async (t) => {
+test('an interruption retries once, aborts old search, and leaves a second interruption to manual recovery', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const currentLease = lease(root, partialSnapshot());
+  const recoveredLease = lease(root, snapshot(5));
+  let acquisitions = 0;
   let searchSignal: AbortSignal | undefined;
   const pending = deferred<DirectorySnapshot>();
-  mount({ acquireDirectory: async () => currentLease.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; } });
+  mount({ acquireDirectory: async () => ++acquisitions === 1 ? currentLease.value : recoveredLease.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; } });
   await flush();
   input('pending name');
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
@@ -1050,13 +1058,61 @@ test('unexpected native release removes the enhanced UI, aborts search and offer
   await flush();
   assert.equal(searchSignal?.aborted, true);
   assert.equal(currentLease.releases(), 1);
+  assert.equal(acquisitions, 2);
+  assert.equal(rows().length, 5);
+  assert.equal(document.querySelector('.bn-directory-notice'), null);
+  pending.resolve(snapshot(10));
+  await flush();
+  assert.equal(rows().length, 5, 'An old search cannot replace the recovered view');
+  recoveredLease.controller.abort();
+  recoveredLease.value.release();
+  await flush();
+  assert.equal(acquisitions, 2, 'A second interruption does not create a retry loop');
   assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
   assert.equal(document.querySelector('.bn-directory'), null);
   assert.ok(button('Try enhanced directory'));
-  pending.resolve(snapshot(10));
-  await flush();
-  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.equal(document.querySelector('.bn-directory-notice p')!.textContent, 'The enhanced directory was interrupted. You can use the original directory or try again.');
 });
+
+test('a failed automatic retry keeps native fallback and permits an explicit retry', async () => {
+  const root = fixture();
+  const initial = lease(root);
+  let acquisitions = 0;
+  mount({ acquireDirectory: async () => {
+    acquisitions += 1;
+    if (acquisitions === 1) return initial.value;
+    if (acquisitions === 2) throw new Error('Retry failed');
+    return lease(root, snapshot(4)).value;
+  } });
+  await flush();
+  initial.controller.abort();
+  await flush();
+  assert.equal(acquisitions, 2);
+  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.match(document.querySelector('.bn-directory-notice p')!.textContent!, /could not load/);
+  assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
+  button('Try again').click();
+  await flush();
+  assert.equal(acquisitions, 3);
+  assert.equal(rows().length, 4);
+});
+
+for (const departure of ['disable', 'navigate']) {
+  test(`a queued automatic retry is cancelled on ${departure}`, async () => {
+    const root = fixture();
+    const initial = lease(root);
+    let acquisitions = 0;
+    const mounted = mount({ acquireDirectory: async () => { acquisitions += 1; return initial.value; } });
+    await flush();
+    initial.controller.abort();
+    if (departure === 'disable') mounted.controller.abort();
+    else window.history.replaceState({}, '', '#studentmyday/progress');
+    await flush();
+    assert.equal(acquisitions, 1, 'A departed view must not request another directory');
+    assert.equal(document.querySelector('.bn-directory'), null);
+    assert.equal(document.querySelector('.bn-directory-notice'), null);
+  });
+}
 
 test('feature abort during acquisition or search leaves no owned UI and ignores later responses', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
