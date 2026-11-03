@@ -6,6 +6,7 @@ import type { Feature } from '../shared/types.ts';
 import { ASSIGNMENT_RESPONSIVE_STYLES, ASSIGNMENT_STYLES } from './assignment-styles.ts';
 import { PROGRESS_STYLES } from './progress-styles.ts';
 import { ASSIGNMENT_DETAIL_STYLES } from './assignment-detail-styles.ts';
+import { ROSTER_STYLES } from './roster-styles.ts';
 
 const TOOL_STYLES = `
 ${THEME_TOKENS}
@@ -74,6 +75,7 @@ html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #accord
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #accordionSchedules .label { font-size: 12px; font-weight: 600; padding: 5px 9px; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="schedule"] #accordionSchedules .label-success { background: #eaf5ed; color: #27613a; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="class"] #academicclassnavmenu .bb-page-heading { margin: 8px 0 20px; }
+${ROSTER_STYLES}
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="directory"] .bn-directory { background: var(--bn-surface); border: 1px solid var(--bn-border); border-radius: var(--bn-radius-lg); padding: 20px; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic { border-color: var(--bn-border); border-radius: var(--bn-radius-lg); box-shadow: var(--bn-shadow); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page="resources"] .boxTopic > .containerFull { border-color: var(--bn-border); border-radius: var(--bn-radius-lg); box-shadow: var(--bn-shadow); }

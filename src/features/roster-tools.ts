@@ -5,6 +5,20 @@ import { createButton, markOwned, watchAddedElements } from '../shared/dom.ts';
 import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
 
+const controlsSelector = 'div#term-picker.form-group.input-group:not([hidden]):has(> select#roster-term-picker:first-child + [data-blackbaud-next-roster="1"]:last-child)';
+const styles = `
+.bn-tools.bn-roster-tools { display: inline-flex; max-width: 100%; min-width: 0; margin: 0; }
+.bn-roster-tools .bn-button { gap: 6px; padding-inline: 10px; font-size: 13px; font-weight: 500; }
+.bn-roster-tools .bn-icon { width: 16px; height: 16px; }
+.bn-roster-tools .bn-tool-status { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; }
+.bn-roster-tools .bn-tool-status:empty { display: none; }
+${controlsSelector} { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; max-width: 100%; margin: 0; }
+${controlsSelector} > select#roster-term-picker { float: none; min-height: 36px; max-width: 100%; margin: 0 !important; padding-left: 10px; }
+@media (max-width: 480px), (pointer: coarse) {
+  ${controlsSelector} > select#roster-term-picker { min-height: 44px; }
+}
+`;
+
 export const rosterToolsFeature: Feature = {
   id: 'roster-tools',
   settingsKeys: [],
@@ -13,16 +27,17 @@ export const rosterToolsFeature: Feature = {
   mount: ({ signal, url }) => {
     if (signal.aborted) return;
     const scope = createScope(signal);
+    scope.style('roster-tools', styles);
     const mountPicker = (picker: HTMLElement) => {
       const pickerScope = createScope(scope.signal);
       const toolbar = markOwned(document.createElement('div'));
       pickerScope.add(() => toolbar.remove());
-      toolbar.className = 'bn-tools';
+      toolbar.className = 'bn-tools bn-roster-tools';
       toolbar.dataset.blackbaudNextRoster = '1';
       toolbar.setAttribute('role', 'group');
       toolbar.setAttribute('aria-label', 'Roster tools');
-      const names = createButton('Copy roster names', 'copy');
-      const emails = createButton('Copy roster emails', 'copy');
+      const names = createButton('Copy names', 'copy');
+      const emails = createButton('Copy emails', 'copy');
       const status = document.createElement('span');
       status.className = 'bn-tool-status';
       status.setAttribute('role', 'status');
