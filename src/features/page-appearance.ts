@@ -28,8 +28,8 @@ ${THEME_TOKENS}
 // structures retain native layout; colors and controls keep native actions.
 const PAGE_STYLES = `
 html[data-blackbaud-next-appearance][data-bn-portal-shell] body { background: var(--bn-page); color: var(--bn-text); font-family: var(--bn-font); }
-html[data-blackbaud-next-appearance][data-bn-portal-shell="legacy"] :is(#site-main-header, #site-main) { box-sizing: border-box; width: calc(100% - var(--bn-shell-gutter) * 2); max-width: var(--bn-shell-max-width); margin-left: auto; margin-right: auto; padding-inline: var(--bn-shell-inset); }
-html[data-blackbaud-next-appearance][data-bn-portal-shell="legacy"] #site-main { padding-top: 0; padding-bottom: 24px; }
+html[data-blackbaud-next-appearance][data-bn-portal-shell="legacy"]:has(#site-main[data-bn-page]) :is(#site-main-header, #site-main) { box-sizing: border-box; width: calc(100% - var(--bn-shell-gutter) * 2); max-width: var(--bn-shell-max-width); margin-left: auto; margin-right: auto; padding-inline: var(--bn-shell-inset); }
+html[data-blackbaud-next-appearance][data-bn-portal-shell="legacy"] #site-main[data-bn-page] { padding-top: 0; padding-bottom: 24px; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] { font: 14px/1.5 var(--bn-font); color: var(--bn-text); }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(h1, h2, h3, h4, h5, .bb-page-heading) { font-family: var(--bn-font); color: var(--bn-text); line-height: 1.35; }
 html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(h1, .bb-page-heading) { font-size: 28px; font-weight: 600; letter-spacing: -.4px; }

@@ -34,6 +34,13 @@ const lowerItems = [
   { id: 'course-requests-btn', kind: 'graduation-cap', className: 'p3icon-courseRequest', destination: 'courses' },
 ] as const satisfies readonly { id: string; kind: IconName; className: string; destination: string }[];
 
+const newsItems = [
+  { id: 'featured-content', kind: 'newspaper', className: 'p3icon-activity', destination: 'featuredcontent' },
+  { id: 'recent-activity', kind: 'clock-3', className: 'p3icon-timeline', destination: 'activitystream' },
+  { id: 'scoreboard', kind: 'chart-column', className: 'p3icon-scoreboard', destination: 'scoreboard' },
+  { id: 'archive-content', kind: 'folder-closed', className: 'p3icon-files', destination: 'archive/news' },
+] as const satisfies readonly { id: string; kind: IconName; className: string; destination: string }[];
+
 function destination(control: HTMLAnchorElement, url: URL): URL | null {
   const href = control.getAttribute('href');
   if (!href) return null;
@@ -56,13 +63,14 @@ function topDestination(control: HTMLAnchorElement, url: URL, kind: typeof topIt
   return studentHash(target, kind === 'resources' ? 'resourceboard' : 'calendar');
 }
 
-function lowerDestination(control: HTMLAnchorElement, url: URL, kind: typeof lowerItems[number]['destination']): boolean {
+function lowerDestination(control: HTMLAnchorElement, url: URL, kind: typeof lowerItems[number]['destination'] | typeof newsItems[number]['destination']): boolean {
   const target = destination(control, url);
   if (!target) return false;
   if (kind === 'progress' || kind === 'schedule') return studentHash(target, `studentmyday/${kind}`);
   if (kind === 'assignments') return studentHash(target, 'studentmyday/assignment-center') ||
     (/^\/lms-assignment\/assignment-center\/student\/?$/i.test(target.pathname) && !target.hash);
-  return /^\/edu-self-registration\/student-course-requests\/?$/i.test(target.pathname) && !target.hash;
+  if (kind === 'courses') return /^\/edu-self-registration\/student-course-requests\/?$/i.test(target.pathname) && !target.hash;
+  return studentHash(target, kind);
 }
 
 function hasNativeTitle(control: HTMLAnchorElement): boolean {
@@ -154,7 +162,7 @@ export function nativeNavigationIconTargets(page: Document, url: URL, shell = na
     if (matches.length === 1) roots.push(matches[0]!);
   }
   const lowerControls = [...new Set(roots.flatMap((root) => [...root.querySelectorAll<HTMLAnchorElement>('ul > li > a[href]')]))];
-  for (const item of lowerItems) {
+  for (const item of modern ? lowerItems : [...lowerItems, ...newsItems]) {
     const matches = lowerControls.filter((control) => (modern || control.id === item.id) && lowerDestination(control, url, item.destination));
     if (matches.length !== 1) continue;
     const control = matches[0]!;

@@ -64,6 +64,7 @@ function currentPrimary(url: URL): string | null {
   if (kind === 'resources') return 'group-header-Resources';
   if (kind === 'class') return 'group-header-Classes';
   if (kind === 'directory') return 'directory-subnav';
+  if (/^#(?:featuredcontent|activitystream|scoreboard|archive\/news)\/?(?:\?.*)?$/i.test(url.hash)) return 'group-header-News';
   if (/^#calendar\/?(?:\?.*)?$/i.test(url.hash)) return 'calendar-subnav';
   return null;
 }
@@ -74,6 +75,10 @@ function currentTab(url: URL): string | null {
   if (modern === 'assignments' || modern === 'assignment' || /^#studentmyday\/assignment-center\/?$/i.test(url.hash)) return 'assignments';
   if (/^#studentmyday\/progress\/?(?:\?.*)?$/i.test(url.hash)) return 'progress';
   if (/^#studentmyday\/schedule\/?(?:\?.*)?$/i.test(url.hash)) return 'schedule';
+  if (/^#featuredcontent\/?(?:\?.*)?$/i.test(url.hash)) return 'featured';
+  if (/^#activitystream\/?(?:\?.*)?$/i.test(url.hash)) return 'activity';
+  if (/^#scoreboard\/?(?:\?.*)?$/i.test(url.hash)) return 'scoreboard';
+  if (/^#archive\/news\/?(?:\?.*)?$/i.test(url.hash)) return 'archive';
   return null;
 }
 
@@ -203,7 +208,14 @@ function utilityParts(page: Document, url: URL, modern: boolean): NativeHeaderAp
 }
 
 function lowerParts(url: URL, icons: NativeNavigationIconTarget[]): NativeHeaderAppearanceTarget[] {
-  const classes = new Map([['p3icon-progress', 'progress'], ['p3icon-schedule', 'schedule'], ['p3icon-assignments', 'assignments'], ['p3icon-courseRequest', 'courses']]);
+  const groups = [
+    new Map([['p3icon-progress', 'progress'], ['p3icon-schedule', 'schedule'], ['p3icon-assignments', 'assignments'], ['p3icon-courseRequest', 'courses']]),
+    new Map([['p3icon-activity', 'featured'], ['p3icon-timeline', 'activity'], ['p3icon-scoreboard', 'scoreboard'], ['p3icon-files', 'archive']]),
+  ];
+  return groups.flatMap((classes) => lowerGroupParts(url, icons, classes));
+}
+
+function lowerGroupParts(url: URL, icons: NativeNavigationIconTarget[], classes: Map<string, string>): NativeHeaderAppearanceTarget[] {
   const lower = icons.flatMap((target) => {
     const kind = target.original && [...target.original.classList].map((name) => classes.get(name)).find(Boolean);
     return kind ? [{ ...target, tab: kind }] : [];

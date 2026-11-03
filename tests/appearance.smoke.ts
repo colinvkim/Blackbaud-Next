@@ -18,6 +18,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const origin = 'https://appearance-fixture.myschoolapp.com';
 const legacyUrl = `${origin}/app/student?svcid=edu#studentmyday/progress`;
 const modernUrl = `${origin}/lms-assignment/assignment-center/student?svcid=edu`;
+const newsNavigation = [
+  ['featured-content', 'Featured Content', 'p3icon-activity', '?svcid=edu#featuredcontent'],
+  ['recent-activity', 'Recent Activity', 'p3icon-timeline', '?svcid=edu#activitystream'],
+  ['scoreboard', 'Scoreboard', 'p3icon-scoreboard', '?svcid=edu#Scoreboard'],
+  ['archive-content', 'Archived Content', 'p3icon-files', '?svcid=edu#archive/news'],
+] as const;
 const schoolLogos = {
   wide: { width: 600, height: 80 },
   square: { width: 80, height: 80 },
@@ -101,7 +107,7 @@ function utilityHeader(modern: boolean): string {
   </div></div></header></div></div>`;
 }
 
-function nativeFixture(modern: boolean): string {
+function nativeFixture(modern: boolean, news = false): string {
   const primaryDescription = (label: string) => nativePrimaryDescription(modern, label);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Appearance fixture</title><style>
     * { box-sizing: border-box; } body { margin: 0; font: 14px Arial,sans-serif; }
@@ -189,7 +195,7 @@ function nativeFixture(modern: boolean): string {
       <li${modern ? '' : ' class="active"'}><a id="myday" class="${modern ? 'root-nav-item' : ''}" href="/app/student?svcid=edu#studentmyday"><div class="dayicon"><span class="month">OCT</span><span class="day">10</span></div>${primaryDescription('My Day')}</a>${nativeMenu('myday', modern)}</li>
       ${topNavigation.map(([id, title, file, href]) => `<li><a id="${id}" class="${modern ? 'root-nav-item' : ''}" href="${modern && id === 'group-header-Groups' ? '#' : href}"><img src="https://polytechnic.myschoolapp.com/p3-cache/img/48x48/${file}" width="48" height="48">${primaryDescription(title)}${modern ? '<sky-icon iconname="caret-down" aria-hidden="true"></sky-icon>' : '<span class="caret" aria-hidden="true"></span>'}</a>${nativeMenu(id, modern)}</li>`).join('')}
     </ul></div></nav>
-    <nav id="site-nav-lower"><div class="${modern ? 'container' : 'res-container'}"><ul class="${modern ? '' : 'nav nav-pills'}">${lowerNavigation.map(([id, title, icon, href], index) => `<li${index === 0 ? ' class="active"' : ''}><a ${modern ? '' : `id="${id}"`} href="${href}"><i class="${icon}" aria-hidden="true"></i>${title}</a></li>`).join('')}</ul></div></nav>
+    <nav id="site-nav-lower"><div class="${modern ? 'container' : 'res-container'}"><ul class="${modern ? '' : 'nav nav-pills'}">${(news ? newsNavigation : lowerNavigation).map(([id, title, icon, href], index) => `<li${index === 0 ? ' class="active"' : ''}><a ${modern ? '' : `id="${id}"`} href="${href}"><i class="${icon}" aria-hidden="true"></i>${title}</a></li>`).join('')}</ul></div></nav>
     <div id="site-top-spacer" class="${modern ? 'white-bg site-top-spacer-lower-nav' : 'site-top-spacer'}"></div>
     ${modern ? `<app-student-assignment-center><div><div class="hide-for-print">
       <div class="padding-left-15 padding-top-20"><h3>1 Active assignment</h3></div>
@@ -223,6 +229,7 @@ function nativeFixture(modern: boolean): string {
     document.querySelectorAll('#site-nav-container .topnav > li > a, #site-nav-lower ul > li > a').forEach(link => link.addEventListener('click', event => {
       event.preventDefault(); document.body.dataset.navigationActions = String(Number(document.body.dataset.navigationActions || 0) + 1);
       document.body.dataset.lastNavigationAction = link.id || link.textContent.trim();
+      if (${news} && link.closest('#site-nav-lower')) location.hash = new URL(link.href).hash;
       const menu = link.parentElement.querySelector('[data-native-menu]'); showMenu(link); if (menu) event.stopPropagation();
     })); document.querySelectorAll('[data-native-utility]').forEach(link => link.addEventListener('click', event => {
       event.preventDefault(); document.body.dataset.utilityActions = String(Number(document.body.dataset.utilityActions || 0) + 1);
@@ -254,7 +261,7 @@ function nativeFixture(modern: boolean): string {
   </body></html>`;
 }
 
-async function syntheticPage(browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>>, modern: boolean): Promise<Page> {
+async function syntheticPage(browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>>, modern: boolean, news = false): Promise<Page> {
   const page = await browser.newPage();
   page.setDefaultTimeout(10_000);
   await page.setViewport({ width: 1280, height: 900 });
@@ -273,7 +280,7 @@ async function syntheticPage(browser: Awaited<ReturnType<typeof launchDevelopmen
       void request.respond({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#ddd"/></svg>' });
       return;
     }
-    void request.respond({ status: 200, contentType: 'text/html', body: nativeFixture(modern) });
+    void request.respond({ status: 200, contentType: 'text/html', body: nativeFixture(modern, news) });
   });
   return page;
 }
@@ -611,6 +618,67 @@ async function fixedHeaderGeometry(page: Page): Promise<void> {
   assert.ok(state.content.top >= Math.max(...state.rows.map(({ bottom }) => bottom)) - 1, `The native spacer must keep content below the fixed navigation: ${JSON.stringify(state)}`);
 }
 
+async function nativeNewsHeader(
+  browser: Awaited<ReturnType<typeof launchDevelopmentBrowser>>,
+  setPreferences: (preferences: Record<string, boolean>) => Promise<unknown>,
+): Promise<void> {
+  const page = await syntheticPage(browser, false, true);
+  const ready = () => page.waitForSelector('#featured-content[data-bn-header-part="tab-item"]');
+  const labels = () => page.$$eval('#site-nav-lower a', links => links.map(link => ({ id: link.id, text: link.textContent, href: link.getAttribute('href') })));
+  try {
+    await page.goto(`${origin}/app/student?svcid=edu#featuredcontent`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => { document.querySelector('#site-main')!.innerHTML = '<article><h2>Native school news</h2><a href="#native-news-story">Read story</a></article>'; });
+    await ready();
+    const original = await labels();
+    const content = await page.$eval('#site-main', main => main.innerHTML);
+    for (const [id, label, , href] of newsNavigation) {
+      await page.click(`#${id}`);
+      await page.waitForSelector(`#${id}[data-bn-header-current="true"]`);
+      assert.equal(new URL(page.url()).hash, new URL(href, page.url()).hash, 'Native News links retain navigation');
+      assert.equal(await page.$eval('body', body => body.dataset.lastNavigationAction), id, 'Native click handlers remain attached');
+      assert.equal(await page.$eval('#group-header-News', link => link.getAttribute('data-bn-header-current')), 'true');
+      await selectedHeaderTab(page, label, 'Featured Content');
+    }
+    assert.equal(await page.$$eval('#site-nav-lower [data-bn-navigation-icon]', icons => icons.length), 4);
+    for (const width of [992, 1280, 390, 320]) {
+      await page.setViewport({ width, height: 900 });
+      await fixedHeaderGeometry(page);
+      assert.equal(await page.$eval('#site-main', main => main.getBoundingClientRect().width), Math.min(1100, width - 32), 'Unsupported News content keeps its native width instead of inheriting a supported-page layout');
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'News navigation does not widen the document');
+    }
+    await page.setViewport({ width: 1280, height: 900 });
+    const disabledPreferences: Record<string, boolean>[] = [{ pageAppearance: false }, { enabled: false }];
+    for (const preferences of disabledPreferences) {
+      await setPreferences(preferences);
+      await page.waitForFunction(() => !document.querySelector('[data-bn-header-part], [data-bn-navigation-icon]'), { polling: 50 });
+      assert.deepEqual(await labels(), original, 'Disabling restores native News labels and destinations');
+      await page.click('#featured-content');
+      assert.equal(new URL(page.url()).hash, '#featuredcontent', 'Native tabs still navigate after cleanup');
+      await setPreferences({ enabled: true, pageAppearance: true });
+      await ready();
+    }
+    await page.evaluate(() => { const button = document.createElement('button'); button.id = 'new-news-action'; button.textContent = 'New native action'; document.querySelector('#site-nav-lower')!.append(button); });
+    await page.waitForFunction(() => !document.querySelector('[data-bn-header-part]'), { polling: 50 });
+    assert.equal(await page.$eval('#new-news-action', button => button.checkVisibility()), true, 'Changed lower navigation falls back without hiding native actions');
+    await page.evaluate(() => document.querySelector('#new-news-action')!.remove());
+    await ready();
+    const href = await page.$eval('#scoreboard', link => link.getAttribute('href')!);
+    await page.$eval('#scoreboard', link => link.setAttribute('href', 'https://foreign.example/app/student#Scoreboard'));
+    await page.waitForFunction(() => !document.querySelector('[data-bn-header-part]'), { polling: 50 });
+    await page.$eval('#scoreboard', (link, originalHref) => link.setAttribute('href', originalHref), href);
+    await ready();
+    await page.evaluate((html) => { document.querySelector('#site-nav-lower ul')!.innerHTML = html; },
+      newsNavigation.map(([id, title, icon, href]) => `<li><a id="${id}" href="${href}"><i class="${icon}" aria-hidden="true"></i>${title}</a></li>`).join(''));
+    await ready();
+    assert.equal(await page.$$eval('#site-nav-lower [data-bn-navigation-icon]', icons => icons.length), 4, 'Native tab rerenders recover without duplicate icons');
+    assert.equal(await page.$eval('#site-main', main => main.innerHTML), content, 'News header support leaves native story markup untouched');
+    assert.equal(await page.$eval('#site-main', main => main.hasAttribute('data-bn-page')), false, 'News content does not opt into another page layout');
+  } finally {
+    await page.close();
+    await setPreferences({ enabled: true, pageAppearance: true });
+  }
+}
+
 async function schoolLogoVariants(page: Page, native: NativeSchoolLogo, enhanced: boolean, baseline?: SchoolLogoSizes): Promise<SchoolLogoSizes> {
   const originalSource = await native.image.evaluate((image) => image.getAttribute('src')!);
   const originalDestination = await native.link.evaluate((link) => link.getAttribute('href'));
@@ -666,7 +734,7 @@ async function schoolLogoVariants(page: Page, native: NativeSchoolLogo, enhanced
   return sizes;
 }
 
-async function selectedHeaderTab(page: Page, expected: string): Promise<void> {
+async function selectedHeaderTab(page: Page, expected: string, nativeSelected = 'Progress'): Promise<void> {
   // Keep hover styling separate from the route's selected appearance.
   await page.mouse.move(0, 800);
   const tabs = await page.evaluate(() => [...document.querySelectorAll<HTMLAnchorElement>('#site-nav-lower ul > li > a')].map((control) => {
@@ -686,9 +754,9 @@ async function selectedHeaderTab(page: Page, expected: string): Promise<void> {
     assert.notEqual(tab.color, selected.color, `Stale native active classes must not retain the selected text color: ${JSON.stringify(tabs)}`);
     assert.ok(selected.weight > tab.weight, `The current page has stronger text: ${JSON.stringify(tabs)}`);
   }
-  const progress = tabs.find(({ label }) => label === 'Progress')!;
-  assert.ok(progress.nativeActive, 'Appearance preserves the original native Progress active class');
-  if (expected !== 'Progress') assert.equal(progress.shadow, 'none', 'A stale native active class does not keep the selected indicator');
+  const native = tabs.find(({ label }) => label === nativeSelected)!;
+  assert.ok(native.nativeActive, 'Appearance preserves the original native active class');
+  if (expected !== nativeSelected) assert.equal(native.shadow, 'none', 'A stale native active class does not keep the selected indicator');
 }
 
 async function malformedPrimaryFallback(page: Page): Promise<void> {
@@ -1903,6 +1971,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       }
     }
     await nativeSchedule(legacy);
+    await nativeNewsHeader(browser, setPreferences);
   } finally {
     await browser?.close();
     await rm(fixture, { recursive: true, force: true });
