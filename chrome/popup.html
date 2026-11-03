@@ -8,71 +8,22 @@
     <link rel="stylesheet" href="dist/popup.css" />
   </head>
   <body>
-    <header class="popup-header">
-      <img src="assets/48x48.png" width="36" height="36" alt="" />
-      <div>
-        <h1>Blackbaud Next</h1>
-        <p>A better everyday Blackbaud.</p>
-      </div>
-    </header>
-
+    <header><img src="assets/blackbaud.png" width="24" height="24" alt="" /><h1>Blackbaud Next</h1></header>
     <main>
-      <label class="master-switch" for="enabled">
-        <span>
-          <span class="master-title" id="enabled-title">Enable enhancements</span>
-          <span class="master-description" id="enabled-description">Loading your settings…</span>
-        </span>
-        <span class="switch">
-          <input id="enabled" type="checkbox" role="switch" aria-labelledby="enabled-title" aria-describedby="enabled-description" disabled />
-          <span class="switch-track" aria-hidden="true"></span>
-        </span>
-      </label>
-
-      <div id="load-error" class="load-error" hidden>
-        <p>Couldn’t load your settings. Please try again.</p>
-        <button id="retry" type="button">Try again</button>
-      </div>
-
-      <div class="feature-groups" id="feature-groups" aria-busy="true">
-        <section class="feature-group" aria-labelledby="appearance-heading">
-          <h2 id="appearance-heading">Appearance</h2>
-          <div id="appearance-options" class="feature-options"></div>
-        </section>
-
-        <section class="feature-group" aria-labelledby="assignments-heading">
-          <h2 id="assignments-heading">Assignments</h2>
-          <div id="assignments-options" class="feature-options"></div>
-        </section>
-
-        <section class="feature-group" aria-labelledby="login-heading">
-          <h2 id="login-heading">Login</h2>
-          <div id="login-options" class="feature-options"></div>
-          <form id="account-form" class="account-form" novalidate>
-            <label for="account-preference">Google account</label>
-            <div class="account-input-row">
-              <input id="account-preference" type="text" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Automatic school account" aria-describedby="account-hint account-error" disabled />
-              <button id="save-account" type="submit" disabled>Save</button>
-            </div>
-            <p id="account-hint" class="account-hint">Leave blank for automatic selection, or enter an email or school domain.</p>
-            <p id="account-error" class="account-error" hidden></p>
-          </form>
-        </section>
-
-        <section class="feature-group" aria-labelledby="tools-heading">
-          <h2 id="tools-heading">Tools</h2>
-          <div id="tools-options" class="feature-options"></div>
-        </section>
-
-        <details class="compatibility">
-          <summary><span id="compatibility-heading" class="compatibility-label">Compatibility</span><span id="compatibility-chevron" class="compatibility-chevron" aria-hidden="true"></span></summary>
-          <p class="compatibility-description">Options for older pages and loading problems.</p>
-          <div id="compatibility-options" class="feature-options"></div>
-        </details>
-      </div>
+      <fieldset class="modes" aria-label="Extension mode">
+        <div class="mode-buttons"><label><input id="mode-off" type="radio" name="mode" value="off" disabled /><span>Off</span></label>
+        <label title="Automatic sign-in and assignment previews"><input id="mode-essentials" type="radio" name="mode" value="essentials" aria-describedby="essentials-description" disabled /><span>Essentials</span></label>
+        <label><input id="mode-full" type="radio" name="mode" value="full" disabled /><span>Full<small id="customized" hidden>Customized</small></span></label></div>
+      </fieldset>
+      <span id="essentials-description" hidden>Automatic sign-in and assignment previews.</span>
+      <button id="reset-full" class="text-button" type="button" hidden>Reset Full defaults</button>
+      <div id="load-error" hidden><p>Couldn’t load your settings.</p><button id="retry" type="button">Try again</button></div>
+      <p id="save-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
     </main>
-
     <footer>
-      <p id="save-status" class="save-status" role="status" aria-live="polite" aria-atomic="true">Loading your settings…</p>
+      <a href="options.html" target="_blank" rel="noopener">Settings</a>
+      <span aria-hidden="true">•</span>
+      <a href="mailto:colin@colinkim.dev">Having trouble?</a>
     </footer>
     <script src="dist/popup.js"></script>
   </body>

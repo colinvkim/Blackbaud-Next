@@ -20,23 +20,23 @@ test('provider sign-in prepares before DOM readiness and preserves native accoun
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     const activeBrowser = browser;
 
     const cases = [
-      { name: 'Blackbaud waits for its native click handler', provider: 'blackbaud', disabledKey: null },
-      { name: 'Google keeps a second account added at DOM readiness manual', provider: 'google', disabledKey: null },
-      { name: 'master disablement before DOM readiness leaves native sign-in usable', provider: 'blackbaud', disabledKey: 'enabled' },
-      { name: 'automatic login disablement before DOM readiness leaves native sign-in usable', provider: 'blackbaud', disabledKey: 'automaticLogin' },
+      { name: 'Login + previews waits for the native Blackbaud click handler', provider: 'blackbaud', disabledKey: null, mode: 'essentials' },
+      { name: 'Google keeps a second account added at DOM readiness manual', provider: 'google', disabledKey: null, mode: 'full' },
+      { name: 'master disablement before DOM readiness leaves native sign-in usable', provider: 'blackbaud', disabledKey: 'enabled', mode: 'full' },
+      { name: 'automatic login disablement before DOM readiness leaves native sign-in usable', provider: 'blackbaud', disabledKey: 'automaticLogin', mode: 'full' },
     ] as const;
-    for (const { name, provider, disabledKey } of cases) {
+    for (const { name, provider, disabledKey, mode } of cases) {
       await t.test(name, async () => {
         await popup.evaluate(`(async () => {
           for (const area of [chrome.storage.local, chrome.storage.session]) {
             await area.remove(Object.keys(await area.get(null)).filter(key => key.startsWith(${JSON.stringify(AUTH_CONTEXT_PREFIX)})));
           }
-          await chrome.storage.sync.set({ enabled: true, automaticLogin: true, optimizeLoginPage: true, loadingOverlay: true, accountPreference: 'students.polytechnic.org' });
+          await chrome.storage.sync.set({ enabled: true, mode: ${JSON.stringify(mode)}, automaticLogin: ${mode !== 'essentials'}, optimizeLoginPage: true, loadingOverlay: true, accountPreference: 'students.polytechnic.org' });
         })()`);
         const page = await activeBrowser.newPage();
         const errors: string[] = [];

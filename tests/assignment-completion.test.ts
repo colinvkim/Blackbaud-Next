@@ -6,6 +6,7 @@ import { JSDOM } from 'jsdom';
 import { COMPLETION_NATIVE_ATTRIBUTE } from '../src/blackbaud/assignment-status.ts';
 import { installAssignmentStatusPageBridge } from '../src/blackbaud/assignment-status-page.ts';
 import { assignmentCompletionFeature } from '../src/features/assignment-completion.ts';
+import { assignmentStatusLabelsFeature } from '../src/features/assignment-status-labels.ts';
 import { assignmentShortcutsFeature } from '../src/features/assignment-shortcuts.ts';
 import { FeatureController } from '../src/runtime/controller.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
@@ -148,7 +149,7 @@ function fixture(html = page(), overdueIds: number[] = []) {
 }
 
 function mount(shortcuts = false) {
-  const controller = new FeatureController(shortcuts ? [assignmentShortcutsFeature, assignmentCompletionFeature] : [assignmentCompletionFeature]);
+  const controller = new FeatureController(shortcuts ? [assignmentShortcutsFeature, assignmentCompletionFeature, assignmentStatusLabelsFeature] : [assignmentCompletionFeature, assignmentStatusLabelsFeature]);
   controller.update(new URL(window.location.href), DEFAULT_SETTINGS);
   cleanups.push(() => controller.dispose());
   return controller;
@@ -532,7 +533,7 @@ for (const status of ['Graded', 'Missing', 'In progress'] as const) {
     await flush();
     assert.equal(assignment.querySelector('.bn-completion-control'), null);
     assert.equal(assignment.querySelectorAll('[data-bn-assignment-status]').length, 1);
-    for (const key of ['assignmentCompletion', 'enabled'] as const) {
+    for (const key of ['assignmentStatusLabels', 'enabled'] as const) {
       controller.update(new URL(sourceUrl), { ...DEFAULT_SETTINGS, [key]: false });
       assert.equal(assignment.querySelector('app-assignment-status-display')!.innerHTML, markup);
       controller.update(new URL(sourceUrl), DEFAULT_SETTINGS);
@@ -657,9 +658,12 @@ test('a native row replacement during Save receives the confirmed status without
 test('one pending native save disables other completion controls without creating another request', async () => {
   const native = fixture(page(row(123) + row(456, 'Completed')));
   native.setOutcome('deferred');
-  mount();
+  const controller = mount();
   checkbox(123).click();
   await flush();
+  const pendingControl = checkbox(123);
+  controller.update(new URL(window.location.href), { ...DEFAULT_SETTINGS, assignmentStatusLabels: false });
+  assert.equal(checkbox(123), pendingControl, 'Changing label styling does not remount an active completion control');
   assert.equal(checkbox(123).disabled, true);
   assert.equal(checkbox(456).disabled, true);
   checkbox(456).click();
@@ -819,4 +823,19 @@ test('dismissing a failure notice disables its detached Retry immediately', asyn
   assert.equal(nativeButton().textContent, 'To do');
   assert.equal(checkbox().checked, false);
   assert.equal(document.querySelector('.bn-completion-notice'), null);
+});
+
+test('status labels can remain enhanced with native completion controls, or return to native independently', async () => {
+  const markup = '<span class="display-flex"><sky-icon iconsize="m"></sky-icon><span>Graded</span></span>';
+  const native = fixture(page(row(123) + row(125, 'Graded', markup)));
+  const controller = mount();
+  const url = new URL(window.location.href);
+  controller.update(url, { ...DEFAULT_SETTINGS, assignmentCompletion: false });
+  assert.equal(document.querySelector('.bn-completion-control'), null);
+  assert.equal(document.querySelector('[data-bn-assignment-status]')?.textContent, 'Graded');
+  controller.update(url, { ...DEFAULT_SETTINGS, assignmentStatusLabels: false });
+  assert.ok(document.querySelector('.bn-completion-control'));
+  assert.equal(document.querySelector('[data-bn-assignment-status]'), null);
+  assert.equal(document.querySelector('[data-assignment-id="125"] app-assignment-status-display')!.innerHTML, markup);
+  assert.equal(native.requests.length, 0);
 });

@@ -69,8 +69,8 @@ test('assignment detail cosmetics preserve native content, controls, responsive 
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     const setPreferences = (update: Record<string, boolean>) => popup.evaluate(async preferences => {
       const api = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await api.storage.sync.set(preferences);

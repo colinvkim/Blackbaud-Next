@@ -148,7 +148,7 @@ test('callback messaging owns pending settings writes independently of the sende
   const replies: unknown[] = [];
   const sender = { id: state.api.runtime.id, url: state.api.runtime.getURL('popup.html') };
   assert.equal(listener({ channel, kind: 'settings', update: { rosterTools: false } }, sender, () => { throw new Error('Sender closed'); }), true);
-  assert.equal(listener({ channel, kind: 'settings', update: { resourceSearch: false } }, sender, (value) => replies.push(value)), true);
+  assert.equal(listener({ channel, kind: 'settings', update: { resourceSearch: false } }, { ...sender, url: state.api.runtime.getURL('options.html') }, (value) => replies.push(value)), true);
   release();
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(state.syncValues.rosterTools, false);
@@ -163,6 +163,9 @@ test('the coordinator rejects foreign senders, arbitrary pages and provider mism
   const settings = { channel, kind: 'settings', update: { enabled: false } };
   await assert.rejects(handle(settings, { id: 'another-extension', url: state.api.runtime.getURL('popup.html') }), /sender/);
   await assert.rejects(state.handle(settings, googleUrl), /sender/);
+  await assert.rejects(state.handle(settings, state.api.runtime.getURL('other.html')), /sender/);
+  await assert.rejects(state.handle(settings, `${state.api.runtime.getURL('options.html')}?untrusted`), /sender/);
+  await assert.rejects(state.handle({ channel, kind: 'settings', update: { mode: 'unknown' } }, state.api.runtime.getURL('options.html')), /mode/);
   await assert.rejects(state.handle({ channel, kind: 'auth', request: { action: 'list' } }, 'https://accounts.google.com/'), /sender/);
   await assert.rejects(state.auth({ action: 'claim', id: state.flow.id, step: 'blackbaud', token: 'wrong-provider' }), /provider/);
   await assert.rejects(state.handle({ channel, kind: 'auth', request: { action: 'create', id: 'other-school', hostname: 'chandler.myschoolapp.com' } }, 'https://polytechnic.myschoolapp.com/app#login'), /school/);

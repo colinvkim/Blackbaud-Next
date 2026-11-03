@@ -128,8 +128,9 @@ async function respondSaved(page: Page, request: HTTPRequest, id: number, status
   assert.match(await page.$eval('body', (element) => (element as HTMLElement).dataset.statusSignals ?? ''), /ready,sent,saved$/);
 }
 
-async function togglePreference(popup: Page, page: Page, key: 'assignmentCompletion' | 'enabled'): Promise<void> {
+async function togglePreference(popup: Page, page: Page, key: 'assignmentCompletion' | 'assignmentStatusLabels' | 'mode-off' | 'mode-full'): Promise<void> {
   await popup.bringToFront();
+  if (!key.startsWith('mode-') && !await popup.$eval('#advanced-settings', details => (details as HTMLDetailsElement).open)) await popup.click('#advanced-settings > summary');
   await popup.waitForSelector(`#${key}:not(:disabled)`);
   await popup.click(`#${key}`);
   await page.bringToFront();
@@ -144,11 +145,11 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), executable);
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     await popup.evaluate(async (features) => {
       const api = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
-      await api.storage.sync.set({ enabled: true, ...Object.fromEntries(features.map((key) => [key, key === 'assignmentCompletion' || key === 'assignmentShortcuts'])) });
+      await api.storage.sync.set({ enabled: true, ...Object.fromEntries(features.map((key) => [key, key === 'assignmentCompletion' || key === 'assignmentStatusLabels' || key === 'assignmentShortcuts'])) });
     }, FEATURE_DEFINITIONS.map(({ key }) => key));
     const { page, writes } = await syntheticPage(browser);
     assert.equal(await page.$$eval('.bn-completion-control', (elements) => elements.length), 3);
@@ -218,20 +219,28 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
 
     await popup.waitForFunction(() => (document.getElementById('assignmentCompletion') as HTMLInputElement)?.checked === true, { polling: 100 });
     await togglePreference(popup, page, 'assignmentCompletion');
-    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, [data-blackbaud-next-completion-native], [data-bn-assignment-status], [data-bn-assignment-native-icon]'), { polling: 100 });
+    await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, [data-blackbaud-next-completion-native]'), { polling: 100 });
+    for (const staticId of [678, 789, 890]) assert.ok(await page.$(`${row(staticId)} [data-bn-assignment-status]`), 'Labels remain enhanced with native completion controls');
+    await togglePreference(popup, page, 'assignmentStatusLabels');
+    await page.waitForFunction(() => !document.querySelector('[data-bn-assignment-status], [data-bn-assignment-native-icon]'), { polling: 100 });
     assert.equal(await page.$eval(`${row(123)} app-assignment-status-display`, (element) => getComputedStyle(element).display === 'none'), false);
     for (const staticId of [678, 789, 890]) assert.notEqual(await page.$eval(`${row(staticId)} sky-icon`, element => getComputedStyle(element).display), 'none');
     await togglePreference(popup, page, 'assignmentCompletion');
     await page.waitForSelector(checkbox(123));
     const pending = await startSave(page, checkbox(123), 123, 1);
     const count = writes.length;
-    await togglePreference(popup, page, 'enabled');
+    const pendingControl = await page.$(checkbox(123));
+    await togglePreference(popup, page, 'assignmentStatusLabels');
+    await page.waitForSelector(`${row(678)} [data-bn-assignment-status]`);
+    assert.ok(await pendingControl!.evaluate(input => input.isConnected && (input as HTMLInputElement).disabled), 'Label styling preserves the original pending completion control');
+    assert.equal(writes.length, count, 'Changing label styling does not issue another save');
+    await togglePreference(popup, page, 'mode-off');
     await page.waitForFunction(() => !document.querySelector('.bn-completion-control, .bn-completion-notice, .bn-completion-undo, .bn-assignment-shortcuts, [data-blackbaud-next-completion-native], [data-bn-assignment-status], [data-bn-assignment-native-icon]'), { polling: 100 });
     assert.equal(writes.length, count);
     await pending.respond({ status: 200, contentType: 'application/json', body: '{}' });
     await page.waitForFunction(() => document.querySelector('[data-assignment-id="123"] app-assignment-status-display button')?.textContent === 'Completed', { polling: 100 });
     assert.equal(await page.$('.bn-completion-notice, .bn-completion-undo'), null);
-    await togglePreference(popup, page, 'enabled');
+    await togglePreference(popup, page, 'mode-full');
     await page.waitForSelector(checkbox(123));
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), true);
     assert.equal(writes.length, count);

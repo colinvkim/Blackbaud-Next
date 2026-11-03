@@ -4,8 +4,9 @@ import { afterEach, test } from 'node:test';
 import { promisify } from 'node:util';
 import { JSDOM } from 'jsdom';
 import { classDestinationForSection, currentClassSection, nativeClassMenuItems, NATIVE_CLASSES_MENU_SELECTOR } from '../src/blackbaud/class-navigation.ts';
-import { classNavigationFeature } from '../src/features/class-navigation.ts';
+import { classNavigationFeature, classSearchFeature } from '../src/features/class-navigation.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
+import { FeatureController } from '../src/runtime/controller.ts';
 import type { Cleanup } from '../src/shared/types.ts';
 
 let dom: JSDOM | undefined;
@@ -50,9 +51,9 @@ function fixture(html: string, route = '#academicclass/999/10/assignments') {
 
 function mount() {
   const controller = new AbortController();
-  const cleanup = classNavigationFeature.mount({ url: new URL(window.location.href), settings: DEFAULT_SETTINGS, signal: controller.signal });
-  cleanups.push(() => controller.abort());
-  if (cleanup) cleanups.push(cleanup);
+  const featureCleanups = [classNavigationFeature, classSearchFeature].map(feature => feature.mount({ url: new URL(window.location.href), settings: DEFAULT_SETTINGS, signal: controller.signal }));
+  const cleanup = () => { for (const stop of featureCleanups) stop?.(); };
+  cleanups.push(() => controller.abort(), cleanup);
   return { controller, cleanup };
 }
 
@@ -509,14 +510,15 @@ test('class search yields to real timers and stops mutating after mount, input a
   // Use real MutationObserver/timers rather than a bounded microtask flush.
   const script = `
     import { JSDOM } from 'jsdom';
-    import { classNavigationFeature } from './src/features/class-navigation.ts';
+    import { classNavigationFeature, classSearchFeature } from './src/features/class-navigation.ts';
     import { DEFAULT_SETTINGS } from './src/shared/settings.ts';
     const dom = new JSDOM(${JSON.stringify(desktopMenu())}, { url: 'https://example.myschoolapp.com/app/student?svcid=edu#academicclass/999/0/assignments' });
     for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, MutationObserver: dom.window.MutationObserver })) {
       Object.defineProperty(globalThis, key, { configurable: true, value });
     }
     const controller = new AbortController();
-    const cleanup = classNavigationFeature.mount({ url: new URL(window.location.href), settings: DEFAULT_SETTINGS, signal: controller.signal });
+    const featureCleanups = [classNavigationFeature, classSearchFeature].map(feature => feature.mount({ url: new URL(window.location.href), settings: DEFAULT_SETTINGS, signal: controller.signal }));
+    const cleanup = () => { for (const stop of featureCleanups) stop?.(); };
     const menu = document.querySelector('.subnav');
     let mutations = 0;
     const observer = new MutationObserver((records) => { mutations += records.length; });
@@ -595,3 +597,27 @@ for (const teardown of ['cleanup', 'abort'] as const) {
     assert.equal(win.document.querySelector('.bn-class-search'), null);
   });
 }
+
+test('class search and remembered tabs switch independently without clearing an active search', async () => {
+  fixture(desktopMenu());
+  const controller = new FeatureController([classNavigationFeature, classSearchFeature]);
+  cleanups.push(() => controller.dispose());
+  const url = new URL(window.location.href);
+  controller.update(url, { ...DEFAULT_SETTINGS, classSwitching: false });
+  const input = search('Geometry');
+  const link = document.querySelector<HTMLAnchorElement>('a.group-page-link-1')!;
+  const nativeHref = link.getAttribute('href');
+  assert.ok(nativeHref?.endsWith('/bulletinboard'));
+  controller.update(url, DEFAULT_SETTINGS);
+  await flush();
+  assert.equal(document.querySelector('.bn-class-search input'), input);
+  assert.equal(input.value, 'Geometry');
+  assert.ok(link.href.endsWith('/assignments'));
+  controller.update(url, { ...DEFAULT_SETTINGS, classSearch: false });
+  await flush();
+  assert.equal(document.querySelector('.bn-class-search'), null);
+  assert.equal(document.querySelector('[data-blackbaud-next-class-hidden]'), null);
+  assert.ok(link.href.endsWith('/assignments'));
+  controller.update(url, { ...DEFAULT_SETTINGS, classSearch: false, classSwitching: false });
+  assert.equal(link.getAttribute('href'), nativeHref);
+});

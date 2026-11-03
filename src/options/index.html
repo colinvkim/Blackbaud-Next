@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Settings · Blackbaud Next</title>
+    <link rel="stylesheet" href="dist/options.css" />
+  </head>
+  <body>
+    <header class="settings-header">
+      <img src="assets/blackbaud.png" width="32" height="32" alt="" />
+      <div>
+        <h1>Settings</h1>
+        <p>Blackbaud Next</p>
+      </div>
+    </header>
+
+    <main>
+      <fieldset class="modes">
+        <legend>Mode</legend>
+        <div class="mode-buttons"><label><input id="mode-off" type="radio" name="mode" value="off" disabled /><span>Off</span></label>
+        <label title="Automatic sign-in and assignment previews"><input id="mode-essentials" type="radio" name="mode" value="essentials" aria-describedby="essentials-description" disabled /><span>Essentials</span></label>
+        <label><input id="mode-full" type="radio" name="mode" value="full" disabled /><span>Full<small id="customized" hidden>Customized</small></span></label></div>
+      </fieldset>
+      <span id="essentials-description" hidden>Automatic sign-in and assignment previews.</span>
+      <div class="mode-description"><p id="mode-caption">Loading your settings…</p></div>
+      <button id="reset-full" class="text-button" type="button" hidden>Reset Full defaults</button>
+
+      <div id="load-error" hidden>
+        <p>Couldn’t load your settings. Please try again.</p>
+        <button id="retry" type="button">Try again</button>
+      </div>
+
+      <details id="advanced-settings" class="advanced-settings">
+        <summary>Advanced</summary>
+        <p class="mode-notice">Recommended defaults suit most people; these controls customize Full mode.</p>
+        <ul class="settings-list" id="settings-list" aria-label="Advanced preferences" aria-busy="true">
+          <li id="account-setting">
+            <form id="account-form" class="account-form" novalidate>
+              <label for="account-preference">Preferred Google account</label>
+              <p id="account-hint" class="account-hint">Email address or school domain for automatic sign-in in either mode. Leave blank for automatic selection.</p>
+              <div class="account-input-row">
+                <input id="account-preference" type="text" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Automatic school account" aria-describedby="account-hint account-error" disabled />
+                <button id="save-account" type="submit" disabled>Save</button>
+              </div>
+              <p id="account-error" class="account-error" hidden></p>
+            </form>
+          </li>
+        </ul>
+      </details>
+    </main>
+
+    <footer id="save-feedback" hidden>
+      <p id="save-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </footer>
+    <script src="dist/options.js"></script>
+  </body>
+</html>

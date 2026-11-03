@@ -1368,7 +1368,7 @@ async function classSearchMenu(page: Page): Promise<void> {
   });
   assert.ok(scrolled.scrollTop > 0, 'Long class lists can be scrolled');
   assert.ok(scrolled.searchTop >= scrolled.menuTop - 1 && scrolled.searchBottom <= scrolled.menuBottom + 1, `Class search stays accessible while scrolling: ${JSON.stringify(scrolled)}`);
-  // Leave a filtered state so disabling class switching must restore native rows.
+  // Leave a filtered state so disabling search must restore native rows.
   await page.click(input);
   await page.type(input, 'geometry');
   await page.waitForFunction(() => document.querySelectorAll('[data-blackbaud-next-class-hidden]').length === 39, { polling: 50 });
@@ -1796,8 +1796,8 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     await buildDevelopmentExtension(fixture, signal);
     const { id } = await reloadDevelopmentExtension(browser, developmentPaths(fixture).extension, legacyUrl, signal);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     const setPreferences = async (preferences: Record<string, boolean>) => popup.evaluate(async (update) => {
       const chrome = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await chrome.storage.sync.set(update);
@@ -1867,12 +1867,15 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       if (page === legacy) await nativeDropdownHover(page, true);
       await unfamiliarDropdownFallback(page);
     }
-    await setPreferences({ classSwitching: true });
+    await setPreferences({ classSwitching: true, classSearch: true });
     for (const page of [legacy, modern]) await classSearchMenu(page);
+    const classInputs = await Promise.all([legacy, modern].map(page => page.$('.bn-class-search input')));
+    await setPreferences({ classSwitching: false });
+    for (const input of classInputs) assert.ok(await input!.evaluate(element => element.isConnected && (element as HTMLInputElement).value === 'geometry'), 'Changing remembered class tabs preserves the current search');
     await setAppearance(false);
     for (const page of [legacy, modern]) assert.equal(await page.$eval('.bn-class-search input', (input) => getComputedStyle(input, '::placeholder').fontStyle), 'normal', 'Class search retains its own placeholder style with appearance off');
     await setAppearance(true);
-    await setPreferences({ classSwitching: false });
+    await setPreferences({ classSwitching: false, classSearch: false });
     for (const page of [legacy, modern]) {
       await page.waitForFunction(() => !document.querySelector('.bn-class-search, [data-blackbaud-next-class-hidden], [data-blackbaud-next-class-menu]'), { polling: 50 });
       assert.deepEqual(await menuLabels(page), menus.get(page), 'Class search cleanup restores native rows and destinations');

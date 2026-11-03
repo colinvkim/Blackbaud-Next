@@ -65,8 +65,8 @@ test('Chrome preview actions stay secondary, support keyboard activation inside 
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     await popup.evaluate(async (features) => {
       const api = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await api.storage.sync.set({ enabled: true, ...Object.fromEntries(features.map((key) => [key, key === 'assignmentPreviews' || key === 'pageAppearance'])) });

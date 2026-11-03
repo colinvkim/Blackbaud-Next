@@ -88,8 +88,8 @@ test('roster names and copy tools align, preserve native controls, and restore i
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     const preferences = (update: Record<string, boolean>) => popup.evaluate(async value => {
       await (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome.storage.sync.set(value);
     }, update);

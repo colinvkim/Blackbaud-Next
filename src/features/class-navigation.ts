@@ -26,15 +26,53 @@ interface LinkState {
   appliedHref: string;
 }
 
-export const classNavigationFeature: Feature = {
-  id: 'class-navigation',
-  enabled: (settings) => settings.classSwitching,
+function watchClassMenus(signal: AbortSignal, mountMenu: (menu: HTMLElement) => Cleanup, updateMenus: () => void): Cleanup {
+  const scope = createScope(signal);
+  // Native desktop and mobile shells are separate. Share ownership if an
+  // unexpected nested shell exposes the same menu to both scoped watchers.
+  const menus = new Map<HTMLElement, { references: number; cleanup: Cleanup }>();
+  const retainMenu = (menu: HTMLElement): Cleanup => {
+    let state = menus.get(menu);
+    if (!state) {
+      state = { references: 0, cleanup: mountMenu(menu) };
+      menus.set(menu, state);
+    }
+    state.references++;
+    return () => {
+      if (--state.references) return;
+      state.cleanup();
+      menus.delete(menu);
+    };
+  };
+  scope.add(watchAddedElements<HTMLElement>(NATIVE_CLASS_NAVIGATION_SELECTOR, (navigation) => {
+    const navigationScope = createScope(scope.signal);
+    navigationScope.add(watchElements(NATIVE_CLASSES_MENU_SELECTOR, retainMenu, navigationScope.signal, navigation));
+    // Validation also depends on the controlling anchor and its ancestors,
+    // outside the menu itself. These small shells capture their mutations.
+    navigationScope.add(observeDom(updateMenus, navigationScope.signal, navigation));
+    return () => {
+      navigationScope.dispose();
+      updateMenus();
+    };
+  }, scope.signal, document, ['id']));
+  // Modern rows require one unambiguous desktop control. A duplicate added
+  // outside navigation must invalidate existing rows without a page scan.
+  scope.add(watchAddedElements(NATIVE_CLASS_CONTROL_SELECTOR, () => {
+    updateMenus();
+    return updateMenus;
+  }, scope.signal, document, ['id']));
+  return scope.dispose;
+}
+
+export const classSearchFeature: Feature = {
+  id: 'class-search',
+  enabled: (settings) => settings.classSearch,
   settingsKeys: [],
   matches: isLmsPage,
   mount: ({ url, signal }) => {
     if (signal.aborted) return;
     const scope = createScope(signal);
-    scope.style('class-navigation', styles);
+    scope.style('class-search', styles);
     let query = '';
     const searches = new Set<() => void>();
     const updateSearches = () => { for (const updateSearch of searches) updateSearch(); };
@@ -71,37 +109,17 @@ export const classNavigationFeature: Feature = {
         else menu.prepend(toolbar);
       };
       insertToolbar();
-      const links = new Map<HTMLAnchorElement, LinkState>();
-      const restoreLink = (link: HTMLAnchorElement, state: LinkState) => {
-        if (link.getAttribute('href') === state.appliedHref && state.appliedHref !== state.nativeHref) link.setAttribute('href', state.nativeHref);
-      };
       const update = () => {
         if (menuScope.signal.aborted || !menu.isConnected) return;
         if (toolbar.parentElement !== menu) insertToolbar();
         if (input.value !== query) input.value = query;
         const items = nativeClassMenuItems(menu, url);
-        const currentLinks = new Set(items.map((item) => item.link));
         const currentRows = new Set(items.map((item) => item.row));
-        for (const [link, state] of links) {
-          if (!currentLinks.has(link)) {
-            restoreLink(link, state);
-            links.delete(link);
-          }
-        }
         ownership.retain((element, attribute) => attribute === menuAttribute || currentRows.has(element));
         const terms = classSearchTerms(query);
         let total = 0;
         let matches = 0;
-        for (const { row, link, name } of items) {
-          const currentHref = link.getAttribute('href')!;
-          let state = links.get(link);
-          if (!state) {
-            state = { nativeHref: currentHref, appliedHref: currentHref };
-            links.set(link, state);
-          } else if (currentHref !== state.appliedHref) state.nativeHref = currentHref;
-          const destination = classDestinationForSection(state.nativeHref, url) ?? state.nativeHref;
-          state.appliedHref = destination;
-          if (link.getAttribute('href') !== destination) link.setAttribute('href', destination);
+        for (const { row, name } of items) {
           ownership.restore(row, hiddenAttribute);
           const available = nativeClassRowVisible(row, menu);
           const matching = terms.every((term) => normalizeClassSearch(name).includes(term));
@@ -134,44 +152,57 @@ export const classNavigationFeature: Feature = {
       update();
       menuScope.add(() => {
         searches.delete(update);
-        for (const [link, state] of links) restoreLink(link, state);
-        links.clear();
       });
       return menuScope.dispose;
     };
-    // Native desktop and mobile shells are separate. Share ownership if an
-    // unexpected nested shell exposes the same menu to both scoped watchers.
-    const menus = new Map<HTMLElement, { references: number; cleanup: Cleanup }>();
-    const retainMenu = (menu: HTMLElement): Cleanup => {
-      let state = menus.get(menu);
-      if (!state) {
-        state = { references: 0, cleanup: mountMenu(menu) };
-        menus.set(menu, state);
-      }
-      state.references++;
-      return () => {
-        if (--state.references) return;
-        state.cleanup();
-        menus.delete(menu);
-      };
-    };
-    scope.add(watchAddedElements<HTMLElement>(NATIVE_CLASS_NAVIGATION_SELECTOR, (navigation) => {
-      const navigationScope = createScope(scope.signal);
-      navigationScope.add(watchElements(NATIVE_CLASSES_MENU_SELECTOR, retainMenu, navigationScope.signal, navigation));
-      // Validation also depends on the controlling anchor and its ancestors,
-      // outside the menu itself. These small shells capture their mutations.
-      navigationScope.add(observeDom(updateSearches, navigationScope.signal, navigation));
-      return () => {
-        navigationScope.dispose();
-        updateSearches();
-      };
-    }, scope.signal, document, ['id']));
-    // Modern rows require one unambiguous desktop control. A duplicate added
-    // outside navigation must invalidate existing rows without a page scan.
-    scope.add(watchAddedElements(NATIVE_CLASS_CONTROL_SELECTOR, () => {
-      updateSearches();
-      return updateSearches;
-    }, scope.signal, document, ['id']));
+    scope.add(watchClassMenus(signal, mountMenu, updateSearches));
     return scope.dispose;
+  },
+};
+
+export const classNavigationFeature: Feature = {
+  id: 'class-navigation',
+  enabled: (settings) => settings.classSwitching,
+  settingsKeys: [],
+  matches: isLmsPage,
+  mount: ({ url, signal }) => {
+    if (signal.aborted) return;
+    const updates = new Set<() => void>();
+    const updateMenus = () => { for (const update of updates) update(); };
+    return watchClassMenus(signal, (menu) => {
+      const scope = createScope(signal);
+      const links = new Map<HTMLAnchorElement, LinkState>();
+      const restoreLink = (link: HTMLAnchorElement, state: LinkState) => {
+        if (link.getAttribute('href') === state.appliedHref && state.appliedHref !== state.nativeHref) link.setAttribute('href', state.nativeHref);
+      };
+      const update = () => {
+        if (scope.signal.aborted || !menu.isConnected) return;
+        const items = nativeClassMenuItems(menu, url);
+        const currentLinks = new Set(items.map((item) => item.link));
+        for (const [link, state] of links) {
+          if (!currentLinks.has(link)) { restoreLink(link, state); links.delete(link); }
+        }
+        for (const { link } of items) {
+          const currentHref = link.getAttribute('href')!;
+          let state = links.get(link);
+          if (!state) {
+            state = { nativeHref: currentHref, appliedHref: currentHref };
+            links.set(link, state);
+          } else if (currentHref !== state.appliedHref) state.nativeHref = currentHref;
+          const destination = classDestinationForSection(state.nativeHref, url) ?? state.nativeHref;
+          state.appliedHref = destination;
+          if (currentHref !== destination) link.setAttribute('href', destination);
+        }
+      };
+      scope.add(observeElementContext(menu, update, { subtree: true }));
+      updates.add(update);
+      update();
+      scope.add(() => {
+        updates.delete(update);
+        for (const [link, state] of links) restoreLink(link, state);
+        links.clear();
+      });
+      return scope.dispose;
+    }, updateMenus);
   },
 };

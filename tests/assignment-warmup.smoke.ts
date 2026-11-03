@@ -56,11 +56,11 @@ async function expectRemoved(page: Page): Promise<void> {
   await page.waitForFunction((selector) => document.querySelector(selector) === null, {}, ruleSelector);
 }
 
-async function togglePreference(popup: Page, page: Page, key: 'prepareAssignmentCenter' | 'enabled'): Promise<void> {
+async function togglePreference(popup: Page, page: Page, key: 'prepareAssignmentCenter' | 'mode-off' | 'mode-full'): Promise<void> {
   assert.equal(await page.evaluate(() => document.visibilityState), 'visible');
   await popup.waitForSelector(`#${key}:not(:disabled)`);
   await popup.$eval(`#${key}`, (element) => {
-    if (!(element instanceof HTMLInputElement)) throw new Error('Expected a preference checkbox.');
+    if (!(element instanceof HTMLInputElement)) throw new Error('Expected a preference input.');
     element.click();
   });
   assert.equal(await page.evaluate(() => document.visibilityState), 'visible');
@@ -75,8 +75,8 @@ test('compiled Chrome warmup follows moved Schedule sources and removes its rule
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), executable);
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     const enableWarmup = async () => {
       await popup.evaluate(async (features) => {
         const api = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
@@ -104,14 +104,14 @@ test('compiled Chrome warmup follows moved Schedule sources and removes its rule
         assert.equal(await page.$(ruleSelector), null);
         await togglePreference(popup, page, 'prepareAssignmentCenter');
         await expectPrepared(page);
-        await togglePreference(popup, page, 'enabled');
+        await togglePreference(popup, page, 'mode-off');
         await expectRemoved(page);
         assert.equal(await page.evaluate(() => document.visibilityState), 'visible');
         await page.click('#hide-source');
         await page.click('#show-source');
         await setTimeout(750);
         assert.equal(await page.$(ruleSelector), null);
-        await togglePreference(popup, page, 'enabled');
+        await togglePreference(popup, page, 'mode-full');
         await expectPrepared(page);
       } finally { await page.close(); }
     });

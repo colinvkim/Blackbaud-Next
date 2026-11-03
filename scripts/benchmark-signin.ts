@@ -176,8 +176,8 @@ try {
     const popup = await browser.newPage();
     variants.push({ name, path: resolve(root, path), browser, popup });
     const id = await browser.installExtension(resolve(root, path));
-    await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${id}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
   }
   const diagnostic = scenarios.find((scenario) => scenario.name === 'google-domain-deferred')!;
   for (const variant of variants) {

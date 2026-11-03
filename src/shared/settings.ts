@@ -3,34 +3,54 @@ import { requestCoordinator } from './coordinator.ts';
 import type { Cleanup } from './types.ts';
 
 export const FEATURE_DEFINITIONS = [
-  { key: 'pageAppearance', label: 'Page appearance', description: 'Readable layouts, clearer controls, and comfortable spacing.', group: 'appearance', defaultValue: true },
-  { key: 'helpfulTabTitles', label: 'Useful tab titles', description: 'Identify the course, assignment, or page in each browser tab.', group: 'appearance', defaultValue: true },
-  { key: 'assignmentShortcuts', label: 'Assignment shortcuts', description: 'Quickly focus on unfinished work or assignments due today and tomorrow.', group: 'assignments', defaultValue: true },
-  { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', group: 'assignments', defaultValue: true },
-  { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do in one click.', group: 'assignments', defaultValue: true },
-  { key: 'prepareAssignmentCenter', label: 'Faster Assignment Center', description: 'Prepare Assignment Center on Schedule or when you hover over or focus its link.', group: 'assignments', defaultValue: true },
-  { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'Simpler sign-in', description: 'A clean school welcome page with one sign-in button.', group: 'login', defaultValue: true },
-  { key: 'automaticLogin', label: 'Automatic login', description: 'Continue through Blackbaud and select your school Google account.', group: 'login', defaultValue: true },
-  { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in progress', description: 'Show a dismissible status while automatic login runs.', group: 'login', defaultValue: true },
-  { key: 'fixFavicon', label: 'Tab icon', description: 'Give Blackbaud tabs a recognizable icon.', group: 'tools', defaultValue: true },
-  { key: 'rosterTools', legacyKey: 'copyRosterTools', label: 'Roster tools', description: 'Copy roster names or email addresses in one click.', group: 'tools', defaultValue: true },
-  { key: 'classSwitching', label: 'Better class switching', description: 'Search classes and keep Assignments or Roster open when switching.', group: 'tools', defaultValue: true },
-  { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', group: 'tools', defaultValue: true },
-  { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Open the original photo from a directory profile.', group: 'tools', defaultValue: true },
-  { key: 'enhancedDirectory', label: 'Better directories', description: 'Search and browse any directory with compact results and local sorting.', group: 'tools', defaultValue: true },
-  { key: 'oldAssignmentCenter', label: 'Legacy assignment center', description: 'Use the older assignment center when available.', group: 'compatibility', defaultValue: false },
-  { key: 'fixInvalidPages', legacyKey: 'fixBrokenAssignmentCenter', label: 'Assignment loading recovery', description: 'Offer recovery when the assignment center stays stuck.', group: 'compatibility', defaultValue: true },
+  { key: 'pageAppearance', label: 'Page appearance', description: 'Restyle navigation and supported pages, including courses, assignments, and rosters.', defaultValue: true },
+  { key: 'helpfulTabTitles', label: 'Descriptive tab titles', description: 'Identify the course, assignment, or page in each browser tab.', defaultValue: true },
+  { key: 'fixFavicon', label: 'Blackbaud tab icon', description: 'Replace the school portal’s tab icon with the Blackbaud icon.', defaultValue: true },
+  { key: 'automaticLogin', label: 'Automatic Google sign-in', description: 'Continue through Blackbaud and select your school Google account. Passwords and authentication challenges stay manual.', defaultValue: true },
+  { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'School sign-in page', description: 'Replace the initial school login form with a Google sign-in button.', defaultValue: true },
+  { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in status messages', description: 'Show progress and a Continue manually action during automatic Google sign-in.', defaultValue: true },
+  { key: 'assignmentShortcuts', label: 'Assignment shortcuts', description: 'Filter loaded assignments to unfinished work or assignments due today and tomorrow.', defaultValue: true },
+  { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', defaultValue: true },
+  { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do from the modern Assignment Center.', defaultValue: true },
+  { key: 'assignmentStatusLabels', legacyKey: 'assignmentCompletion', label: 'Assignment status labels', description: 'Show clearer Graded, Missing, and In progress labels in the modern Assignment Center.', defaultValue: true },
+  { key: 'assignmentReturnLink', label: 'Assignment return link', description: 'Make the Assignments link on an assignment page open Assignment Center.', defaultValue: true },
+  { key: 'prepareAssignmentCenter', label: 'Preload Assignment Center', description: 'Prepare the modern Assignment Center from Schedule or when you hover over or focus its link.', defaultValue: true },
+  { key: 'fixInvalidPages', legacyKey: 'fixBrokenAssignmentCenter', label: 'Stalled assignment recovery', description: 'Offer a reload action when the modern Assignment Center stays loading.', defaultValue: true },
+  { key: 'classSearch', legacyKey: 'classSwitching', label: 'Classes search', description: 'Filter the Classes menu by class name.', defaultValue: true },
+  { key: 'classSwitching', label: 'Remember class tab', description: 'Keep Assignments or Roster open when switching classes.', defaultValue: true },
+  { key: 'rosterTools', legacyKey: 'copyRosterTools', label: 'Roster copy buttons', description: 'Copy roster names or email addresses in one click.', defaultValue: true },
+  { key: 'enhancedDirectory', label: 'Directory redesign', description: 'Browse supported directories with search, sorting, contact details, and Columns or Rows views.', defaultValue: true },
+  { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Add an option to open the original photo from a directory profile.', defaultValue: true },
+  { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', defaultValue: true },
+  { key: 'oldAssignmentCenter', label: 'Legacy Assignment Center', description: 'Use the older Assignment Center when available. Modern status controls, preloading, and loading recovery will be inactive.', defaultValue: false },
 ] as const;
 
 export type FeatureKey = typeof FEATURE_DEFINITIONS[number]['key'];
-export type Settings = { schemaVersion: 2; enabled: boolean; accountPreference: string } & Record<FeatureKey, boolean>;
+export type EnhancementMode = 'essentials' | 'full';
+export type Settings = { schemaVersion: 2; enabled: boolean; mode: EnhancementMode; accountPreference: string } & Record<FeatureKey, boolean>;
+
+const essentialFeatures = new Set<FeatureKey>(['automaticLogin', 'optimizeLoginPage', 'loadingOverlay', 'assignmentPreviews']);
+
+export function effectiveSettings(settings: Settings): Settings {
+  if (settings.mode !== 'essentials') return settings;
+  return { ...settings, ...Object.fromEntries(FEATURE_DEFINITIONS.map(({ key }) => [key, essentialFeatures.has(key)])) };
+}
+
+export function isFullCustomized(settings: Settings): boolean {
+  return FEATURE_DEFINITIONS.some(({ key, defaultValue }) => settings[key] !== defaultValue);
+}
+
+export function fullDefaults(): Record<FeatureKey, boolean> {
+  return Object.fromEntries(FEATURE_DEFINITIONS.map(({ key, defaultValue }) => [key, defaultValue])) as Record<FeatureKey, boolean>;
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 2,
   enabled: true,
+  mode: 'full',
   accountPreference: '',
-  ...Object.fromEntries(FEATURE_DEFINITIONS.map((feature) => [feature.key, feature.defaultValue])),
-} as Settings;
+  ...fullDefaults(),
+};
 
 export function normalizeAccountPreference(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -43,6 +63,7 @@ export function normalizeSettings(raw: Record<string, unknown> = {}): Settings {
   const settings = {
     ...DEFAULT_SETTINGS,
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : raw.uiMode !== 'original',
+    mode: raw.mode === 'essentials' ? 'essentials' as const : 'full' as const,
     accountPreference: normalizeAccountPreference(raw.accountPreference),
   };
   for (const feature of FEATURE_DEFINITIONS) {
@@ -64,6 +85,10 @@ export function settingsPatch(update: Partial<Omit<Settings, 'schemaVersion'>>):
   // Store a patch so updates from two tabs cannot overwrite each other's switches.
   const validated: Record<string, unknown> = { schemaVersion: 2 };
   if (typeof update.enabled === 'boolean') validated.enabled = update.enabled;
+  if (update.mode !== undefined) {
+    if (update.mode !== 'essentials' && update.mode !== 'full') throw new Error('Choose a valid enhancement mode.');
+    validated.mode = update.mode;
+  }
   if (update.accountPreference !== undefined) {
     const preference = normalizeAccountPreference(update.accountPreference);
     if (update.accountPreference.trim() && !preference) throw new Error('Enter a valid email address or school account domain.');

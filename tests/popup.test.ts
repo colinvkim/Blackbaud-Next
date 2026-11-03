@@ -1,265 +1,80 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { JSDOM } from 'jsdom';
-import { mountPopup } from '../src/popup/controller.ts';
-import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
-import { createCoordinator } from '../src/background/coordinator.ts';
-import type { ExtensionApi } from '../src/shared/extension.ts';
+import { setupSettingsUi, flush } from './fixtures/settings-ui.ts';
 
-const html = await readFile(new URL('../src/popup/index.html', import.meta.url), 'utf8');
-const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-function setup(options: { failRead?: boolean; holdInitialRead?: boolean } = {}) {
-  const dom = new JSDOM(html, { url: 'https://extension.example/popup.html' });
-  const document = dom.window.document;
-  const values: Record<string, unknown> = { ...DEFAULT_SETTINGS };
-  const writes: Record<string, unknown>[] = [];
-  const listeners = new Set<(changes: Record<string, unknown>, area: string) => void>();
-  const heldWrites: (() => void)[] = [];
-  const heldReads: (() => void)[] = [];
-  const messages: unknown[] = [];
-  let holdNextRead = options.holdInitialRead ?? false;
-  const scope = globalThis as typeof globalThis & { chrome?: unknown };
-  const previousChrome = scope.chrome;
-  let failRead = options.failRead ?? false;
-  let failWrite = false;
-  let holdWrites = false;
-  const notify = () => { for (const listener of listeners) listener({}, 'sync'); };
-  const storage = {
-    async get() {
-      if (failRead) throw new Error('Storage unavailable');
-      const snapshot = { ...values };
-      if (holdNextRead) {
-        holdNextRead = false;
-        await new Promise<void>((resolve) => heldReads.push(resolve));
-      }
-      return snapshot;
-    },
-    async set(patch: Record<string, unknown>) {
-      writes.push(patch);
-      if (holdWrites) await new Promise<void>((resolve) => heldWrites.push(resolve));
-      if (failWrite) throw new Error('Write unavailable');
-      Object.assign(values, patch);
-      notify();
-    },
-    async remove() {},
-  };
-  const api = {
-    storage: {
-      sync: storage,
-      local: storage,
-      onChanged: {
-        addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => listeners.add(listener),
-        removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => listeners.delete(listener),
-      },
-    },
-    runtime: { id: 'popup-fixture', getURL: (path: string) => `chrome-extension://popup-fixture/${path}` },
-  } as unknown as ExtensionApi;
-  const handle = createCoordinator(api);
-  api.runtime.sendMessage = async (message) => {
-    messages.push(message);
-    try { return { ok: true, value: await handle(message, { id: api.runtime.id, url: api.runtime.getURL('popup.html') }) }; }
-    catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Failed' }; }
-  };
-  scope.chrome = api;
-  const input = (id: string) => document.getElementById(id) as HTMLInputElement;
-  const toggle = (id: string, checked: boolean) => {
-    input(id).checked = checked;
-    input(id).dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  };
-  const editAccount = (value: string) => {
-    input('account-preference').value = value;
-    input('account-preference').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  };
-  const submitAccount = () => document.getElementById('account-form')!.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
-  const dispose = mountPopup(document, dom.window as unknown as Window);
-  return {
-    document, values, writes, messages, listeners, input, toggle, editAccount, submitAccount, notify,
-    failReads: (value: boolean) => { failRead = value; },
-    failWrites: (value: boolean) => { failWrite = value; },
-    holdWrites: (value: boolean) => { holdWrites = value; },
-    releaseWrite: () => { assert.ok(heldWrites.length); heldWrites.shift()!(); },
-    releaseRead: () => { assert.ok(heldReads.length); heldReads.shift()!(); },
-    close() { dispose(); dom.window.close(); },
-    cleanup() {
-      dispose();
-      dom.window.close();
-      if (previousChrome === undefined) delete scope.chrome;
-      else scope.chrome = previousChrome;
-    },
-  };
-}
-
-test('pausing keeps preferences and disables feature controls until resumed', async () => {
-  const popup = setup();
+test('mode choices retain the Full setup and account preference', async () => {
+  const popup = setupSettingsUi('popup', { values: { rosterTools: false, accountPreference: 'student@example.test' } });
   try {
     await flush();
-    assert.equal(popup.input('rosterTools').checked, true);
-    popup.toggle('enabled', false);
-    assert.equal(popup.input('rosterTools').disabled, true);
+    assert.equal(popup.input('mode-full').checked, true);
+    assert.equal(popup.document.getElementById('customized')!.hidden, false);
+    for (const mode of ['off', 'essentials', 'full']) {
+      popup.input(`mode-${mode}`).click();
+      await flush();
+      assert.equal(popup.input(`mode-${mode}`).checked, true);
+      assert.equal(popup.values.rosterTools, false);
+      assert.equal(popup.values.accountPreference, 'student@example.test');
+      assert.equal(popup.document.getElementById('save-status')!.hidden, true, 'Successful changes remain quiet');
+    }
+    assert.deepEqual(popup.writes, [
+      { schemaVersion: 2, enabled: false },
+      { schemaVersion: 2, enabled: true, mode: 'essentials' },
+      { schemaVersion: 2, enabled: true, mode: 'full' },
+    ]);
+  } finally { popup.cleanup(); }
+});
+
+test('resetting Full restores recommended features without changing the active mode or account', async () => {
+  const popup = setupSettingsUi('popup', { values: { enabled: false, mode: 'essentials', rosterTools: false, oldAssignmentCenter: true, accountPreference: 'school.test' } });
+  try {
     await flush();
+    popup.document.getElementById('reset-full')!.click();
+    await flush();
+    assert.equal(popup.values.rosterTools, true);
+    assert.equal(popup.values.oldAssignmentCenter, false, 'Compatibility remains opt-in');
     assert.equal(popup.values.enabled, false);
-    assert.equal(popup.values.rosterTools, true);
-    assert.equal(popup.input('account-preference').disabled, true);
-    popup.toggle('enabled', true);
-    await flush();
-    assert.equal(popup.input('rosterTools').disabled, false);
-    assert.equal(popup.input('rosterTools').checked, true);
-    assert.deepEqual(popup.writes, [{ schemaVersion: 2, enabled: false }, { schemaVersion: 2, enabled: true }]);
+    assert.equal(popup.values.mode, 'essentials');
+    assert.equal(popup.values.accountPreference, 'school.test');
+    assert.equal(popup.document.getElementById('customized')!.hidden, true);
+    assert.equal(popup.document.getElementById('reset-full')!.hidden, true);
   } finally { popup.cleanup(); }
 });
 
-test('failed saves restore the persisted switch and announce the failure', async () => {
-  const popup = setup();
+test('a failed mode save restores the selection and a failed initial read can retry', async () => {
+  const popup = setupSettingsUi('popup', { failRead: true });
   try {
     await flush();
+    assert.equal(popup.input('mode-full').disabled, true);
+    assert.equal(popup.document.getElementById('load-error')!.hidden, false);
+    popup.failReads(false);
+    popup.document.getElementById('retry')!.click();
+    await flush();
+    assert.equal(popup.input('mode-full').checked, true);
     popup.failWrites(true);
-    popup.toggle('rosterTools', false);
-    assert.equal(popup.input('rosterTools').checked, false);
+    popup.input('mode-essentials').click();
+    assert.equal(popup.input('mode-essentials').checked, true);
     await flush();
-    assert.equal(popup.values.rosterTools, true);
-    assert.equal(popup.input('rosterTools').checked, true);
+    assert.equal(popup.input('mode-full').checked, true);
     assert.match(popup.document.getElementById('save-status')!.textContent!, /previous setting was restored/);
+    assert.equal(popup.document.getElementById('save-status')!.hidden, false);
   } finally { popup.cleanup(); }
 });
 
-test('rapid choices are written sequentially and stale notifications cannot undo them', async () => {
-  const popup = setup();
+test('accepted mode changes finish in order after the popup closes', async () => {
+  const popup = setupSettingsUi('popup');
   try {
     await flush();
     popup.holdWrites(true);
-    popup.toggle('rosterTools', false);
-    popup.toggle('rosterTools', true);
-    popup.toggle('pageAppearance', false);
-    assert.equal(popup.messages.length, 3, 'every accepted change is handed to the worker immediately');
+    popup.input('mode-essentials').click();
+    popup.input('mode-off').click();
     await flush();
-    assert.deepEqual(popup.writes, [{ schemaVersion: 2, rosterTools: false }]);
-    assert.equal(popup.input('rosterTools').checked, true);
-    assert.equal(popup.input('pageAppearance').checked, false);
-    popup.notify();
-    await flush();
-    assert.equal(popup.input('pageAppearance').checked, false);
-    popup.releaseWrite();
-    await flush();
-    assert.deepEqual(popup.writes, [{ schemaVersion: 2, rosterTools: false }, { schemaVersion: 2, rosterTools: true }]);
-    popup.releaseWrite();
-    await flush();
-    popup.releaseWrite();
-    await flush();
-    assert.equal(popup.values.rosterTools, true);
-    assert.equal(popup.values.pageAppearance, false);
-    assert.equal(popup.input('rosterTools').checked, true);
-    assert.equal(popup.input('pageAppearance').checked, false);
-  } finally { popup.cleanup(); }
-});
-
-test('closing the popup cannot discard settings accepted behind a pending save', async () => {
-  const popup = setup();
-  try {
-    await flush();
-    popup.holdWrites(true);
-    popup.toggle('rosterTools', false);
-    popup.toggle('resourceSearch', false);
     assert.equal(popup.messages.length, 2);
-    await flush();
     popup.close();
     popup.releaseWrite();
     await flush();
     popup.releaseWrite();
     await flush();
-    assert.equal(popup.values.rosterTools, false);
-    assert.equal(popup.values.resourceSearch, false);
-  } finally { popup.cleanup(); }
-});
-
-test('a settings change during the initial read is refreshed rather than missed', async () => {
-  const popup = setup({ holdInitialRead: true });
-  try {
-    assert.equal(popup.listeners.size, 1);
-    popup.values.enabled = false;
-    popup.values.resourceSearch = false;
-    popup.notify();
-    popup.releaseRead();
-    await flush();
-    assert.equal(popup.input('enabled').checked, false);
-    assert.equal(popup.input('resourceSearch').checked, false);
-  } finally { popup.cleanup(); }
-});
-
-test('external updates preserve account edits and keyboard focus; account saves normalize values', async () => {
-  const popup = setup();
-  try {
-    await flush();
-    const account = popup.input('account-preference');
-    account.focus();
-    popup.editAccount(' Student@School.EDU ');
-    popup.values.rosterTools = false;
-    popup.notify();
-    await flush();
-    assert.equal(popup.input('rosterTools').checked, false);
-    assert.equal(account.value, ' Student@School.EDU ');
-    assert.equal(popup.document.activeElement, account);
-    popup.submitAccount();
-    await flush();
-    assert.equal(popup.values.accountPreference, 'student@school.edu');
-    assert.equal(account.value, 'student@school.edu');
-    assert.equal(popup.input('save-account').disabled, true);
-  } finally { popup.cleanup(); }
-});
-
-test('invalid account preferences are rejected and empty preferences restore automatic selection', async () => {
-  const popup = setup();
-  try {
-    await flush();
-    popup.editAccount('not an account');
-    popup.submitAccount();
-    assert.equal(popup.writes.length, 0);
-    assert.equal(popup.input('account-preference').getAttribute('aria-invalid'), 'true');
-    assert.equal(popup.document.getElementById('account-error')!.hidden, false);
-    popup.editAccount('@School.EDU');
-    popup.submitAccount();
-    await flush();
-    assert.equal(popup.values.accountPreference, 'school.edu');
-    popup.editAccount('');
-    popup.submitAccount();
-    await flush();
-    assert.equal(popup.values.accountPreference, '');
-  } finally { popup.cleanup(); }
-});
-
-test('an initial storage failure disables controls and can recover with retry', async () => {
-  const popup = setup({ failRead: true });
-  try {
-    await flush();
-    assert.equal(popup.input('enabled').disabled, true);
-    assert.equal(popup.input('rosterTools').disabled, true);
-    assert.equal(popup.document.getElementById('load-error')!.hidden, false);
-    popup.failReads(false);
-    popup.document.getElementById('retry')!.click();
-    await flush();
-    assert.equal(popup.input('enabled').disabled, false);
-    assert.equal(popup.document.getElementById('load-error')!.hidden, true);
-    assert.equal(popup.listeners.size, 1);
-  } finally { popup.cleanup(); }
-});
-
-test('an external storage read failure retains the loaded preferences', async () => {
-  const popup = setup();
-  try {
-    await flush();
-    popup.failReads(true);
-    popup.notify();
-    await flush();
-    assert.match(popup.document.getElementById('save-status')!.textContent!, /Couldn’t reload settings/);
-    assert.equal(popup.input('rosterTools').checked, true);
-    popup.failReads(false);
-    popup.document.getElementById('retry')!.click();
-    await flush();
-    assert.equal(popup.input('enabled').disabled, false);
-    assert.equal(popup.document.getElementById('load-error')!.hidden, true);
-    assert.equal(popup.listeners.size, 1);
-    popup.cleanup();
-    assert.equal(popup.listeners.size, 0);
+    assert.equal(popup.values.mode, 'essentials');
+    assert.equal(popup.values.enabled, false);
   } finally { popup.cleanup(); }
 });

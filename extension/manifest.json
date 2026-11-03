@@ -8,6 +8,7 @@
   "permissions": ["storage"],
   "background": { "service_worker": "dist/background.js" },
   "action": { "default_popup": "popup.html" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
   "content_scripts": [
     { "css": ["dist/appearance.css"], "js": ["dist/appearance.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start" },
     { "js": ["dist/directory-page.js"], "matches": ["https://*.myschoolapp.com/*"], "run_at": "document_start", "world": "MAIN" },

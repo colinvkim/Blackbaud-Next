@@ -58,42 +58,42 @@ test('real Chrome loads, rebuilds, reloads, retains settings, and recovers from 
     });
     await queue.buildNow();
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--bn-accent').trim() === '#0066a1');
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--bn-accent').trim() === '#0066a1', { polling:100 });
     await page.evaluate(() => document.head.replaceChildren());
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bn-accent').trim()), '#0066a1');
     let popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto(`chrome-extension://${extensionId}/options.html`);
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     await popup.evaluate(async () => {
       const chrome = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await chrome.storage.sync.set({ fixFavicon: false });
     });
-    await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-favicon]'));
+    await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-favicon]'), { polling:100 });
     stopWatching = watchProjectSources(fixture, () => queue!.requestBuild());
     const entry = resolve(fixture, 'src/entrypoints/lms.ts');
     const original = await readFile(entry, 'utf8');
     await writeFile(entry, `${original}\ndocument.documentElement.dataset.browserBuild = 'two';\n`);
-    await page.waitForFunction(() => document.documentElement.dataset.browserBuild === 'two', { timeout: 30_000 });
+    await page.waitForFunction(() => document.documentElement.dataset.browserBuild === 'two', { polling:100, timeout: 30_000 });
     await queue.idle();
     assert.equal(await untouched.evaluate(() => document.documentElement.dataset.untouched), 'true');
     // Chrome closes extension pages during a reload; reopen the real popup to inspect storage.
     popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popup.goto(`chrome-extension://${extensionId}/options.html`);
     assert.equal(await popup.evaluate(async () => {
       const chrome = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       return (await chrome.storage.sync.get('fixFavicon')).fixFavicon;
     }), false);
 
-    // Copied popup HTML must participate in the full build, not only imported TS/CSS.
-    const htmlPath = resolve(fixture, 'src/popup/index.html');
+    // Copied settings HTML must participate in the full build, not only imported TS/CSS.
+    const htmlPath = resolve(fixture, 'src/options/index.html');
     const html = await readFile(htmlPath, 'utf8');
     const beforeHtmlBuild = ids.length;
-    await writeFile(htmlPath, html.replace('<title>Blackbaud Next</title>', '<title>Rebuilt popup</title>'));
+    await writeFile(htmlPath, html.replace('<title>Settings · Blackbaud Next</title>', '<title>Rebuilt settings</title>'));
     await waitFor(() => ids.length > beforeHtmlBuild);
     await queue.idle();
     popup = await browser.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    assert.equal(await popup.title(), 'Rebuilt popup');
+    await popup.goto(`chrome-extension://${extensionId}/options.html`);
+    assert.equal(await popup.title(), 'Rebuilt settings');
 
     const published = resolve(developmentPaths(fixture).extension, 'dist/lms.js');
     const lastGood = await readFile(published, 'utf8');
@@ -103,7 +103,7 @@ test('real Chrome loads, rebuilds, reloads, retains settings, and recovers from 
     assert.equal(await readFile(published, 'utf8'), lastGood, 'failed compilation preserves complete published files');
     assert.equal(await page.evaluate(() => document.documentElement.dataset.browserBuild), 'two');
     await writeFile(entry, `${original}\ndocument.documentElement.dataset.browserBuild = 'three';\n`);
-    await page.waitForFunction(() => document.documentElement.dataset.browserBuild === 'three', { timeout: 30_000 });
+    await page.waitForFunction(() => document.documentElement.dataset.browserBuild === 'three', { polling:100, timeout: 30_000 });
     await queue.idle();
     assert.ok(ids.length >= 4);
     assert.ok(ids.every((id) => id === extensionId), 'reload keeps the extension identity and preferences');

@@ -7,8 +7,9 @@ import { oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadc
 import { assignmentShortcutsFeature } from '../features/assignment-shortcuts.ts';
 import { assignmentPreviewFeature } from '../features/assignment-preview.ts';
 import { assignmentCompletionFeature } from '../features/assignment-completion.ts';
+import { assignmentStatusLabelsFeature } from '../features/assignment-status-labels.ts';
 import { helpfulTabTitlesFeature, resourceSearchFeature } from '../features/navigation.ts';
-import { classNavigationFeature } from '../features/class-navigation.ts';
+import { classNavigationFeature, classSearchFeature } from '../features/class-navigation.ts';
 import { assignmentWarmupFeature } from '../features/assignment-warmup.ts';
 import { startOnActivation } from '../runtime/activation.ts';
 import { enhancedDirectoryFeature } from '../features/directory.ts';
@@ -33,8 +34,8 @@ function start() {
   void startExtension([
     loginFeature, faviconFeature,
     oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature, rosterToolsFeature, avatarDownloadFeature,
-    assignmentShortcutsFeature, assignmentPreviewFeature, assignmentCompletionFeature, helpfulTabTitlesFeature, resourceSearchFeature,
-    classNavigationFeature,
+    assignmentShortcutsFeature, assignmentPreviewFeature, assignmentCompletionFeature, assignmentStatusLabelsFeature, helpfulTabTitlesFeature, resourceSearchFeature,
+    classNavigationFeature, classSearchFeature,
     assignmentWarmupFeature,
     enhancedDirectoryFeature,
   ], { ready: waitForDocumentReady }).catch((error) => console.warn('Blackbaud Next could not start.', error));

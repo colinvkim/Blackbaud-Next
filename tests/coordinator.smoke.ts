@@ -51,10 +51,10 @@ test('real Chrome preserves popup saves, per-tab auth attempts and worker restar
     const executable = await ensureDevelopmentBrowser(developmentPaths(root).cache);
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), executable);
     const id = await browser.installExtension(developmentPaths(fixture).extension);
-    const popupUrl = `chrome-extension://${id}/popup.html`;
+    const popupUrl = `chrome-extension://${id}/options.html`;
     let popup = await browser.newPage();
     await popup.goto(popupUrl);
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     await popup.evaluate(() => {
       for (const key of ['rosterTools', 'resourceSearch', 'pageAppearance']) (document.getElementById(key) as HTMLInputElement).click();
     });

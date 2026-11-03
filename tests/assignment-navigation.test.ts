@@ -59,6 +59,28 @@ async function flush() {
   for (let index = 0; index < 12; index += 1) await Promise.resolve();
 }
 
+test('the return-link switch and Login + previews restore the native assignment breadcrumb', async () => {
+  fixture();
+  const controller = new FeatureController([assignmentBreadcrumbFeature]);
+  cleanups.push(() => controller.dispose());
+  const url = new URL(detailUrl);
+  controller.update(url, { ...DEFAULT_SETTINGS, mode: 'essentials' });
+  await flush();
+  assert.equal(breadcrumb().getAttribute('href'), backHref);
+  controller.update(url, DEFAULT_SETTINGS);
+  await flush();
+  assert.equal(breadcrumb().getAttribute('href'), centerUrl);
+  controller.update(url, { ...DEFAULT_SETTINGS, assignmentReturnLink: false });
+  await flush();
+  assert.equal(breadcrumb().getAttribute('href'), backHref);
+  controller.update(url, DEFAULT_SETTINGS);
+  await flush();
+  assert.equal(breadcrumb().getAttribute('href'), centerUrl);
+  controller.update(url, { ...DEFAULT_SETTINGS, mode: 'essentials' });
+  await flush();
+  assert.equal(breadcrumb().getAttribute('href'), backHref);
+});
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   dom?.window.close();

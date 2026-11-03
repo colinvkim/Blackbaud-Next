@@ -22,6 +22,12 @@ Blackbaud Next is a Chrome extension that improves Blackbaud LMS. It adds cleane
 
 Download Blackbaud Next for Chrome, Edge, Helium, and other Chromium-based browsers by [installing it via the Chrome Web Store](https://chromewebstore.google.com/detail/blackbaud-next-supercharg/ofadcfkogaiddhcmbabpgidjimnkfkij).
 
+## Choose your setup
+
+The extension popup offers three modes: **Off**, **Essentials** (automatic sign-in and assignment previews), and **Full**. Full enables the recommended enhancements. Open **Settings**, then expand **Advanced** to choose individual features and your preferred Google account.
+
+Your Full customizations are kept when you switch modes. A **Customized** label and **Reset Full defaults** action make it easy to return to the recommended setup.
+
 ## Privacy
 
 Blackbaud Next uses your existing school session and access permissions. Assignment, roster, and directory data used by its tools stays in memory; the extension does not save those records to extension storage or send them to a separate service. Directory tools respect Blackbaud’s publication settings.

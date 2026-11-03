@@ -2,7 +2,7 @@ import { isSchoolHostname, schoolFromSigninUrl } from '../blackbaud/auth.ts';
 import { isBlackbaudSignin, isGoogleOAuth, isSchoolPage, isStudentPortal } from '../blackbaud/routes.ts';
 import type { AuthRequest } from '../shared/coordinator.ts';
 import type { ExtensionApi, MessageListener, MessageSender } from '../shared/extension.ts';
-import { settingsPatch } from '../shared/settings.ts';
+import { FEATURE_DEFINITIONS, normalizeSettings, settingsPatch } from '../shared/settings.ts';
 import type { Settings } from '../shared/settings.ts';
 import { AuthStore } from './auth-store.ts';
 
@@ -32,10 +32,18 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
     if (!raw || typeof raw !== 'object' || !('channel' in raw) || raw.channel !== 'blackbaud-next-coordinator-v1' || !('kind' in raw)) throw new Error('Invalid coordinator message.');
     const url = new URL(sender.url);
     if (raw.kind === 'settings') {
-      if (url.href !== api.runtime.getURL('popup.html') || !('update' in raw) || !raw.update || typeof raw.update !== 'object' || Array.isArray(raw.update)) throw new Error('Invalid settings sender or update.');
+      if (![api.runtime.getURL('popup.html'), api.runtime.getURL('options.html')].includes(url.href) || !('update' in raw) || !raw.update || typeof raw.update !== 'object' || Array.isArray(raw.update)) throw new Error('Invalid settings sender or update.');
       if ('accountPreference' in raw.update && typeof raw.update.accountPreference !== 'string') throw new Error('Invalid account preference.');
       const patch = settingsPatch(raw.update as Partial<Omit<Settings, 'schemaVersion'>>);
-      const saved = settingsWrites.then(() => api.storage.sync.set(patch));
+      const saved = settingsWrites.then(async () => {
+        const companions = FEATURE_DEFINITIONS.filter((feature) => 'legacyKey' in feature && feature.legacyKey in patch && !(feature.key in patch));
+        if (companions.length) {
+          // Pin inherited preferences before editing their former combined switch.
+          const current = normalizeSettings(await api.storage.sync.get(null));
+          for (const { key } of companions) patch[key] = current[key];
+        }
+        await api.storage.sync.set(patch);
+      });
       settingsWrites = saved.catch(() => {});
       await saved;
       return undefined;

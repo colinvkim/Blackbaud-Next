@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_SETTINGS, getSettings, normalizeAccountPreference, normalizeSettings, updateSettings } from '../src/shared/settings.ts';
+import { DEFAULT_SETTINGS, effectiveSettings, getSettings, normalizeAccountPreference, normalizeSettings, updateSettings } from '../src/shared/settings.ts';
 import { createCoordinator } from '../src/background/coordinator.ts';
 import type { ExtensionApi } from '../src/shared/extension.ts';
 
@@ -29,6 +29,50 @@ test('old modes migrate while preserving individual switches and aliases', () =>
 test('invalid storage data uses typed defaults and respects the new enabled flag', () => {
   assert.deepEqual(normalizeSettings({ automaticLogin: 'false', accountPreference: {}, enabled: true, uiMode: 'original' }), DEFAULT_SETTINGS);
   assert.equal(normalizeSettings({ enabled: false, uiMode: 'next' }).enabled, false);
+});
+
+for (const [parent, child] of [['assignmentCompletion', 'assignmentStatusLabels'], ['classSwitching', 'classSearch']] as const) {
+  test(`${child} inherits the old ${parent} preference once and remains independent after editing`, async () => {
+    const scope = globalThis as typeof globalThis & { chrome?: unknown };
+    const previous = scope.chrome;
+    let raw: Record<string, unknown> = { [parent]: false };
+    scope.chrome = coordinate({ storage: { sync: {
+      get: async () => ({ ...raw }),
+      set: async (patch: Record<string, unknown>) => { Object.assign(raw, patch); },
+    } } } as unknown as ExtensionApi);
+    try {
+      assert.equal(normalizeSettings(raw)[child], false);
+      await updateSettings({ [parent]: true });
+      assert.equal(normalizeSettings(raw)[parent], true);
+      assert.equal(normalizeSettings(raw)[child], false, 'Changing the old switch preserves its companion’s prior state');
+      raw = {};
+      await updateSettings({ [parent]: false });
+      assert.equal(normalizeSettings(raw)[child], true, 'Disabling one half preserves the other default');
+      await updateSettings({ [child]: false });
+      assert.equal(normalizeSettings(raw)[parent], false);
+      assert.equal(normalizeSettings(raw)[child], false);
+      raw = { [parent]: false };
+      await Promise.all([updateSettings({ [parent]: true }), updateSettings({ [child]: true }), updateSettings({ [parent]: false })]);
+      assert.equal(normalizeSettings(raw)[parent], false);
+      assert.equal(normalizeSettings(raw)[child], true, 'Queued writes read the latest companion value');
+    } finally { scope.chrome = previous; }
+  });
+}
+
+test('legacy settings retain Full by default and the lighter mode does not mutate the saved setup', () => {
+  const full = normalizeSettings({ rosterTools: false, assignmentPreviews: false, automaticLogin: false });
+  assert.equal(full.mode, 'full');
+  const saved = { ...full, mode: 'essentials' as const };
+  const effective = effectiveSettings(saved);
+  assert.equal(effective.assignmentPreviews, true);
+  assert.equal(effective.automaticLogin, true);
+  assert.equal(effective.pageAppearance, false);
+  assert.equal(effective.rosterTools, false);
+  assert.equal(effective.oldAssignmentCenter, false);
+  assert.equal(saved.assignmentPreviews, false);
+  assert.equal(saved.automaticLogin, false);
+  assert.equal(effectiveSettings({ ...saved, mode: 'full' }).assignmentPreviews, false);
+  assert.equal(normalizeSettings({ mode: 'unrecognized' }).mode, 'full');
 });
 
 test('account preferences accept complete email addresses or domains', () => {

@@ -11,7 +11,7 @@ const recoveryStorageKey = 'blackbaud-next-assignment-recovery';
 export const assignmentBreadcrumbFeature: Feature = {
   id: 'assignment-breadcrumb',
   settingsKeys: ['oldAssignmentCenter'],
-  enabled: () => true,
+  enabled: (settings) => settings.assignmentReturnLink,
   matches: isAssignmentDetail,
   mount: ({ url, settings, signal }) => {
     const destination = settings.oldAssignmentCenter ? legacyAssignmentCenterUrl(url) : assignmentCenterUrl(url);

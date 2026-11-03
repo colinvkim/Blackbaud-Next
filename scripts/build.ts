@@ -16,12 +16,13 @@ if (!watching) {
 }
 await copyFile(resolve(root, 'extension/manifest.json'), resolve(output, 'manifest.json'));
 await copyFile(resolve(root, 'src/popup/index.html'), resolve(output, 'popup.html'));
+await copyFile(resolve(root, 'src/options/index.html'), resolve(output, 'options.html'));
 await rm(resolve(output, 'assets'), { recursive: true, force: true });
 await cp(resolve(root, 'assets'), resolve(output, 'assets'), { recursive: true });
 
 const headerStylesPath = resolve(root, 'src/features/header-styles.ts');
 let headerStylesRevision = 0;
-const entries = ['appearance', 'lms', 'auth', 'popup', 'directory-page', 'background'];
+const entries = ['appearance', 'lms', 'auth', 'popup', 'options', 'directory-page', 'background'];
 const initialBundles = new Set<string>();
 let watchReady = false;
 
@@ -30,6 +31,7 @@ async function validateOutput(): Promise<void> {
   const manifest = JSON.parse(await readFile(resolve(output, 'manifest.json'), 'utf8'));
   const paths = [
     manifest.action.default_popup,
+    manifest.options_ui.page,
     manifest.background.service_worker,
     ...Object.values(manifest.icons),
     ...manifest.content_scripts.flatMap((script: { js?: string[]; css?: string[] }) => [
@@ -38,6 +40,8 @@ async function validateOutput(): Promise<void> {
     ...manifest.web_accessible_resources.flatMap((resource: { resources: string[] }) => resource.resources),
     'dist/popup.css',
     'dist/popup.js',
+    'dist/options.css',
+    'dist/options.js',
   ];
   for (const path of paths) await readFile(resolve(output, path as string));
 }

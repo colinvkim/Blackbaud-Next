@@ -1,5 +1,5 @@
 import type { Feature, FeatureContext, Cleanup } from '../shared/types.ts';
-import type { Settings } from '../shared/settings.ts';
+import { effectiveSettings, type Settings } from '../shared/settings.ts';
 
 interface MountedFeature {
   abort: AbortController;
@@ -29,6 +29,7 @@ export class FeatureController {
   }
 
   update(url: URL, settings: Settings): void {
+    settings = effectiveSettings(settings);
     const desired = new Map<string, { feature: Feature; signature: string }>();
     if (settings.enabled) {
       for (const feature of this.features) {

@@ -62,8 +62,8 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
     const id = await browser.installExtension(extension);
     const popup = await browser.newPage();
     popup.setDefaultTimeout(5_000);
-    await popup.goto('chrome-extension://' + id + '/popup.html');
-    await popup.waitForSelector('#enabled:not(:disabled)');
+    await popup.goto('chrome-extension://' + id + '/options.html');
+    await popup.waitForSelector('#mode-full:not(:disabled)');
     await popup.evaluate(async (keys) => {
       const api = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await api.storage.sync.set({
@@ -82,6 +82,7 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
     });
     const toggle = async (key: string) => {
       await popup.bringToFront();
+      if (!key.startsWith('mode-') && !await popup.$eval('#advanced-settings', details => (details as HTMLDetailsElement).open)) await popup.click('#advanced-settings > summary');
       await popup.waitForSelector(`#${key}:not(:disabled)`);
       await popup.click(`#${key}`);
       await page.bringToFront();
@@ -127,7 +128,7 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
     await page.waitForFunction(() => !document.querySelector('.bn-resource-search'));
     await toggle('resourceSearch');
     await page.waitForSelector('.bn-resource-search');
-    await toggle('enabled');
+    await toggle('mode-off');
     await page.waitForFunction(() => !document.querySelector('.bn-resource-search') &&
       !getComputedStyle(document.documentElement).getPropertyValue('--bn-accent'));
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--fixture-foreign').trim()), 'retained');
@@ -139,7 +140,7 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
       return JSON.parse(document.documentElement.dataset.testTimers ?? '[]').includes(2_000);
     });
     assert.equal((await timers(page)).filter((delay) => delay === 2_000).length, 1);
-    await toggle('enabled');
+    await toggle('mode-full');
     await page.waitForSelector('.bn-resource-search');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.bn-resource-search');

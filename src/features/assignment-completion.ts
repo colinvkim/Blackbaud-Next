@@ -1,11 +1,10 @@
-import { ASSIGNMENT_ROW_SELECTOR, readAssignmentStaticStatus, readAssignmentRow } from '../blackbaud/assignment-list.ts';
-import { AssignmentCompletionError, COMPLETION_NATIVE_ATTRIBUTE, completionSettledEvent, isAssignmentCompletionBusy, isAssignmentCompletionPage, isNativeAssignmentStatusAvailable, readAssignmentCompletionTarget, setAssignmentCompletion } from '../blackbaud/assignment-status.ts';
+import { ASSIGNMENT_ROW_SELECTOR } from '../blackbaud/assignment-list.ts';
+import { AssignmentCompletionError, COMPLETION_NATIVE_ATTRIBUTE, completionSettledEvent, isAssignmentCompletionBusy, isAssignmentCompletionPage, readAssignmentCompletionTarget, setAssignmentCompletion } from '../blackbaud/assignment-status.ts';
 import type { AssignmentCompletionTarget } from '../blackbaud/assignment-status.ts';
 import { assignmentPreviewReturnFocus } from '../blackbaud/assignment-preview.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { createButton, isActionable, markOwned, observeElementContext, watchAddedElements } from '../shared/dom.ts';
 import { createScope } from '../shared/scope.ts';
-import { createIcon } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
 
 const styles = `
@@ -18,19 +17,11 @@ const styles = `
 .bn-completion-overdue { font-size: 12px; color: var(--bn-muted); }
 .bn-completion-feedback { font-size: 12px; color: var(--bn-muted); }
 .bn-completion-control [hidden] { display: none !important; }
-app-assignment-status-display:has(> [data-bn-assignment-status]) { font: inherit; }
-[data-bn-assignment-status] { align-items: center; gap: 8px; min-height: 32px; color: var(--bn-text); font-weight: 600; line-height: 1.1; }
-[data-bn-assignment-status="Graded"] > .bn-icon { color: #27613a; }
-[data-bn-assignment-status="Missing"] > .bn-icon { color: #b42318; }
-[data-bn-assignment-status="In progress"] > .bn-icon { color: #8a5700; }
-[data-bn-assignment-native-icon="true"] { display: none !important; }
 .bn-completion-notice { position: fixed; right: 20px; bottom: 20px; z-index: 100001; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; box-sizing: border-box; max-width: min(460px, calc(100vw - 32px)); padding: 12px 16px; border: 1px solid var(--bn-border); border-radius: var(--bn-radius); background: var(--bn-surface); color: var(--bn-text); box-shadow: 0 4px 20px #222a3520; font: 14px/1.5 var(--bn-font); }
 .bn-completion-notice > span { flex: 1 1 160px; overflow-wrap: anywhere; }
 .bn-completion-notice .bn-button { min-height: 32px; }
-@media (max-width: 480px), (pointer: coarse) { .bn-completion-control label, .bn-completion-notice .bn-button, [data-bn-assignment-status] { min-height: 44px; } .bn-completion-notice { right: 16px; bottom: 16px; } }
+@media (max-width: 480px), (pointer: coarse) { .bn-completion-control label, .bn-completion-notice .bn-button { min-height: 44px; } .bn-completion-notice { right: 16px; bottom: 16px; } }
 `;
-
-const staticStatusIcons = { Graded: 'clipboard-check', Missing: 'circle-alert', 'In progress': 'clock-3' } as const;
 
 interface CompletionControl {
   target: AssignmentCompletionTarget;
@@ -149,25 +140,8 @@ export const assignmentCompletionFeature: Feature = {
     };
     const stopRows = watchAddedElements<HTMLElement>(ASSIGNMENT_ROW_SELECTOR, (row) => {
       let control: CompletionControl | null = null;
-      let staticStatus: (NonNullable<ReturnType<typeof readAssignmentStaticStatus>> & { graphic: SVGSVGElement }) | null = null;
-      const restoreStaticStatus = () => {
-        if (!staticStatus) return;
-        staticStatus.graphic.remove();
-        ownership.restore(staticStatus.container, 'data-bn-assignment-status');
-        ownership.restore(staticStatus.icon, 'data-bn-assignment-native-icon');
-        staticStatus = null;
-      };
       const update = () => {
         if (!current()) return;
-        const nativeStatic = readAssignmentRow(row) && readAssignmentStaticStatus(row);
-        const visibleStatic = nativeStatic && isNativeAssignmentStatusAvailable(nativeStatic.caption) ? nativeStatic : null;
-        if (staticStatus && (staticStatus.container !== visibleStatic?.container || staticStatus.icon !== visibleStatic?.icon || staticStatus.status !== visibleStatic?.status)) restoreStaticStatus();
-        if (visibleStatic) {
-          if (!staticStatus) staticStatus = { ...visibleStatic, graphic: createIcon(staticStatusIcons[visibleStatic.status], row.ownerDocument) };
-          ownership.mark(staticStatus.container, 'data-bn-assignment-status', visibleStatic.status);
-          ownership.mark(staticStatus.icon, 'data-bn-assignment-native-icon', 'true');
-          if (staticStatus.graphic.parentElement !== staticStatus.container) staticStatus.container.insertBefore(staticStatus.graphic, staticStatus.icon);
-        }
         const target = readAssignmentCompletionTarget(row);
         if (!target || nativeOnly.has(target.assignmentIndexId) ||
           (control && (target.component !== control.target.component || target.button !== control.target.button))) {
@@ -227,7 +201,6 @@ export const assignmentCompletionFeature: Feature = {
       return () => {
         stopContext();
         updates.delete(update);
-        restoreStaticStatus();
         if (control) restoreControl(control);
         controls.delete(row);
       };
