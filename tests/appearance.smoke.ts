@@ -1329,6 +1329,9 @@ async function nativeControlStates(page: Page, setAppearance: (enabled: boolean)
       <textarea id="state-readonly" class="form-control" readonly aria-label="Read-only field"></textarea>
       <fieldset disabled><input id="state-fieldset" class="form-control" aria-label="Disabled fieldset field"></fieldset>
       <select id="state-select" class="input-sm" disabled aria-label="Disabled selection"><option>Native option</option></select>
+      <select id="state-combobox" class="form-control" size="1" aria-label="Native selection"><option value="first">First native option</option><option value="second">Second native option</option></select>
+      <select id="state-multiple" class="form-control" multiple aria-label="Multiple selections"><option>First option</option><option>Second option</option></select>
+      <select id="state-listbox" class="input-sm" size="3" aria-label="Visible selections"><option>First option</option><option>Second option</option></select>
       <div id="state-heading" class="bb-tile-title" hidden><div class="bb-tile-header-with-content"><h2 class="bb-tile-header">Native hidden heading</h2></div><div class="bb-tile-header-column-tools"><button type="button">Native action</button></div></div>`;
     document.getElementById('site-main')!.append(section);
   });
@@ -1342,15 +1345,28 @@ async function nativeControlStates(page: Page, setAppearance: (enabled: boolean)
       heading: getComputedStyle(document.getElementById('state-heading')!).display,
     };
   });
+  const selectPresentation = () => page.evaluate(() => ['state-select', 'state-combobox', 'state-multiple', 'state-listbox'].map((id) => {
+    const style = getComputedStyle(document.getElementById(id)!);
+    return { appearance: style.appearance, image: style.backgroundImage, x: style.backgroundPositionX, y: style.backgroundPositionY };
+  }));
   try {
     await setAppearance(false);
     const native = await read();
+    const nativeSelects = await selectPresentation();
     assert.equal(native.heading, 'none');
     assert.notEqual(native.backgrounds[0], native.backgrounds[1], 'The fixture supplies a native disabled-state cue');
     for (const width of [1280, 390]) {
       await page.setViewport({ width, height: 900 });
       await setAppearance(true);
       assert.deepEqual(await read(), native, 'Appearance preserves native disabled/read-only cues and hidden headings');
+      const selects = await selectPresentation();
+      for (const select of selects.slice(0, 2)) {
+        assert.equal(select.appearance, 'none', 'Native dropdowns share the inset chevron treatment');
+        assert.notEqual(select.image, 'none');
+        assert.equal(select.x, 'calc(100% - 12px)');
+        assert.equal(select.y, '50%');
+      }
+      assert.deepEqual(selects.slice(2), nativeSelects.slice(2), 'Multiple-selection controls and visible listboxes retain their native presentation');
       await page.evaluate(() => {
         (document.getElementById('state-editable') as HTMLInputElement).disabled = true;
         (document.getElementById('state-disabled') as HTMLInputElement).disabled = false;
@@ -1371,6 +1387,20 @@ async function nativeControlStates(page: Page, setAppearance: (enabled: boolean)
       assert.deepEqual(await read(), native, 'Native states restore without remounting appearance');
       await setAppearance(false);
       assert.deepEqual(await read(), native, 'Disabling appearance retains the native states');
+      assert.deepEqual(await selectPresentation(), nativeSelects, 'Disabling appearance restores the original native dropdown arrows');
+    }
+    await setAppearance(true);
+    const session = await page.createCDPSession();
+    try {
+      await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+      assert.equal(await page.evaluate(() => matchMedia('(forced-colors: active)').matches), true);
+      for (const select of (await selectPresentation()).slice(0, 2)) {
+        assert.equal(select.appearance, 'auto', 'High-contrast mode restores the platform dropdown arrow');
+        assert.equal(select.image, 'none');
+      }
+    } finally {
+      await session.send('Emulation.setEmulatedMedia', { features: [] });
+      await session.detach();
     }
   } finally {
     await page.evaluate(() => document.getElementById('native-state-controls')!.remove());

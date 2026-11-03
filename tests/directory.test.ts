@@ -42,7 +42,7 @@ function nativeSnapshot(...people: NativeDirectoryFixture[]): NativeDirectoryFix
 }
 
 function entry(id: number, firstName: string, lastName: string, grade = ''): DirectoryEntry {
-  return { userId: id, firstName, lastName, nickname: '', displayName: `${firstName} ${lastName}`, grade, email: '', photoUrl: '', canViewProfile: true };
+  return { userId: id, firstName, lastName, nickname: '', displayName: `${firstName} ${lastName}`, grade, jobTitle: '', email: '', address: '', phones: [], photoUrl: '', canViewProfile: true };
 }
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -77,7 +77,7 @@ test('complete directory responses retain only display fields and resolve the na
   const snapshot = normalizeDirectorySnapshot([{ ...nativePerson(), AddressLine1: 'Private street', SpouseID: 42, Deceased: false }], origin, photoBase);
   assert.deepEqual(snapshot, { totalCount: 1, reportedTotalCount: 1, complete: true, entries: [{
     userId: 1, firstName: 'Ada', lastName: 'Example', nickname: 'Addie', displayName: 'Ada (Addie) Example',
-    grade: '11', email: 'ada@example.org', photoUrl: `${photoBase}large_user_example.jpg`, canViewProfile: true,
+    grade: '11', jobTitle: '', email: 'ada@example.org', address: '', phones: [], photoUrl: `${photoBase}large_user_example.jpg`, canViewProfile: true,
   }] });
   assert.deepEqual(normalizeDirectorySnapshot([], origin), { entries: [], totalCount: 0, reportedTotalCount: 0, complete: true });
 });
@@ -88,11 +88,12 @@ test('prepared data retains only published display fields and safe photo filenam
     nativePerson(2, { FirstName: 'Ada', LastName: 'Alpha', UserNameFormatted: 'Ada Alpha', PublishEmail: false }),
     nativePerson(3, { PublishUserProfile: false, LargeFileName: 'large_user_private.jpg' }),
     nativePerson(4, { LargeFileName: 'large_user_../../secret.jpg' }),
-  ).map((person) => ({ ...person, AddressLine1: 'Private street', PreferredAddressId: 999, SpouseID: 555, JobTitle: 'Private title' }));
+  ).map((person) => ({ ...person, AddressLine1: 'Private street', PreferredAddressId: 999, SpouseID: 555, JobTitle: person.PublishUserProfile ? 'Science teacher' : 'Private title' }));
   const prepared = prepareDirectorySnapshot(people, origin);
   assert.deepEqual(prepared.photoFiles, [{ userId: 1, fileName: 'large_user_example.jpg' }, { userId: 2, fileName: 'large_user_example.jpg' }]);
   assert.equal(prepared.snapshot.entries.every((person) => person.photoUrl === ''), true);
   assert.equal(prepared.snapshot.entries.find((person) => person.userId === 2)!.email, '');
+  assert.equal(prepared.snapshot.entries[0]!.jobTitle, 'Science teacher');
   assert.deepEqual(prepared.snapshot.entries.map((person) => person.userId), [1, 2, 3, 4]);
   assert.deepEqual(people.map((person) => person.UserID), [1, 2, 3, 4]);
   assert.equal(/Private street|PreferredAddressId|SpouseID|Private title|large_user_private/u.test(JSON.stringify(prepared)), false);
@@ -113,6 +114,57 @@ test('prepared snapshots retain already validated full URLs without requiring a 
   const prepared = prepareDirectorySnapshot([nativePerson(1, { LargeFileName: safePhoto })], origin);
   assert.deepEqual(prepared.photoFiles, []);
   assert.equal(finalizeDirectorySnapshot(prepared, origin).entries[0]!.photoUrl, safePhoto);
+});
+
+test('directory addresses retain only supported server-filtered fields and stay out of name search', () => {
+  const person = {
+    ...nativePerson(), HasRelationships: false,
+    AddressLine1: ' 123 Example Street ', AddressLine2: 'Apartment 4', AddressLine3: null,
+    City: 'Example City', State: 'CA', Zip: '90000', Country: 'United States',
+    PreferredAddressId: 123, PreferredAddressLat: 30, PreferredAddressLng: -100,
+  };
+  const snapshot = normalizeDirectorySnapshot([person], origin);
+  assert.equal(snapshot.entries[0]!.address, '123 Example Street\nApartment 4\nExample City, CA 90000\nUnited States');
+  assert.doesNotMatch(JSON.stringify(snapshot), /PreferredAddress|address_id/);
+  assert.equal(filterDirectoryEntries(snapshot.entries, { query: 'Example Street' }).length, 0);
+  assert.equal(normalizeDirectorySnapshot([{ ...person, AddressLine1: null, AddressLine2: undefined, Country: '' }], origin).entries[0]!.address,
+    'Example City, CA 90000');
+  for (const overrides of [
+    { PublishUserProfile: false }, { HasRelationships: true }, { HasRelationships: undefined }, { HasRelationships: 'false' },
+    { AddressLine1: '<script>private</script>' }, { AddressLine2: 'x'.repeat(301) }, { City: 'City\nHidden' }, { Zip: 90000 },
+  ]) {
+    assert.equal(normalizeDirectorySnapshot([{ ...person, ...overrides }], origin).entries[0]!.address, '', JSON.stringify(overrides));
+  }
+});
+
+test('directory phone links and titles use published fields without exposing them through name search', () => {
+  const person = {
+    ...nativePerson(), HasRelationships: false, JobTitle: '  Science  teacher ',
+    HomePhone: '(202) 555-0100', CellPhone: '+44 20 7946 0000',
+    OfficePhone: '202.555.0101 ext. 42', HomePhone2: '202-555-0102',
+  };
+  const snapshot = normalizeDirectorySnapshot([person], origin);
+  assert.equal(snapshot.entries[0]!.jobTitle, 'Science teacher');
+  assert.deepEqual(snapshot.entries[0]!.phones, [
+    { label: 'Home', number: '(202) 555-0100', href: 'tel:12025550100' },
+    { label: 'Mobile', number: '+44 20 7946 0000', href: 'tel:+442079460000' },
+    { label: 'Work', number: '202.555.0101 ext. 42', href: 'tel:12025550101;ext=42' },
+    { label: 'Home 2', number: '202-555-0102', href: 'tel:12025550102' },
+  ]);
+  for (const query of ['Science teacher', '2025550100', '7946']) {
+    assert.equal(filterDirectoryEntries(snapshot.entries, { query }).length, 0);
+  }
+  for (const overrides of [{ PublishUserProfile: false }, { HasRelationships: true }, { HasRelationships: undefined }]) {
+    assert.deepEqual(normalizeDirectorySnapshot([{ ...person, ...overrides }], origin).entries[0]!.phones, []);
+  }
+  for (const value of [null, undefined, 2025550100, '', 'not a phone', 'javascript:alert(1)', '2025550100?body=private', '2025550100\nHidden', '+'.repeat(101), '1234567890123456']) {
+    assert.deepEqual(normalizeDirectorySnapshot([{ ...nativePerson(), HasRelationships: false, HomePhone: value }], origin).entries[0]!.phones, [], String(value));
+  }
+  for (const value of [null, 123, '<b>Private title</b>', 'x'.repeat(301)]) {
+    assert.equal(normalizeDirectorySnapshot([{ ...person, JobTitle: value }], origin).entries[0]!.jobTitle, '');
+  }
+  assert.equal(normalizeDirectorySnapshot([{ ...person, PublishUserProfile: false }], origin).entries[0]!.jobTitle, '');
+  assert.equal(normalizeDirectorySnapshot([{ ...person, HasRelationships: true }], origin).entries[0]!.jobTitle, 'Science teacher');
 });
 
 test('early navigation intent accepts native same-document directories regardless of their configured labels', () => {
@@ -221,7 +273,7 @@ test('name-only profiles exclude unpublished contact, nickname, grade, and hidde
     FirstName: 'PrivateLegal', Nickname: 'PrivateNickname', UserNameFormatted: 'Preferred Example', PublishUserProfile: false,
   })], origin, photoBase);
   assert.deepEqual(snapshot.entries[0], {
-    userId: 1, firstName: '', lastName: 'Example', nickname: '', displayName: 'Preferred Example', grade: '', email: '', photoUrl: '', canViewProfile: false,
+    userId: 1, firstName: '', lastName: 'Example', nickname: '', displayName: 'Preferred Example', grade: '', jobTitle: '', email: '', address: '', phones: [], photoUrl: '', canViewProfile: false,
   });
   for (const query of ['PrivateLegal', 'PrivateNickname', 'ada@example.org', 'Private street']) {
     assert.equal(filterDirectoryEntries(snapshot.entries, { query }).length, 0);

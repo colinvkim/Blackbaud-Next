@@ -4,7 +4,9 @@ import { directoryEntryGrades, directoryGradeCounts, directoryPage, directoryThu
 import type { DirectoryEntry, DirectoryGradeCount, DirectorySnapshot, DirectoryTarget, fetchDirectorySnapshot } from '../blackbaud/directory.ts';
 import { DIRECTORY_NATIVE_ATTRIBUTE, DIRECTORY_UI_ATTRIBUTE } from '../blackbaud/directory-protocol.ts';
 import { markOwned, createButton } from '../shared/dom.ts';
+import { directoryLayout, rememberDirectoryLayout } from '../shared/directory-layout.ts';
 import { createIcon } from '../shared/icons.ts';
+import { createScope } from '../shared/scope.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Cleanup } from '../shared/types.ts';
@@ -72,6 +74,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   let readRevision = 0;
   let read: AbortController | null = null;
   let searching = false;
+  let rowsScope = createScope(signal);
   let searchTimer: number | undefined;
   let clearReadDeadline: Cleanup = () => {};
   const current = () => alive && isCurrent() && lease.root.isConnected && !lease.signal.aborted;
@@ -105,7 +108,30 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   const list = document.createElement('ul');
   list.className = 'bn-directory-list';
   list.id = `blackbaud-next-directory-list-${++directoryNumber}`;
+  list.tabIndex = -1;
+  list.setAttribute('aria-label', 'Directory results');
   search.setAttribute('aria-controls', list.id);
+  const views = document.createElement('div');
+  views.className = 'bn-directory-views';
+  views.setAttribute('role', 'group');
+  views.setAttribute('aria-label', 'Directory view');
+  const columnsView = createButton('Columns', 'columns-2');
+  const rowsView = createButton('Rows', 'rows-3');
+  for (const button of [columnsView, rowsView]) button.setAttribute('aria-controls', list.id);
+  views.append(columnsView, rowsView);
+  const selectView = (view: 'columns' | 'rows') => {
+    if (!current()) return;
+    rememberDirectoryLayout(list.ownerDocument, view);
+    list.dataset.view = view;
+    columnsView.setAttribute('aria-pressed', String(view === 'columns'));
+    rowsView.setAttribute('aria-pressed', String(view === 'rows'));
+  };
+  columnsView.addEventListener('click', () => selectView('columns'));
+  rowsView.addEventListener('click', () => selectView('rows'));
+  selectView(directoryLayout(list.ownerDocument));
+  const resultsBar = document.createElement('div');
+  resultsBar.className = 'bn-directory-results-bar';
+  resultsBar.append(count, views);
   const empty = document.createElement('div');
   empty.className = 'bn-directory-empty';
   const emptyMessage = document.createElement('p');
@@ -122,7 +148,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   feedback.className = 'bn-directory-feedback';
   feedback.setAttribute('role', 'status');
   feedback.setAttribute('aria-live', 'polite');
-  section.append(heading, count, limit, list, empty, pagination, feedback);
+  section.append(heading, resultsBar, limit, list, empty, pagination, feedback);
 
   let derived: {
     snapshot: DirectorySnapshot;
@@ -190,44 +216,121 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     }
     const person = document.createElement('div');
     person.className = 'bn-directory-person';
+    const identity = document.createElement('div');
+    identity.className = 'bn-directory-identity';
     const name = document.createElement(entry.canViewProfile ? 'a' : 'span');
     name.className = 'bn-directory-name';
     name.textContent = entry.displayName;
     if (name instanceof window.HTMLAnchorElement) name.setAttribute('href', `#profile/${entry.userId}/contactcard`);
-    person.append(name);
+    identity.append(name);
+    if (entry.canViewProfile && entry.jobTitle) {
+      const jobTitle = document.createElement('div');
+      jobTitle.className = 'bn-directory-job-title';
+      jobTitle.textContent = entry.jobTitle;
+      identity.append(jobTitle);
+    }
     const schoolGrades = directoryEntryGrades(entry);
     if (entry.canViewProfile && schoolGrades.length) {
       const schoolGrade = document.createElement('div');
       schoolGrade.className = 'bn-directory-grade';
       schoolGrade.textContent = `${schoolGrades.length > 1 ? 'Grades' : 'Grade'} ${schoolGrades.join(', ')}`;
-      person.append(schoolGrade);
+      identity.append(schoolGrade);
     }
+    person.append(identity);
     if (entry.canViewProfile && entry.email) {
       const email = document.createElement('div');
       email.className = 'bn-directory-email';
       const address = document.createElement('a');
       address.setAttribute('href', `mailto:${encodeURIComponent(entry.email).replace(/%40/gu, '@')}`);
       address.textContent = entry.email;
-      const copy = createButton('Copy', 'copy');
+      const copy = createButton('', 'copy');
+      copy.classList.add('bn-directory-copy');
       copy.setAttribute('aria-label', `Copy email for ${entry.displayName}`);
-      copy.addEventListener('click', () => {
+      copy.title = 'Copy email address';
+      const copyFeedback = document.createElement('span');
+      copyFeedback.className = 'bn-directory-copy-feedback';
+      copyFeedback.setAttribute('role', 'status');
+      copyFeedback.setAttribute('aria-atomic', 'true');
+      const copySignal = rowsScope.signal;
+      const copyCurrent = () => !copySignal.aborted && current() && renderRevision === revision && item.isConnected;
+      let resetTimer: number | undefined;
+      const resetCopy = () => {
+        copy.replaceChildren(createIcon('copy'));
+        copy.title = 'Copy email address';
+        copy.removeAttribute('data-copied');
+        copyFeedback.removeAttribute('data-error');
+        copyFeedback.textContent = '';
+      };
+      rowsScope.add(() => window.clearTimeout(resetTimer));
+      rowsScope.listen(copy, 'click', () => {
+        if (!copyCurrent() || copy.disabled) return;
+        window.clearTimeout(resetTimer);
+        resetCopy();
+        copy.disabled = true;
+        copy.setAttribute('aria-busy', 'true');
         void (async () => {
           try {
             await window.navigator.clipboard.writeText(entry.email);
-            if (current() && renderRevision === revision && item.isConnected) feedback.textContent = `Copied email for ${entry.displayName}.`;
+            if (!copyCurrent()) return;
+            copy.replaceChildren(createIcon('check'));
+            copy.title = 'Copied';
+            copy.setAttribute('data-copied', 'true');
+            copyFeedback.textContent = 'Email copied.';
+            resetTimer = window.setTimeout(() => { if (copyCurrent()) resetCopy(); }, 2000);
           } catch {
-            if (current() && renderRevision === revision && item.isConnected) feedback.textContent = 'Could not copy the email. You can select the address or open your email app.';
+            if (!copyCurrent()) return;
+            copyFeedback.setAttribute('data-error', '');
+            copyFeedback.textContent = 'Could not copy. Select the address to copy it manually.';
+          } finally {
+            if (copyCurrent()) {
+              copy.disabled = false;
+              copy.removeAttribute('aria-busy');
+            }
           }
         })();
       });
-      email.append(address, copy);
+      email.append(address, copy, copyFeedback);
       person.append(email);
+    }
+    if (entry.canViewProfile && (entry.address || entry.phones.length)) {
+      const details = document.createElement('details');
+      details.className = 'bn-directory-contact';
+      const label = entry.phones.length ? 'Contact details' : 'Address';
+      const summary = document.createElement('summary');
+      summary.setAttribute('aria-label', `${label} for ${entry.displayName}`);
+      summary.append(createIcon('chevron-right'), label);
+      details.append(summary);
+      if (entry.address) {
+        const address = document.createElement('address');
+        address.textContent = entry.address;
+        details.append(address);
+      }
+      if (entry.phones.length) {
+        const phones = document.createElement('dl');
+        phones.className = 'bn-directory-phones';
+        for (const phone of entry.phones) {
+          const group = document.createElement('div');
+          const label = document.createElement('dt');
+          label.textContent = phone.label;
+          const number = document.createElement('dd');
+          const link = document.createElement('a');
+          link.href = phone.href;
+          link.textContent = phone.number;
+          number.append(link);
+          group.append(label, number);
+          phones.append(group);
+        }
+        details.append(phones);
+      }
+      person.append(details);
     }
     item.append(avatar, person);
     return item;
   };
   const renderResults = () => {
     if (!current()) return;
+    rowsScope.dispose();
+    rowsScope = createScope(signal);
     const inviteSearch = serverSearch && !displayedQuery.trim() && snapshot.totalCount === 0 && (lease.searchOnly === true || snapshot.complete === false);
     list.hidden = searching;
     pagination.hidden = searching;
@@ -345,8 +448,17 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
     else { renderGrades(); renderResults(); }
     search.focus();
   });
-  previous.addEventListener('click', () => { page -= 1; renderResults(); });
-  next.addEventListener('click', () => { page += 1; renderResults(); });
+  const changePage = (direction: -1 | 1) => {
+    if (!current()) return;
+    page += direction;
+    renderResults();
+    list.focus({ preventScroll: true });
+    // The native page top includes its fixed-navigation spacer. Scrolling a
+    // result directly into view would instead put it underneath that header.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+  previous.addEventListener('click', () => changePage(-1));
+  next.addEventListener('click', () => changePage(1));
   const previousNativeAttribute = lease.root.getAttribute(DIRECTORY_NATIVE_ATTRIBUTE);
   const nativeAttributeValue = `enhanced-${directoryNumber}`;
   renderGrades();
@@ -356,6 +468,7 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   return () => {
     if (!alive) return;
     alive = false;
+    rowsScope.dispose();
     cancelPendingRead();
     section.remove();
     if (lease.root.getAttribute(DIRECTORY_NATIVE_ATTRIBUTE) === nativeAttributeValue) {

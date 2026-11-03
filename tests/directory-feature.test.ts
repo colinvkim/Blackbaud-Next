@@ -10,6 +10,7 @@ import { normalizeDirectorySnapshot } from '../src/blackbaud/directory.ts';
 import type { DirectorySnapshot } from '../src/blackbaud/directory.ts';
 import { createEnhancedDirectoryFeature, DIRECTORY_PAGE_SIZE, DIRECTORY_REQUEST_TIMEOUT, DIRECTORY_SEARCH_DELAY, enhancedDirectoryFeature } from '../src/features/directory.ts';
 import type { DirectoryFeatureDependencies } from '../src/features/directory.ts';
+import { createDirectoryLoadingView } from '../src/features/directory-loading-view.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import type { Settings } from '../src/shared/settings.ts';
 import type { Cleanup } from '../src/shared/types.ts';
@@ -23,6 +24,8 @@ const cleanups: Cleanup[] = [];
 function fixture(name = 'Student Directory') {
   dom = new JSDOM(`<nav id="topnav-containter"><button>Directories</button><a href="#directory/456">Faculty</a></nav><main id="site-main"><div id="native-directory"><div id="overview"><h1>Student Directory</h1><p>Native introduction</p></div><div class="directory-header"><button>Native directory selector</button></div><aside>Native filters</aside><div id="directory-results"><p>Original native people</p></div></div></main>`, { url: sourceUrl, pretendToBeVisual: true });
   const win = dom.window;
+  // Browser smoke tests own layout and scrolling; JSDOM does not implement it.
+  win.scrollTo = () => {};
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
   for (const [key, value] of Object.entries({ window: win, document: win.document, MutationObserver: win.MutationObserver, CustomEvent: win.CustomEvent })) {
     descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -120,11 +123,9 @@ function deferred<T>() {
 test('independent loading keeps one original action and choosing it cancels enhancement without a failure notice', async () => {
   const root = fixture();
   root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
-  const pending = document.createElement('div');
+  const pending = createDirectoryLoadingView(document);
   pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
-  const original = document.createElement('button');
-  original.textContent = 'Use original directory';
-  pending.append(original);
+  const original = pending.querySelector<HTMLButtonElement>('.bn-directory-original')!;
   root.append(pending);
   let readSignal: AbortSignal | undefined;
   let nativeCalls = 0;
@@ -139,7 +140,7 @@ test('independent loading keeps one original action and choosing it cancels enha
   const late = lease(root);
   ready.resolve(late.value);
   await flush();
-  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.equal(document.querySelector('.bn-directory:not(.bn-directory-loading)'), null);
   assert.equal(late.releases(), 1);
   assert.match(document.querySelector('.bn-directory-notice')?.textContent ?? '', /Using the original Blackbaud directory/);
   assert.doesNotMatch(document.querySelector('.bn-directory-notice')?.textContent ?? '', /could not load/);
@@ -149,11 +150,9 @@ test('a delayed independent shell keeps one original action and its fallback can
   const root = fixture();
   const shell = root.cloneNode(true) as HTMLElement;
   shell.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
-  const pending = document.createElement('div');
+  const pending = createDirectoryLoadingView(document);
   pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
-  const original = document.createElement('button');
-  original.textContent = 'Use original directory';
-  pending.append(original);
+  const original = pending.querySelector<HTMLButtonElement>('.bn-directory-original')!;
   shell.append(pending);
   let readSignal: AbortSignal | undefined;
   let nativeCalls = 0;
@@ -171,7 +170,7 @@ test('a delayed independent shell keeps one original action and its fallback can
   assert.ok(button('Use enhanced directory'));
   ready.reject(new Error('The native directory resumed.'));
   await flush();
-  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.equal(document.querySelector('.bn-directory:not(.bn-directory-loading)'), null);
   assert.match(document.querySelector('.bn-directory-notice')?.textContent ?? '', /Using the original Blackbaud directory/);
   assert.doesNotMatch(document.querySelector('.bn-directory-notice')?.textContent ?? '', /could not load/);
 });
@@ -179,11 +178,9 @@ test('a delayed independent shell keeps one original action and its fallback can
 test('independent loading listeners are detached when the route feature is disabled', async () => {
   const root = fixture();
   root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, '123');
-  const pending = document.createElement('div');
+  const pending = createDirectoryLoadingView(document);
   pending.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
-  const original = document.createElement('button');
-  original.textContent = 'Use original directory';
-  pending.append(original);
+  const original = pending.querySelector<HTMLButtonElement>('.bn-directory-original')!;
   root.append(pending);
   const ready = deferred<DirectoryLease>();
   const mounted = mount({ acquireDirectory: async () => ready.promise });
@@ -194,7 +191,7 @@ test('independent loading listeners are detached when the route feature is disab
   ready.resolve(late.value);
   await flush();
   assert.equal(late.releases(), 1);
-  assert.equal(document.querySelector('.bn-directory'), null);
+  assert.equal(document.querySelector('.bn-directory:not(.bn-directory-loading)'), null);
 });
 async function flush() { for (let index = 0; index < 8; index += 1) await Promise.resolve(); }
 
@@ -288,11 +285,56 @@ test('instant name and grade filtering, live grade counts, sorting, pagination a
   assert.equal(document.activeElement, search);
 });
 
+test('directory views preserve results, expanded contacts, filters and the page while remembering the tab choice', async () => {
+  const root = fixture();
+  const data = snapshot(DIRECTORY_PAGE_SIZE + 13);
+  data.entries[DIRECTORY_PAGE_SIZE]!.address = '123 Example Street';
+  let extraReads = 0;
+  const dependencies = {
+    acquireDirectory: async () => lease(root, data).value,
+    fetchDirectorySnapshot: async () => { extraReads += 1; return data; },
+  };
+  const first = mount(dependencies);
+  await flush();
+  assert.equal(button('Columns').getAttribute('aria-pressed'), 'true');
+  button('Next').click();
+  const count = document.querySelector('.bn-directory-count')!.textContent;
+  const firstRow = rows()[0]!;
+  const details = firstRow.querySelector('details')!;
+  details.open = true;
+  button('Rows').click();
+  assert.equal(button('Rows').getAttribute('aria-pressed'), 'true');
+  assert.equal(button('Columns').getAttribute('aria-pressed'), 'false');
+  assert.equal(rows()[0], firstRow);
+  assert.equal(details.open, true);
+  assert.equal(document.querySelector('.bn-directory-count')!.textContent, count);
+  assert.match(count!, /Showing 51–63 of 63/);
+  input('Student');
+  select('Grade', '10');
+  select('Sort by', 'first');
+  const filteredRow = rows()[0];
+  const filteredCount = document.querySelector('.bn-directory-count')!.textContent;
+  button('Columns').click();
+  assert.equal(rows()[0], filteredRow);
+  assert.equal(document.querySelector('.bn-directory-count')!.textContent, filteredCount);
+  assert.equal(field<HTMLInputElement>('Search people').value, 'Student');
+  assert.equal(field<HTMLSelectElement>('Grade').value, '10');
+  assert.equal(field<HTMLSelectElement>('Sort by').value, 'first');
+  assert.equal(extraReads, 0);
+  button('Rows').click();
+  first.controller.abort();
+  assert.equal(document.querySelector('.bn-directory'), null);
+  mount(dependencies);
+  await flush();
+  assert.equal(button('Rows').getAttribute('aria-pressed'), 'true');
+  button('Columns').click();
+});
+
 test('a faculty directory uses its native identity and generic people controls without an unpublished grade filter', async () => {
   const root = fixture('Faculty Directory');
   const data = normalizeDirectorySnapshot([
-    { UserID: 1, FirstName: 'Grace', LastName: 'Example', UserNameFormatted: 'Grace Example', PublishUserProfile: true, PublishEmail: true, EmailBad: false, Email: 'grace@example.test', GradeDisplay: '', TotalCount: 2 },
-    { UserID: 2, FirstName: 'Hidden', LastName: 'Person', UserNameFormatted: 'Published Name', PublishUserProfile: false, PublishEmail: true, GradeDisplay: '12', TotalCount: 0 },
+    { UserID: 1, FirstName: 'Grace', LastName: 'Example', UserNameFormatted: 'Grace Example', PublishUserProfile: true, PublishEmail: true, EmailBad: false, Email: 'grace@example.test', GradeDisplay: '', JobTitle: 'Science teacher', HasRelationships: false, OfficePhone: '(202) 555-0100', TotalCount: 2 },
+    { UserID: 2, FirstName: 'Hidden', LastName: 'Person', UserNameFormatted: 'Published Name', PublishUserProfile: false, PublishEmail: true, GradeDisplay: '12', JobTitle: 'Private title', HasRelationships: false, OfficePhone: '(202) 555-0199', TotalCount: 0 },
   ], sourceUrl);
   const currentLease = lease(root, data, 'Faculty Directory');
   mount({ acquireDirectory: async () => currentLease.value });
@@ -301,6 +343,15 @@ test('a faculty directory uses its native identity and generic people controls w
   assert.match(document.querySelector('#overview')!.textContent!, /Native introduction/);
   assert.equal(document.querySelector('.bn-directory')!.getAttribute('aria-label'), 'Faculty Directory');
   assert.equal(document.querySelector('.bn-directory h2')!.textContent, 'Browse people');
+  const publicRow = document.querySelector('[data-bn-directory-user="1"]')!;
+  assert.equal(publicRow.querySelector('.bn-directory-job-title')!.textContent, 'Science teacher');
+  assert.equal(publicRow.querySelector('summary')!.textContent, 'Contact details');
+  assert.equal(publicRow.querySelector('address'), null);
+  assert.equal(publicRow.querySelector('.bn-directory-phones dt')!.textContent, 'Work');
+  assert.equal(publicRow.querySelector('.bn-directory-phones a')!.getAttribute('href'), 'tel:12025550100');
+  assert.equal(publicRow.querySelector('.bn-directory-phones a')!.textContent, '(202) 555-0100');
+  const protectedRow = document.querySelector('[data-bn-directory-user="2"]')!;
+  assert.equal(protectedRow.querySelector('.bn-directory-job-title,details'), null);
   const grade = field<HTMLSelectElement>('Grade');
   assert.equal(grade.disabled, true);
   assert.equal(grade.parentElement!.hidden, true);
@@ -355,6 +406,10 @@ test('partial directories debounce names, abort earlier reads immediately, and k
   assert.equal(requests.length, 0);
   t.mock.timers.tick(1);
   assert.deepEqual(requests.map((request) => request.query), ['ab']);
+  button('Rows').click();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]!.signal.aborted, false);
+  assert.equal(document.querySelector<HTMLElement>('.bn-directory-list')!.hidden, true);
   input('abc');
   assert.equal(requests[0]!.signal.aborted, true);
   t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
@@ -616,11 +671,11 @@ test('server results update grade controls while preserving search and sort and 
   assert.deepEqual([...grade.options].map((item) => item.textContent), ['All grades', '7 (63)']);
 });
 
-test('only published profile fields create links, photos and email actions; failed photos fall back to initials', async () => {
+test('only published profile fields create links, photos, email actions and addresses; failed photos fall back to initials', async () => {
   const root = fixture();
   const data = normalizeDirectorySnapshot([
-    { UserID: 1, FirstName: 'Alex', LastName: 'Example', UserNameFormatted: 'Alex Example', PublishUserProfile: true, PublishEmail: true, EmailBad: false, Email: 'alex+school@example.test', GradeDisplay: '9', LargeFileName: 'large_user_alex.jpg', TotalCount: 2 },
-    { UserID: 2, FirstName: 'Private', LastName: 'Person', UserNameFormatted: 'Student Only', Nickname: 'Hidden Name', PublishUserProfile: false, PublishEmail: true, EmailBad: false, Email: 'unpublished@example.test', GradeDisplay: '12', LargeFileName: 'large_user_hidden.jpg', TotalCount: 2 },
+    { UserID: 1, FirstName: 'Alex', LastName: 'Example', UserNameFormatted: 'Alex Example', PublishUserProfile: true, PublishEmail: true, EmailBad: false, Email: 'alex+school@example.test', GradeDisplay: '9', LargeFileName: 'large_user_alex.jpg', HasRelationships: false, AddressLine1: '123 Example Street', City: 'Example City', State: 'CA', Zip: '90000', TotalCount: 2 },
+    { UserID: 2, FirstName: 'Private', LastName: 'Person', UserNameFormatted: 'Student Only', Nickname: 'Hidden Name', PublishUserProfile: false, PublishEmail: true, EmailBad: false, Email: 'unpublished@example.test', GradeDisplay: '12', LargeFileName: 'large_user_hidden.jpg', HasRelationships: false, AddressLine1: 'Private street', TotalCount: 2 },
   ], sourceUrl, photoBaseUrl);
   const currentLease = lease(root, data);
   mount({ acquireDirectory: async () => currentLease.value });
@@ -628,6 +683,9 @@ test('only published profile fields create links, photos and email actions; fail
   const publicRow = document.querySelector('[data-bn-directory-user="1"]')!;
   assert.equal(publicRow.querySelector('.bn-directory-name')!.getAttribute('href'), '#profile/1/contactcard');
   assert.equal(publicRow.querySelector('.bn-directory-email a')!.getAttribute('href'), 'mailto:alex%2Bschool@example.test');
+  assert.equal(publicRow.querySelector('address')!.textContent, '123 Example Street\nExample City, CA 90000');
+  assert.equal(publicRow.querySelector('summary')!.textContent, 'Address');
+  assert.equal(publicRow.querySelector('details')!.open, false);
   const fullPhoto = publicRow.querySelector<HTMLAnchorElement>('.bn-directory-avatar')!;
   assert.equal(fullPhoto.getAttribute('target'), '_blank');
   assert.equal(fullPhoto.getAttribute('rel'), 'noopener noreferrer');
@@ -644,6 +702,7 @@ test('only published profile fields create links, photos and email actions; fail
   const protectedRow = document.querySelector('[data-bn-directory-user="2"]')!;
   assert.equal(protectedRow.querySelectorAll('a,button,img').length, 0);
   assert.equal(protectedRow.querySelector('.bn-directory-grade'), null);
+  assert.equal(protectedRow.querySelector('details,address'), null);
   assert.equal(protectedRow.querySelector('.bn-directory-name')!.textContent, 'Student Only');
   assert.doesNotMatch(document.querySelector('.bn-directory')!.textContent!, /unpublished|Hidden Name|Private|Person/);
   input('Hidden Name');
@@ -659,7 +718,8 @@ test('photo preference retains thumbnails while removing the full-size action', 
   assert.equal(document.querySelector('a.bn-directory-avatar'), null);
 });
 
-test('email copy reports success and failure and ignores completion for replaced results', async () => {
+test('email copy gives local success and retryable errors, prevents duplicate writes, and ignores replaced results', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();
   const currentLease = lease(root);
   const pending = deferred<void>();
@@ -668,22 +728,69 @@ test('email copy reports success and failure and ignores completion for replaced
   Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: (value: string) => { copied.push(value); return copyResult; } } });
   mount({ acquireDirectory: async () => currentLease.value });
   await flush();
-  button('Copy').click();
+  const copy = document.querySelector<HTMLButtonElement>('.bn-directory-email button')!;
+  const status = () => copy.parentElement!.querySelector<HTMLElement>('[role="status"]')!;
+  assert.equal(copy.textContent, '', 'Copy is an icon button with an accessible name');
+  assert.equal(copy.getAttribute('aria-label'), 'Copy email for Student 001 Example');
+  assert.equal(copy.title, 'Copy email address');
+  copy.click();
   await flush();
   assert.deepEqual(copied, ['student@example.test']);
-  assert.match(feedback(), /Copied email/);
+  assert.equal(copy.title, 'Copied');
+  assert.equal(status().textContent, 'Email copied.');
+  assert.equal(status().hasAttribute('data-error'), false);
+  assert.equal(feedback(), '', 'Copy feedback stays with the email');
+  t.mock.timers.tick(2000);
+  assert.equal(copy.title, 'Copy email address');
+  assert.equal(status().textContent, '');
   copyResult = Promise.reject(new Error('Clipboard unavailable'));
-  button('Copy').click();
+  copy.click();
   await flush();
-  assert.match(feedback(), /Could not copy/);
+  assert.match(status().textContent!, /Could not copy/);
+  assert.equal(status().hasAttribute('data-error'), true);
+  assert.equal(copy.disabled, false, 'Failure keeps the button usable for retry');
+  copyResult = Promise.resolve();
+  copy.click();
+  await flush();
+  assert.equal(status().hasAttribute('data-error'), false);
+  assert.equal(copy.title, 'Copied');
   copyResult = pending.promise;
-  button('Copy').click();
+  copy.click();
+  copy.click();
+  assert.equal(copied.length, 4, 'A second click while copying does not write again');
+  assert.equal(copy.disabled, true);
+  button('Rows').click();
+  assert.equal(copy.disabled, true, 'Changing the layout preserves the active copy');
+  const detachedStatus = status();
   input('Student 002');
-  const before = feedback();
+  copy.click();
+  assert.equal(copied.length, 4, 'A removed button cannot start another clipboard write');
   pending.resolve();
   await flush();
-  assert.equal(feedback(), before);
+  assert.equal(detachedStatus.textContent, '', 'A late clipboard result does not update the replaced row');
+  assert.equal(document.querySelector('.bn-directory-copy-feedback'), null);
+  assert.equal(feedback(), '');
 });
+
+test('disabling the directory ignores a pending clipboard failure and removes copy actions', async () => {
+  const root = fixture();
+  const pending = deferred<void>();
+  let writes = 0;
+  Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: () => { writes += 1; return pending.promise; } } });
+  const mounted = mount({ acquireDirectory: async () => lease(root).value });
+  await flush();
+  const copy = document.querySelector<HTMLButtonElement>('.bn-directory-copy')!;
+  const status = document.querySelector('.bn-directory-copy-feedback')!;
+  copy.click();
+  mounted.controller.abort();
+  pending.reject(new Error('Clipboard denied after disablement'));
+  await flush();
+  copy.dispatchEvent(new window.MouseEvent('click'));
+  assert.equal(writes, 1, 'A stale control cannot write after cleanup');
+  assert.equal(status.textContent, '', 'The departed view receives no late error');
+  assert.equal(document.querySelector('.bn-directory'), null);
+});
+
 test('disabling restores the native page, cancels search, and re-enabling acquires a fresh lease', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const root = fixture();

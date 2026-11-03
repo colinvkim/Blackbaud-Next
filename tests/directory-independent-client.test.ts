@@ -10,6 +10,8 @@ import {
   INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT,
 } from '../src/blackbaud/directory-independent-protocol.ts';
 import { DIRECTORY_OWNER_ATTRIBUTE } from '../src/blackbaud/directory-protocol.ts';
+import { createDirectoryLoadingView } from '../src/features/directory-loading-view.ts';
+import { rememberDirectoryLayout } from '../src/shared/directory-layout.ts';
 import type { Cleanup } from '../src/shared/types.ts';
 
 const target = { directoryId: '123', origin: 'https://example.myschoolapp.com' };
@@ -49,7 +51,10 @@ function fixture(options: FixtureOptions = {}) {
   const root = page.document.createElement('section');
   root.setAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE, options.root === 'wrong-directory' ? '456' : target.directoryId);
   root.setAttribute(DIRECTORY_OWNER_ATTRIBUTE, options.root === 'wrong-owner' ? 'other-directory-owner-01' : leaseToken);
-  root.innerHTML = `<header id="overview"><h1>Loading directory</h1></header><p ${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}>Loading people…</p>`;
+  root.innerHTML = '<header id="overview"><h1>Loading directory</h1></header>';
+  const loading = createDirectoryLoadingView(page.document);
+  loading.setAttribute(INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, '');
+  root.append(loading);
   if (options.root === 'missing-header') root.querySelector('#overview')!.remove();
   if (options.root === 'wrong-attribute') root.removeAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE);
   if (options.root === 'nested') {
@@ -392,6 +397,12 @@ for (const root of ['missing', 'nested', 'missing-header', 'wrong-owner', 'wrong
 
 test('configuration and people transfer concurrently while the pending shell remains until both are ready', async (t) => {
   const frame = fixture();
+  rememberDirectoryLayout(document, 'rows');
+  frame.reply({ status: 'shell', directoryId: target.directoryId, token: 'unrelated-directory-owner-01' });
+  assert.equal(frame.root.querySelector<HTMLElement>('.bn-directory-skeleton-list')?.dataset.view, 'columns');
+  frame.reply({ status: 'shell', directoryId: target.directoryId, token: leaseToken });
+  assert.equal(frame.root.querySelector<HTMLElement>('.bn-directory-skeleton-list')?.dataset.view, 'rows', 'The MAIN shell uses the layout remembered by the isolated view');
+  assert.equal(frame.root.querySelector('.bn-directory-views button:last-child')?.getAttribute('aria-pressed'), 'true');
   const reads = deferredReads(t);
   let resolved = false;
   const pending = acquireIndependentDirectory(target, new AbortController().signal).then((lease) => { resolved = true; return lease; });

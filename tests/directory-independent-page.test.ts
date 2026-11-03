@@ -141,7 +141,7 @@ test('enabled startup mounts the lightweight shell through the native lifecycle 
   assert.equal(frame.root().getAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE), '438');
   assert.equal(frame.root().getAttribute(DIRECTORY_OWNER_ATTRIBUTE), frame.lease());
   assert.equal(frame.root().querySelector(':scope > #overview h1')?.textContent, 'Students');
-  assert.equal(frame.root().querySelector(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}] p`)?.textContent, 'Loading directory…');
+  assert.equal(frame.root().querySelector(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}] [role="status"]`)?.textContent, 'Loading people…');
   assert.deepEqual(frame.lifecycle, ['previous-page-dispose', 'remove', 'off', 'render-main-page']);
   assert.equal(frame.app._currentMainView.template, 'blackbaud-next/directory');
   assert.equal(frame.app._currentMainView.Page?.name, 'blackbaud-next-directory');
@@ -461,7 +461,7 @@ test('explicit original, release and pending fallback each resume the saved nati
       const receiver = { native: true };
       frame.navigate('438', ['438', null, 'retained'], receiver);
       const token = frame.lease();
-      if (action === 'button') frame.root().querySelector<HTMLButtonElement>('button')!.click();
+      if (action === 'button') frame.root().querySelector<HTMLButtonElement>('.bn-directory-original')!.click();
       else frame.send(action, token, '438');
       frame.send('original', token, '438');
       frame.send('release', token, '438');

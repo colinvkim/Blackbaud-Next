@@ -57,19 +57,20 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
         }
         if (!notice.isConnected) noticeHost()?.append(notice);
       };
-      const showNotice = (message: string, action: string, handler: () => void, icon: IconName = 'refresh') => {
+      const showNotice = (message: string, action: string, handler: () => void, icon: IconName = 'refresh', loading = false) => {
         clearNotice();
         if (!isCurrent()) return;
         const host = noticeHost();
         if (!host) return;
         noticeScope = createScope(signal);
         notice = markOwned(document.createElement('div'));
-        notice.className = 'bn-directory-notice';
+        notice.className = `bn-directory-notice${loading ? ' bn-directory-loading-notice' : ''}`;
         notice.setAttribute(DIRECTORY_UI_ATTRIBUTE, '');
         const text = document.createElement('p');
         text.setAttribute('role', 'status');
         text.textContent = message;
         const button = createButton(action, icon);
+        if (loading) button.classList.add('bn-directory-original');
         noticeScope.listen(button, 'click', handler);
         notice.append(text, button);
         host.append(notice);
@@ -118,7 +119,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           const button = element?.closest('button');
           const pendingUi = button?.closest(`[${INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE}]`);
           const root = pendingUi?.parentElement;
-          if (button && button.parentElement === pendingUi && root?.parentElement === main &&
+          if (button?.matches('.bn-directory-original') && root?.parentElement === main &&
             root?.getAttribute(INDEPENDENT_DIRECTORY_ATTRIBUTE) === target!.directoryId && isCurrent() &&
             acquisition === controller) returnToNative();
         };
@@ -130,7 +131,7 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           detachPendingNative = detachNativeAction;
         }
         if (!pending) {
-          showNotice('Preparing the enhanced directory…', 'Use original directory', returnToNative, 'arrow-left');
+          showNotice('Preparing the enhanced directory…', 'Use original directory', returnToNative, 'arrow-left', true);
         }
         let lease: DirectoryLease | null = null;
         try {

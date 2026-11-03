@@ -5,6 +5,12 @@ export interface DirectoryTarget {
   origin: string;
 }
 
+export interface DirectoryPhone {
+  label: string;
+  number: string;
+  href: string;
+}
+
 export interface DirectoryEntry {
   userId: number;
   firstName: string;
@@ -12,7 +18,10 @@ export interface DirectoryEntry {
   nickname: string;
   displayName: string;
   grade: string;
+  jobTitle: string;
   email: string;
+  address: string;
+  phones: readonly DirectoryPhone[];
   photoUrl: string;
   canViewProfile: boolean;
 }
@@ -128,6 +137,34 @@ function publishedEmail(value: unknown): string {
   return /^[^\s@<>,;:?&#%]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/iu.test(email) ? email : '';
 }
 
+function publishedAddress(item: Record<string, unknown>): string {
+  // The native directory uses these server-filtered fields for individual
+  // rows. Household relationships have a separate native disclosure flow.
+  if (item.PublishUserProfile !== true || item.HasRelationships !== false) return '';
+  const fields = ['AddressLine1', 'AddressLine2', 'AddressLine3', 'City', 'State', 'Zip', 'Country'];
+  const values = fields.map((key) => item[key]);
+  if (values.some((value) => value != null && (typeof value !== 'string' || (value.trim() !== '' && !plainText(value))))) return '';
+  const [first, second, third, city, state, zip, country] = values.map((value) => plainText(value));
+  const locality = [city, state].filter(Boolean).join(', ');
+  const place = [locality, zip].filter(Boolean).join(' ');
+  return [first, second, third, place, country].filter(Boolean).join('\n');
+}
+
+function publishedPhones(item: Record<string, unknown>): DirectoryPhone[] {
+  if (item.PublishUserProfile !== true || item.HasRelationships !== false) return [];
+  const fields = [['HomePhone', 'Home'], ['CellPhone', 'Mobile'], ['OfficePhone', 'Work'], ['HomePhone2', 'Home 2']] as const;
+  return fields.flatMap(([field, label]) => {
+    const number = plainText(item[field], 100);
+    const match = /^(\+?[\d(). -]+?)(?:\s*(?:ext(?:ension)?\.?|x)\s*(\d{1,10}))?$/iu.exec(number);
+    if (!match) return [];
+    const base = match[1]!.replace(/[(). -]/gu, '');
+    if (!/^\+?\d{3,15}$/u.test(base)) return [];
+    // Match Blackbaud's dialing prefix for ten-digit North American numbers.
+    const dial = /^\d{10}$/u.test(base) ? `1${base}` : base;
+    return [{ label, number, href: `tel:${dial}${match[2] ? `;ext=${match[2]}` : ''}` }];
+  });
+}
+
 export function directoryThumbnailUrl(photoUrl: string, baseUrl: string): string {
   const safe = publishedPhoto(photoUrl, baseUrl);
   if (!safe) return '';
@@ -168,7 +205,10 @@ function readDirectorySnapshot(payload: unknown, baseUrl: string, photoBaseUrl?:
       nickname: canViewProfile ? plainText(item.Nickname) : '',
       displayName,
       grade: canViewProfile ? gradeText(item.GradeDisplay) || gradeText(item.GradeNumericDisplay) || gradeText(item.Grade) : '',
+      jobTitle: canViewProfile ? plainText(item.JobTitle) : '',
       email: canViewProfile && item.PublishEmail && item.EmailBad === false ? publishedEmail(item.Email) : '',
+      address: publishedAddress(item),
+      phones: publishedPhones(item),
       photoUrl: canViewProfile ? publishedPhoto(item.LargeFileName, baseUrl, photoBaseUrl) : '',
       canViewProfile,
     });

@@ -1,8 +1,8 @@
 import {
   ArrowLeft, BookOpen, BookUser, Calendar, CalendarDays, ChartColumn, ChartNoAxesColumnIncreasing, Check,
-  ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock3, ContactRound, Copy,
+  ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock3, Columns2, ContactRound, Copy,
   ExternalLink, Eye, FileText, Folder, FolderOpen, GraduationCap, House, ListFilter, LogIn, Mail, Newspaper,
-  Palette, RefreshCw, Search, Settings, Users, UsersRound, Wrench, X,
+  Palette, RefreshCw, Rows3, Search, Settings, Users, UsersRound, Wrench, X,
 } from 'lucide';
 
 // Explicit imports keep the shipped set small. Render into the caller's
@@ -12,10 +12,10 @@ const icons = {
   'calendar-outline': Calendar,
   chart: ChartNoAxesColumnIncreasing, 'chart-column': ChartColumn, check: Check, 'chevron-down': ChevronDown,
   'chevron-left': ChevronLeft, 'chevron-right': ChevronRight,
-  'clipboard-check': ClipboardCheck, 'clipboard-list': ClipboardList, 'clock-3': Clock3, contact: ContactRound, copy: Copy,
+  'clipboard-check': ClipboardCheck, 'clipboard-list': ClipboardList, 'clock-3': Clock3, 'columns-2': Columns2, contact: ContactRound, copy: Copy,
   'external-link': ExternalLink, eye: Eye, 'file-text': FileText, folder: FolderOpen, 'folder-closed': Folder,
   'graduation-cap': GraduationCap, house: House, 'list-filter': ListFilter, 'log-in': LogIn,
-  mail: Mail, newspaper: Newspaper, palette: Palette, refresh: RefreshCw, search: Search,
+  mail: Mail, newspaper: Newspaper, palette: Palette, refresh: RefreshCw, 'rows-3': Rows3, search: Search,
   settings: Settings, users: Users, 'users-round': UsersRound, wrench: Wrench, x: X,
 };
 

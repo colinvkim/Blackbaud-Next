@@ -1,4 +1,5 @@
 import { THEME_TOKENS } from '../shared/theme.ts';
+import { selectStyles } from '../shared/select-styles.ts';
 import { isSchoolPage } from '../blackbaud/routes.ts';
 import { addStyle } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
@@ -98,6 +99,7 @@ ${ASSIGNMENT_RESPONSIVE_STYLES}
   html[data-blackbaud-next-appearance] #site-main[data-bn-page] :is(a, button, input, select, textarea):focus-visible { outline-color: Highlight; }
 }
 ${PROGRESS_STYLES}
+${selectStyles('html[data-blackbaud-next-appearance] #site-main[data-bn-page] select:is(.form-control, .input-sm)')}
 `;
 
 export const toolStylesFeature: Feature = {

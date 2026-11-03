@@ -6,6 +6,8 @@ import { DIRECTORY_OWNER_ATTRIBUTE } from './directory-protocol.ts';
 import { INDEPENDENT_DIRECTORY_ATTRIBUTE, INDEPENDENT_DIRECTORY_PENDING_ATTRIBUTE, INDEPENDENT_DIRECTORY_REQUEST_EVENT, INDEPENDENT_DIRECTORY_RESPONSE_EVENT } from './directory-independent-protocol.ts';
 import type { DirectoryLease } from './directory-bridge.ts';
 import type { Cleanup } from '../shared/types.ts';
+import { directoryLayout } from '../shared/directory-layout.ts';
+import { applyDirectoryLoadingLayout } from '../features/directory-loading-view.ts';
 
 interface Gate { token: string; ready: boolean; pending: boolean; }
 const gates = new WeakMap<Document, Gate>();
@@ -38,6 +40,11 @@ export function enableIndependentDirectory(signal: AbortSignal): Cleanup {
   gates.set(document, gate);
   const receive = (event: Event) => {
     const value = response(event);
+    if (value?.status === 'shell' && typeof value.directoryId === 'string' && /^[1-9]\d{0,14}$/.test(value.directoryId) &&
+      typeof value.token === 'string' && /^[a-z0-9-]{16,80}$/i.test(value.token)) {
+      const root = document.querySelector(`#site-main > [${INDEPENDENT_DIRECTORY_ATTRIBUTE}="${value.directoryId}"][${DIRECTORY_OWNER_ATTRIBUTE}="${value.token}"]`);
+      if (root) applyDirectoryLoadingLayout(root, directoryLayout(document));
+    }
     if (value?.token === gate.token && ['enabled', 'unsupported'].includes(String(value.status))) {
       if (value.status === 'enabled' && !gate.pending && !gate.ready) return;
       gate.ready = value.status === 'enabled';
