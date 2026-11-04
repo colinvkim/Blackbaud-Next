@@ -1,6 +1,7 @@
 import { ASSIGNMENT_ROW_SELECTOR, assignmentTitleLinkUrl, readAssignmentRow } from './assignment-list.ts';
 import { ASSIGNMENT_STATUS_REQUEST_EVENT, ASSIGNMENT_STATUS_RESPONSE_EVENT, assignmentStatusResponse, isAssignmentStatusPage } from './assignment-status-protocol.ts';
 import type { AssignmentStatusRequest } from './assignment-status-protocol.ts';
+import { assignmentIndexIdFromPath } from './routes.ts';
 
 export type ManualAssignmentStatus = 'todo' | 'in-progress' | 'completed' | 'overdue';
 export const COMPLETION_NATIVE_ATTRIBUTE = 'data-blackbaud-next-completion-native';
@@ -82,7 +83,7 @@ export function readAssignmentCompletionTarget(row: HTMLElement): AssignmentComp
   if (!isAssignmentCompletionPage(new URL(page.URL)) || !row.matches(ASSIGNMENT_ROW_SELECTOR)) return null;
   const parsed = readAssignmentRow(row);
   const details = parsed && assignmentTitleLinkUrl(parsed.link);
-  const assignmentIndexId = details?.pathname.match(/\/([1-9]\d*)\/?$/)?.[1];
+  const assignmentIndexId = details && assignmentIndexIdFromPath(details.pathname);
   if (!parsed || !assignmentIndexId || !Number.isSafeInteger(Number(assignmentIndexId))) return null;
   const components = [...row.querySelectorAll<HTMLElement>('app-assignment-status-display')].filter((element) => element.closest(ASSIGNMENT_ROW_SELECTOR) === row);
   if (components.length !== 1) return null;

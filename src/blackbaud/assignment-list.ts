@@ -1,4 +1,5 @@
 import { assignmentElementTitle } from './assignment-title.ts';
+import { assignmentIndexIdFromPath } from './routes.ts';
 
 export type AssignmentShortcut = 'all' | 'unfinished' | 'today' | 'tomorrow';
 
@@ -21,7 +22,7 @@ export function assignmentTitleLinkUrl(link: HTMLAnchorElement): URL | null {
   try {
     const url = new URL(link.getAttribute('href') ?? '', link.ownerDocument.baseURI);
     const page = new URL(link.ownerDocument.URL);
-    return url.origin === page.origin && /^\/lms-assignment\/assignment\/assignment-student-view\/[1-9]\d*\/?$/.test(url.pathname) ? url : null;
+    return url.origin === page.origin && assignmentIndexIdFromPath(url.pathname) !== null ? url : null;
   } catch {
     return null;
   }
@@ -81,16 +82,6 @@ export function readAssignmentRows(root: Document | Element): NativeAssignmentRo
     const row = readAssignmentRow(element);
     return row ? [row] : [];
   });
-}
-
-export function isNativeAssignmentVisible(element: HTMLElement): boolean {
-  if (!element.isConnected || element.closest('[hidden], [aria-hidden="true"]')) return false;
-  const view = element.ownerDocument.defaultView;
-  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
-    const style = view?.getComputedStyle(current);
-    if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') return false;
-  }
-  return true;
 }
 
 /** A calendar key in the student's local timezone, rather than an UTC date. */

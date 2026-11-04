@@ -91,8 +91,11 @@ test('only native same-origin assignment detail links provide row identities', (
   const dom = new JSDOM('<a></a>', { url: 'https://example.myschoolapp.com/lms-assignment/assignment-center/student' });
   const anchor = dom.window.document.querySelector('a')!;
   try {
-    anchor.href = '/lms-assignment/assignment/assignment-student-view/123';
-    assert.equal(assignmentTitleLinkUrl(anchor)?.pathname, '/lms-assignment/assignment/assignment-student-view/123');
+    for (const path of ['/lms-assignment/assignment/assignment-student-view/123', '/lms-assignment/assignment/assignment-student-view/123/',
+      `/lms-assignment/assignment/assignment-student-view/${'9'.repeat(100)}`]) {
+      anchor.href = `${path}?svcid=edu#native-state`;
+      assert.equal(assignmentTitleLinkUrl(anchor)?.pathname, path);
+    }
     anchor.href = 'https://other.example/lms-assignment/assignment/assignment-student-view/123';
     assert.equal(assignmentTitleLinkUrl(anchor), null);
     anchor.href = '/lms-assignment/assignment/assignment-student-view/123-other';
@@ -246,6 +249,27 @@ test('native hidden rows and collapsed groups stay hidden when shortcuts change'
   assert.ok(document.querySelector('#collapsed')!.hasAttribute('hidden'));
   assert.equal(document.querySelectorAll<HTMLElement>('.assignment-repeater-item')[1]!.style.display, 'none');
   assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
+});
+
+test('shortcuts filter disabled and inert rows but preserve native hiding on rows and ancestors', () => {
+  fixture(nativeToolbar() + group('native', row(123, '10/7/2026', 'Completed')));
+  mount();
+  const current = document.querySelector<HTMLElement>('.assignment-repeater-item')!;
+  const cases = [
+    ['hidden', '', false], ['aria-hidden', 'true', false], ['style', 'display:none', false],
+    ['style', 'visibility:hidden', false], ['style', 'visibility:collapse', false],
+    ['disabled', '', true], ['aria-disabled', 'true', true], ['inert', '', true],
+  ] as const;
+  for (const element of [current, document.querySelector('#native')!]) {
+    for (const [name, value, visible] of cases) {
+      element.setAttribute(name, value);
+      click('Unfinished');
+      assert.equal(current.getAttribute(hiddenAttribute), visible ? 'true' : null, `${element.tagName} ${name}="${value}"`);
+      click('All loaded');
+      assert.equal(element.getAttribute(name), value);
+      element.removeAttribute(name);
+    }
+  }
 });
 
 test('native status changes and local midnight refresh the chosen shortcut', async (t) => {

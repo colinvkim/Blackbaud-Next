@@ -1,5 +1,6 @@
 import { ASSIGNMENT_LINK_SELECTOR, assignmentTitleLinkUrl } from './assignment-list.ts';
 import { assignmentElementTitle, assignmentTitle } from './assignment-title.ts';
+import { assignmentIndexIdFromPath } from './routes.ts';
 import { isActionable } from '../shared/dom.ts';
 
 export interface AssignmentAttachment {
@@ -33,9 +34,9 @@ export function assignmentPreviewTarget(link: HTMLAnchorElement, base: string): 
   try {
     const url = assignmentTitleLinkUrl(link);
     if (!url || url.origin !== new URL(base).origin || url.protocol !== 'https:' || url.username || url.password) return null;
-    const route = url.pathname.match(/^\/lms-assignment\/assignment\/assignment-student-view\/([1-9]\d*)\/?$/);
-    if (!route?.[1] || !validIndexId(route[1])) return null;
-    return { assignmentIndexId: route[1], detailsUrl: url.href, title: assignmentElementTitle(link) || 'Assignment' };
+    const assignmentIndexId = assignmentIndexIdFromPath(url.pathname);
+    if (!assignmentIndexId || !validIndexId(assignmentIndexId)) return null;
+    return { assignmentIndexId, detailsUrl: url.href, title: assignmentElementTitle(link) || 'Assignment' };
   } catch { return null; }
 }
 
@@ -118,8 +119,7 @@ async function assignmentJson(path: string, signal: AbortSignal): Promise<unknow
 function validateAssignmentPreviewTarget(target: AssignmentPreviewTarget): void {
   const details = new URL(target.detailsUrl);
   if (!validIndexId(target.assignmentIndexId) || details.origin !== window.location.origin || details.protocol !== 'https:' || details.username || details.password ||
-    (details.pathname !== `/lms-assignment/assignment/assignment-student-view/${target.assignmentIndexId}` &&
-      details.pathname !== `/lms-assignment/assignment/assignment-student-view/${target.assignmentIndexId}/`)) {
+    assignmentIndexIdFromPath(details.pathname) !== target.assignmentIndexId) {
     throw new Error('The assignment identifier is invalid.');
   }
 }

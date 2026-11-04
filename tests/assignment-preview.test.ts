@@ -114,7 +114,12 @@ test('preview identifiers come only from same-origin native assignment detail li
   assert.deepEqual(assignmentPreviewTarget(link, win.location.href), {
     assignmentIndexId: '123', title: 'Example assignment', detailsUrl: 'https://example.myschoolapp.com/lms-assignment/assignment/assignment-student-view/123',
   });
-  for (const href of ['https://foreign.example/lms-assignment/assignment/assignment-student-view/123', '/lms-assignment/assignment/assignment-student-view/123other', '/lms-assignment/assignment/assignment-student-view/0', '#123', '/app/student#assignment/123']) {
+  link.setAttribute('href', '/lms-assignment/assignment/assignment-student-view/123/?svcid=edu#native-state');
+  assert.equal(assignmentPreviewTarget(link, win.location.href)?.assignmentIndexId, '123');
+  for (const href of ['https://foreign.example/lms-assignment/assignment/assignment-student-view/123', '/lms-assignment/assignment/assignment-student-view/123other',
+    '/lms-assignment/assignment/assignment-student-view/0', '/lms-assignment/assignment/assignment-student-view/01',
+    '/lms-assignment/assignment/assignment-student-view/123/extra', '/lms-assignment/assignment/assignment-student-view/9007199254740992',
+    '#123', '/app/student#assignment/123']) {
     link.setAttribute('href', href);
     assert.equal(assignmentPreviewTarget(link, win.location.href), null);
   }

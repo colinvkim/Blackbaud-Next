@@ -1,7 +1,7 @@
 import { isAssignmentCenter } from '../blackbaud/routes.ts';
-import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
+import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError } from '../blackbaud/assignment-loading.ts';
 import { ASSIGNMENT_DETAILS_SELECTOR, assignmentBreadcrumbLinks, assignmentCenterUrl, isAssignmentDetail, isNativeAssignmentBackLink } from '../blackbaud/assignment-navigation.ts';
-import { markOwned, createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
+import { markOwned, createButton, isElementVisible, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
 import type { Feature } from '../shared/types.ts';
 
 export const ASSIGNMENT_STALL_DELAY = 15_000;
@@ -83,7 +83,7 @@ export const assignmentRecoveryFeature: Feature = {
       let reload: HTMLButtonElement | null = null;
       let dismiss: HTMLButtonElement | null = null;
       const isStalled = () => !disposed && !signal.aborted && window.location.href === url.href &&
-        mask.matches(ASSIGNMENT_LOADING_MASK_SELECTOR) && isAssignmentLoadingVisible(mask) && !hasVisibleAssignmentError(mask.ownerDocument);
+        mask.matches(ASSIGNMENT_LOADING_MASK_SELECTOR) && isElementVisible(mask) && !hasVisibleAssignmentError(mask.ownerDocument);
       const readRemaining = () => {
         try { return recoveryRemaining(window.sessionStorage, url.pathname, Date.now()); } catch { return 0; }
       };

@@ -360,6 +360,17 @@ export function createButton(text: string, icon?: IconName): HTMLButtonElement {
   return button;
 }
 
+/** Visibility does not require an element to be enabled or interactive. */
+export function isElementVisible(element: Element): boolean {
+  if (!element.isConnected || element.closest('[hidden], [aria-hidden="true"]')) return false;
+  const view = element.ownerDocument.defaultView;
+  for (let current: Element | null = element; current; current = current.parentElement) {
+    const style = view?.getComputedStyle(current);
+    if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') return false;
+  }
+  return true;
+}
+
 export function isActionable(element: HTMLElement): boolean {
   if (!element.isConnected || element.closest('[disabled], [aria-disabled="true"], [hidden], [aria-hidden="true"], [inert]')) return false;
   const view = element.ownerDocument.defaultView;

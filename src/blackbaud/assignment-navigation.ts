@@ -1,10 +1,10 @@
-import { isLmsPage } from './routes.ts';
+import { assignmentIndexIdFromPath, isLmsPage } from './routes.ts';
 
 export const ASSIGNMENT_DETAILS_SELECTOR = 'app-assignment-view-details';
 
 export function isAssignmentDetail(url: URL): boolean {
   return isLmsPage(url) && !url.username && !url.password &&
-    /^\/lms-assignment\/assignment\/assignment-student-view\/[1-9]\d*\/?$/.test(url.pathname);
+    assignmentIndexIdFromPath(url.pathname) !== null;
 }
 
 export function assignmentCenterUrl(url: URL): string {

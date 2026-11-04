@@ -1,8 +1,8 @@
-import { ASSIGNMENT_ROW_SELECTOR, ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, ASSIGNMENT_TOOLBAR_SELECTOR, isNativeAssignmentVisible, matchesAssignmentShortcut, readAssignmentRow } from '../blackbaud/assignment-list.ts';
+import { ASSIGNMENT_ROW_SELECTOR, ASSIGNMENT_TOOLBAR_ELEMENT_SELECTOR, ASSIGNMENT_TOOLBAR_SELECTOR, matchesAssignmentShortcut, readAssignmentRow } from '../blackbaud/assignment-list.ts';
 import type { AssignmentShortcut, NativeAssignmentRow } from '../blackbaud/assignment-list.ts';
 import { isAssignmentCenter } from '../blackbaud/routes.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
-import { createButton, markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
+import { createButton, isElementVisible, markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
 import { createScope } from '../shared/scope.ts';
 import type { IconName } from '../shared/icons.ts';
 import type { Feature } from '../shared/types.ts';
@@ -50,7 +50,7 @@ export const assignmentShortcutsFeature: Feature = {
       if (signal.aborted) return;
       ownership.clear();
       if (!toolbars.size) return;
-      const rows = [...loaded].filter(([element]) => isNativeAssignmentVisible(element));
+      const rows = [...loaded].filter(([element]) => isElementVisible(element));
       const now = new Date();
       let count = 0;
       const groups = new Map<HTMLElement, boolean>();

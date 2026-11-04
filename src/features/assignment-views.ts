@@ -1,10 +1,10 @@
 import { ASSIGNMENT_VIEW_SELECTOR, assignmentViewControls, classicAssignmentContent, hasClassicAssignmentDialog, isClassicAssignmentCenter, isStudentAssignmentCenter } from '../blackbaud/assignment-views.ts';
 import { isAssignmentDetail } from '../blackbaud/assignment-navigation.ts';
-import { ASSIGNMENT_LOADING_MASK_SELECTOR, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
+import { ASSIGNMENT_LOADING_MASK_SELECTOR } from '../blackbaud/assignment-loading.ts';
 import { legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { getAssignmentCenterView, rememberAssignmentCenterView, type AssignmentCenterView } from '../shared/assignment-view-preference.ts';
-import { markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
+import { isElementVisible, markOwned, observeDom, observeElementContext, watchAddedElements } from '../shared/dom.ts';
 import { createIcon } from '../shared/icons.ts';
 import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
@@ -322,7 +322,7 @@ export const assignmentViewsFeature: Feature = {
         });
         const restore = () => {
           if (visit.signal.aborted || restored || !preference || !inputs.some(input => input.checked) ||
-            [...document.querySelectorAll(ASSIGNMENT_LOADING_MASK_SELECTOR)].some(isAssignmentLoadingVisible)) return;
+            [...document.querySelectorAll(ASSIGNMENT_LOADING_MASK_SELECTOR)].some(isElementVisible)) return;
           if (preference === 'classic') { restored = true; open(); return; }
           const input = inputs.find(input => input.value === (preference === 'calendar' ? '1' : '0'))!;
           if (input.disabled) return;

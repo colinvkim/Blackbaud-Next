@@ -58,3 +58,8 @@ export function legacyAssignmentCenterUrl(url: URL): string {
 export function isAssignmentCenter(url: URL): boolean {
   return isLmsPage(url) && url.pathname.includes('/lms-assignment/assignment-center');
 }
+
+/** Route syntax only; callers retain their URL and numeric ID validation. */
+export function assignmentIndexIdFromPath(pathname: string): string | null {
+  return pathname.match(/^\/lms-assignment\/assignment\/assignment-student-view\/([1-9]\d*)\/?$/)?.[1] ?? null;
+}

@@ -141,8 +141,15 @@ test('target parsing requires one same-origin assignment and an editable native 
   current.row.setAttribute('inert', '');
   assert.equal(readAssignmentCompletionTarget(current.row), null);
   current.row.removeAttribute('inert');
-  current.row.querySelector('a')!.setAttribute('href', 'https://foreign.example/lms-assignment/assignment/assignment-student-view/123');
-  assert.equal(readAssignmentCompletionTarget(current.row), null);
+  const link = current.row.querySelector('a')!;
+  link.setAttribute('href', '/lms-assignment/assignment/assignment-student-view/123/?svcid=edu#native-state');
+  assert.equal(readAssignmentCompletionTarget(current.row)?.assignmentIndexId, '123');
+  for (const href of ['https://foreign.example/lms-assignment/assignment/assignment-student-view/123',
+    '/lms-assignment/assignment/assignment-student-view/0', '/lms-assignment/assignment/assignment-student-view/01',
+    '/lms-assignment/assignment/assignment-student-view/123/extra', '/lms-assignment/assignment/assignment-student-view/9007199254740992']) {
+    link.setAttribute('href', href);
+    assert.equal(readAssignmentCompletionTarget(current.row), null, href);
+  }
 });
 
 test('owned hidden native components and shortcut-hidden rows stay usable without changing filters', () => {
