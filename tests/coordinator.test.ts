@@ -157,6 +157,61 @@ test('callback messaging owns pending settings writes independently of the sende
   dispose();
 });
 
+test('assignment view preferences survive worker restart and reads wait for accepted writes', async () => {
+  const state = fixture();
+  const source = `https://${schoolHostname}/lms-assignment/assignment-center/student?svcid=edu`;
+  const message = (request: unknown) => ({ channel, kind: 'assignment-view', request });
+  assert.equal(await state.handle(message({ action: 'get' }), source), null);
+  const original = state.api.storage.sync.set;
+  let release: () => void = () => {};
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  state.api.storage.sync.set = async patch => { await pending; await original(patch); };
+  const save = state.handle(message({ action: 'set', view: 'classic' }), source);
+  const read = state.handle(message({ action: 'get' }), source);
+  release();
+  await save;
+  assert.equal(await read, 'classic');
+  state.restart();
+  assert.equal(await state.handle(message({ action: 'get' }), source), 'classic');
+  await Promise.all(['calendar', 'list'].map(view => state.handle(message({ action: 'set', view }), source)));
+  assert.equal(await state.handle(message({ action: 'get' }), source), 'list');
+  assert.deepEqual(state.syncValues, { assignmentCenterView: 'list' }, 'Only the view preference is stored');
+  state.api.storage.sync.set = async () => { throw new Error('Storage unavailable'); };
+  await assert.rejects(state.handle(message({ action: 'set', view: 'classic' }), source));
+  state.api.storage.sync.set = original;
+  await state.handle(message({ action: 'set', view: 'calendar' }), source);
+  assert.equal(await state.handle(message({ action: 'get' }), source), 'calendar', 'A failed save does not block later choices');
+});
+
+test('assignment view messages accept only valid choices from the top-level student Assignment Center', async () => {
+  const state = fixture();
+  const source = `https://${schoolHostname}/lms-assignment/assignment-center/student/`;
+  const message = { channel, kind: 'assignment-view', request: { action: 'set', view: 'classic' } };
+  for (const identity of [state.sender(studentUrl), state.sender(googleUrl), { ...state.sender(source), frameId: 1 }, { ...state.sender(source), id: 'other-extension' }]) {
+    await assert.rejects(state.dispatch(message, identity));
+  }
+  for (const request of [{ action: 'set', view: 'other' }, { action: 'set', view: { enabled: false } }, { action: 'delete' }]) {
+    await assert.rejects(state.handle({ ...message, request }, source));
+  }
+  assert.deepEqual(state.syncValues, {});
+  await state.handle(message, source);
+  state.syncValues.assignmentCenterView = 'invalid';
+  assert.equal(await state.handle({ ...message, request: { action: 'get' } }, source), null);
+});
+
+test('the retired legacy toggle supplies Classic until a new view has been chosen', async () => {
+  const state = fixture();
+  const source = `https://${schoolHostname}/lms-assignment/assignment-center/student`;
+  const read = { channel, kind: 'assignment-view', request: { action: 'get' } };
+  state.syncValues.oldAssignmentCenter = false;
+  assert.equal(await state.handle(read, source), null);
+  state.syncValues.oldAssignmentCenter = true;
+  assert.equal(await state.handle(read, source), 'classic');
+  assert.deepEqual(state.syncValues, { oldAssignmentCenter: true }, 'Reading old preferences does not write a migration over a concurrent choice');
+  await state.handle({ ...read, request: { action: 'set', view: 'list' } }, source);
+  assert.equal(await state.handle(read, source), 'list');
+});
+
 test('the coordinator rejects foreign senders, arbitrary pages and provider mismatches', async () => {
   const state = fixture();
   const handle = createCoordinator(state.api);

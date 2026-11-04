@@ -1,5 +1,6 @@
 import { extensionApi } from './extension.ts';
 import type { Settings } from './settings.ts';
+import type { AssignmentCenterView } from './assignment-view-preference.ts';
 
 export type AuthStep = 'blackbaud' | 'google';
 export type AuthRequest =
@@ -11,6 +12,7 @@ export type AuthRequest =
 
 export type CoordinatorMessage =
   | { channel: 'blackbaud-next-coordinator-v1'; kind: 'settings'; update: Partial<Omit<Settings, 'schemaVersion'>> }
+  | { channel: 'blackbaud-next-coordinator-v1'; kind: 'assignment-view'; request: { action: 'get' } | { action: 'set'; view: AssignmentCenterView } }
   | { channel: 'blackbaud-next-coordinator-v1'; kind: 'auth'; request: AuthRequest };
 
 export async function requestCoordinator<T>(message: CoordinatorMessage): Promise<T> {

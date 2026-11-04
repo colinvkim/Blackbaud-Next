@@ -3,7 +3,8 @@ import { loginFeature } from '../features/login.ts';
 import { rosterToolsFeature } from '../features/roster-tools.ts';
 import { avatarDownloadFeature } from '../features/avatar-download.ts';
 import { faviconFeature } from '../features/favicon.ts';
-import { oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature } from '../features/assignment-center.ts';
+import { assignmentRecoveryFeature, assignmentBreadcrumbFeature } from '../features/assignment-center.ts';
+import { assignmentViewsFeature } from '../features/assignment-views.ts';
 import { assignmentShortcutsFeature } from '../features/assignment-shortcuts.ts';
 import { assignmentPreviewFeature } from '../features/assignment-preview.ts';
 import { assignmentCompletionFeature } from '../features/assignment-completion.ts';
@@ -33,7 +34,7 @@ function start() {
   void startExtension([directoryLoadingFeature]).catch((error) => console.warn('Blackbaud Next could not start directory loading.', error));
   void startExtension([
     loginFeature, faviconFeature,
-    oldAssignmentCenterFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature, rosterToolsFeature, avatarDownloadFeature,
+    assignmentViewsFeature, assignmentRecoveryFeature, assignmentBreadcrumbFeature, rosterToolsFeature, avatarDownloadFeature,
     assignmentShortcutsFeature, assignmentPreviewFeature, assignmentCompletionFeature, assignmentStatusLabelsFeature, helpfulTabTitlesFeature, resourceSearchFeature,
     classNavigationFeature, classSearchFeature,
     assignmentWarmupFeature,

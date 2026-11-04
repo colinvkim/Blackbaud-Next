@@ -3,7 +3,7 @@ import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { fullSizePhotoUrl, profilePhotoForOptions } from '../src/blackbaud/avatar.ts';
 import { ROSTER_CACHE_LIFETIME, createRosterReader, fetchRoster, normalizeRoster, rosterTargetFromPicker, rosterTargetFromRequest, rosterTargetFromUrl, rosterValues } from '../src/blackbaud/roster.ts';
-import { ASSIGNMENT_STALL_DELAY, assignmentRecoveryFeature, oldAssignmentCenterFeature, recoveryRemaining } from '../src/features/assignment-center.ts';
+import { ASSIGNMENT_STALL_DELAY, assignmentRecoveryFeature, recoveryRemaining } from '../src/features/assignment-center.ts';
 import { avatarDownloadFeature } from '../src/features/avatar-download.ts';
 import { faviconFeature } from '../src/features/favicon.ts';
 import { rosterToolsFeature } from '../src/features/roster-tools.ts';
@@ -571,17 +571,6 @@ test('roster discovery ignores unrelated pickers and activates a delayed native 
   await flush();
   assert.equal(win.document.querySelectorAll('.bn-tools').length, 1);
   assert.ok(win.document.querySelector('.bn-tools')!.closest('#academicclassmaincontainer'));
-});
-
-test('disabling legacy assignment navigation restores native hrefs', () => {
-  const win = fixture('<a id="assignment-center-btn" href="/lms-assignment/assignment-center">Assignments</a>');
-  const controller = new AbortController();
-  cleanups.push(() => controller.abort());
-  const cleanup = oldAssignmentCenterFeature.mount({ url: new URL(win.location.href), signal: controller.signal, settings: { ...DEFAULT_SETTINGS, oldAssignmentCenter: true } });
-  const link = win.document.querySelector<HTMLAnchorElement>('#assignment-center-btn')!;
-  assert.equal(link.href, 'https://example.myschoolapp.com/app/student?svcid=edu#studentmyday/assignment-center');
-  cleanup?.();
-  assert.equal(link.getAttribute('href'), '/lms-assignment/assignment-center');
 });
 
 test('assignment recovery offers a manual action after a sustained mask and removes it on success', async (t) => {

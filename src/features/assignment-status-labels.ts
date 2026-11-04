@@ -20,7 +20,7 @@ const staticStatusIcons = { Graded: 'clipboard-check', Missing: 'circle-alert', 
 export const assignmentStatusLabelsFeature: Feature = {
   id: 'assignment-status-labels',
   settingsKeys: [],
-  enabled: (settings) => settings.assignmentStatusLabels && !settings.oldAssignmentCenter,
+  enabled: (settings) => settings.assignmentStatusLabels,
   matches: isAssignmentCompletionPage,
   mount: ({ url, signal: parentSignal }) => {
     if (parentSignal.aborted) return;

@@ -15,7 +15,7 @@ interface Source {
 
 export const assignmentWarmupFeature: Feature = {
   id: 'assignment-center-preparation',
-  enabled: (settings) => settings.prepareAssignmentCenter && !settings.oldAssignmentCenter,
+  enabled: (settings) => settings.prepareAssignmentCenter,
   settingsKeys: [],
   matches: isAssignmentWarmupPage,
   mount: ({ url, signal: parentSignal }) => {

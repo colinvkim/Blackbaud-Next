@@ -3,7 +3,6 @@ import { afterEach, test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { ASSIGNMENT_DETAILS_SELECTOR, assignmentBreadcrumbLinks, assignmentCenterUrl, isAssignmentDetail, isNativeAssignmentBackLink } from '../src/blackbaud/assignment-navigation.ts';
 import { assignmentBreadcrumbFeature } from '../src/features/assignment-center.ts';
-import { legacyAssignmentCenterUrl } from '../src/blackbaud/routes.ts';
 import { FeatureController } from '../src/runtime/controller.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import type { Settings } from '../src/shared/settings.ts';
@@ -269,17 +268,17 @@ test('new native history-back href spelling replaces previous ownership for cond
   assert.equal(link.getAttribute('href'), latestHref);
 });
 
-test('legacy preference changes the direct breadcrumb destination and the master switch restores native state', async () => {
+test('unrelated view availability preserves the breadcrumb and the master switch restores native state', async () => {
   fixture();
   const controller = new FeatureController([assignmentBreadcrumbFeature]);
   cleanups.push(() => controller.dispose());
   const url = new URL(detailUrl);
-  const settings = { ...DEFAULT_SETTINGS, enabled: true, oldAssignmentCenter: false };
+  const settings = { ...DEFAULT_SETTINGS, enabled: true };
   const link = breadcrumb();
   controller.update(url, settings);
   assert.equal(link.href, centerUrl);
-  controller.update(url, { ...settings, oldAssignmentCenter: true });
-  assert.equal(link.href, legacyAssignmentCenterUrl(url));
+  controller.update(url, { ...settings, classicAssignmentCenter: false });
+  assert.equal(link.href, centerUrl);
   controller.update(url, settings);
   assert.equal(link.href, centerUrl);
   controller.update(url, { ...settings, enabled: false });

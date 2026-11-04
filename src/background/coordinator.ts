@@ -4,6 +4,8 @@ import type { AuthRequest } from '../shared/coordinator.ts';
 import type { ExtensionApi, MessageListener, MessageSender } from '../shared/extension.ts';
 import { FEATURE_DEFINITIONS, normalizeSettings, settingsPatch } from '../shared/settings.ts';
 import type { Settings } from '../shared/settings.ts';
+import { isAssignmentCenterView } from '../shared/assignment-view-preference.ts';
+import { isStudentAssignmentCenter } from '../blackbaud/assignment-views.ts';
 import { AuthStore } from './auth-store.ts';
 
 function authRequest(raw: unknown): AuthRequest {
@@ -31,6 +33,26 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
     if (sender.id !== api.runtime.id || !sender.url) throw new Error('Unrecognized extension sender.');
     if (!raw || typeof raw !== 'object' || !('channel' in raw) || raw.channel !== 'blackbaud-next-coordinator-v1' || !('kind' in raw)) throw new Error('Invalid coordinator message.');
     const url = new URL(sender.url);
+    if (raw.kind === 'assignment-view') {
+      const tabId = sender.tab?.id;
+      if (!isStudentAssignmentCenter(url) || sender.frameId !== 0 || typeof tabId !== 'number' || !Number.isSafeInteger(tabId) || tabId < 0 ||
+        !('request' in raw) || !raw.request || typeof raw.request !== 'object' || !('action' in raw.request)) throw new Error('Invalid assignment view sender or request.');
+      const request = raw.request;
+      if (request.action !== 'get' && (request.action !== 'set' || !('view' in request) || !isAssignmentCenterView(request.view))) throw new Error('Invalid assignment view choice.');
+      const action = request.action;
+      const view = 'view' in request ? request.view : null;
+      const operation = settingsWrites.then(async () => {
+        if (isAssignmentCenterView(view) && action === 'set') {
+          await api.storage.sync.set({ assignmentCenterView: view });
+          return undefined;
+        }
+        const { assignmentCenterView, oldAssignmentCenter } = await api.storage.sync.get(['assignmentCenterView', 'oldAssignmentCenter']);
+        if (isAssignmentCenterView(assignmentCenterView)) return assignmentCenterView;
+        return oldAssignmentCenter === true ? 'classic' : null;
+      });
+      settingsWrites = operation.then(() => {}, () => {});
+      return operation;
+    }
     if (raw.kind === 'settings') {
       if (![api.runtime.getURL('popup.html'), api.runtime.getURL('options.html')].includes(url.href) || !('update' in raw) || !raw.update || typeof raw.update !== 'object' || Array.isArray(raw.update)) throw new Error('Invalid settings sender or update.');
       if ('accountPreference' in raw.update && typeof raw.update.accountPreference !== 'string') throw new Error('Invalid account preference.');

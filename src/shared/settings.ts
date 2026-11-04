@@ -22,7 +22,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'enhancedDirectory', label: 'Directory redesign', description: 'Browse supported directories with search, sorting, contact details, and Columns or Rows views.', defaultValue: true },
   { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Add an option to open the original photo from a directory profile.', defaultValue: true },
   { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', defaultValue: true },
-  { key: 'oldAssignmentCenter', label: 'Legacy Assignment Center', description: 'Use the older Assignment Center when available. Modern status controls, preloading, and loading recovery will be inactive.', defaultValue: false },
+  { key: 'classicAssignmentCenter', label: 'Classic Assignment Center view', description: 'Add the native classic Assignment Center beside Calendar and List, and remember your last chosen view.', defaultValue: true },
 ] as const;
 
 export type FeatureKey = typeof FEATURE_DEFINITIONS[number]['key'];

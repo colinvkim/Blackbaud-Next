@@ -352,8 +352,8 @@ test('generic intent revalidates route changes before starting and settings chan
   const controller = new FeatureController([assignmentWarmupFeature]);
   cleanups.push(() => controller.dispose());
   const url = new URL(progressUrl);
-  const settings = { ...DEFAULT_SETTINGS, enabled: true, prepareAssignmentCenter: true, oldAssignmentCenter: false };
-  for (const changes of [{ prepareAssignmentCenter: false }, { oldAssignmentCenter: true }, { enabled: false }]) {
+  const settings = { ...DEFAULT_SETTINGS, enabled: true, prepareAssignmentCenter: true };
+  for (const changes of [{ prepareAssignmentCenter: false }, { enabled: false }]) {
     controller.update(url, settings);
     intent(link, 'focusin');
     t.mock.timers.tick(0);
@@ -540,16 +540,15 @@ test('hidden native schedule and cancellation before/after starting preserve nat
   assert.equal(document.querySelector('#assignment-center-btn')!.getAttribute('href'), nativeHref);
 });
 
-test('route changes are revalidated at timer start and legacy assignment mode disables preparation', (t) => {
+test('route changes are revalidated at timer start and the preparation preference is respected', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   fixture();
   mount();
   dom!.reconfigure({ url: sourceUrl.replace('/schedule', '/progress') });
   t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
   assert.equal(ownRule(), null);
-  assert.equal(assignmentWarmupFeature.enabled({ ...DEFAULT_SETTINGS, prepareAssignmentCenter: true, oldAssignmentCenter: false }), true);
-  assert.equal(assignmentWarmupFeature.enabled({ ...DEFAULT_SETTINGS, prepareAssignmentCenter: true, oldAssignmentCenter: true }), false);
-  assert.equal(assignmentWarmupFeature.enabled({ ...DEFAULT_SETTINGS, prepareAssignmentCenter: false, oldAssignmentCenter: false }), false);
+  assert.equal(assignmentWarmupFeature.enabled({ ...DEFAULT_SETTINGS, prepareAssignmentCenter: true }), true);
+  assert.equal(assignmentWarmupFeature.enabled({ ...DEFAULT_SETTINGS, prepareAssignmentCenter: false }), false);
 });
 
 test('native parent visibility toggles resume an unused visit and cancel an attempted preparation', async (t) => {
@@ -739,13 +738,13 @@ test('schedule descendant additions do not rescan the document or restart prepar
   assert.ok(ownRule());
 });
 
-test('controller preserves preparation across unrelated preferences and cancels it for feature, legacy, master and route changes', (t) => {
+test('controller preserves preparation across unrelated preferences and cancels it for feature, master and route changes', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   fixture();
   const controller = new FeatureController([assignmentWarmupFeature]);
   cleanups.push(() => controller.dispose());
   const url = new URL(sourceUrl);
-  let settings = { ...DEFAULT_SETTINGS, enabled: true, prepareAssignmentCenter: true, oldAssignmentCenter: false };
+  let settings = { ...DEFAULT_SETTINGS, enabled: true, prepareAssignmentCenter: true };
   const prepare = () => {
     controller.update(url, settings);
     t.mock.timers.tick(ASSIGNMENT_WARMUP_SETTLE_DELAY);
@@ -764,11 +763,10 @@ test('controller preserves preparation across unrelated preferences and cancels 
   settings = { ...settings, prepareAssignmentCenter: true };
   const second = prepare();
   assert.notEqual(second, first);
-  settings = { ...settings, oldAssignmentCenter: true };
+  settings = { ...settings, classicAssignmentCenter: false };
   controller.update(url, settings);
-  assert.equal(ownRule(), null);
-  assert.equal(second.isConnected, false);
-  settings = { ...settings, oldAssignmentCenter: false };
+  assert.equal(ownRule(), second, 'View availability does not interrupt preparation');
+  settings = { ...settings, classicAssignmentCenter: true };
   const third = prepare();
   settings = { ...settings, enabled: false };
   controller.update(url, settings);

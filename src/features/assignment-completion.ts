@@ -36,7 +36,7 @@ interface CompletionControl {
 export const assignmentCompletionFeature: Feature = {
   id: 'assignment-completion',
   settingsKeys: [],
-  enabled: (settings) => settings.assignmentCompletion && !settings.oldAssignmentCenter,
+  enabled: (settings) => settings.assignmentCompletion,
   matches: isAssignmentCompletionPage,
   mount: ({ url, signal: parentSignal }) => {
     if (parentSignal.aborted) return;

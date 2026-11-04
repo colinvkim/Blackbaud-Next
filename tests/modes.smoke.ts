@@ -48,7 +48,7 @@ test('three modes apply live, retain customized Full, and reset across popup and
     await advanced.focus('#advanced-settings > summary');
     await advanced.keyboard.press('Space');
     await advanced.waitForSelector('#rosterTools', { visible:true });
-    for (const selector of ['#pageAppearance', '#automaticLogin', '#assignmentPreviews', '#assignmentReturnLink', '#oldAssignmentCenter']) assert.ok(await advanced.$(selector));
+    for (const selector of ['#pageAppearance', '#automaticLogin', '#assignmentPreviews', '#assignmentReturnLink', '#classicAssignmentCenter']) assert.ok(await advanced.$(selector));
     await advanced.click('#rosterTools');
     await advanced.click('#assignmentPreviews');
     await advanced.type('#account-preference', 'student@school.test');
@@ -97,7 +97,7 @@ test('three modes apply live, retain customized Full, and reset across popup and
     await advanced.waitForFunction(() => (document.getElementById('assignmentPreviews') as HTMLInputElement).checked && (document.getElementById('rosterTools') as HTMLInputElement).checked, { polling:100 });
     await page.waitForSelector('.bn-preview-button');
     assert.equal(await advanced.$eval('#account-preference', input => (input as HTMLInputElement).value), 'student@school.test');
-    assert.equal(await advanced.$eval('#oldAssignmentCenter', input => (input as HTMLInputElement).checked), false);
+    assert.equal(await advanced.$eval('#classicAssignmentCenter', input => (input as HTMLInputElement).checked), true);
 
     for (const theme of ['light', 'dark']) {
       await popup.emulateMediaFeatures([{ name:'prefers-color-scheme', value:theme }]);

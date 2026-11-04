@@ -743,7 +743,6 @@ test('disabling removes an existing failure notice and its detached Retry cannot
 const disableCases: Array<{ name: string; settings(settings: Settings): Settings }> = [
   { name: 'feature switch', settings: (settings) => ({ ...settings, assignmentCompletion: false }) },
   { name: 'master switch', settings: (settings) => ({ ...settings, enabled: false }) },
-  { name: 'legacy assignment mode', settings: (settings) => ({ ...settings, oldAssignmentCenter: true }) },
 ];
 for (const disabled of disableCases) {
   test(`${disabled.name} restores native state and an already-sent save cannot recreate completion UI`, async (t) => {

@@ -24,6 +24,7 @@ test('old modes migrate while preserving individual switches and aliases', () =>
     assert.equal(settings.fixInvalidPages, false);
   }
   assert.equal(normalizeSettings({ rosterTools: true, copyRosterTools: false }).rosterTools, true);
+  assert.equal(normalizeSettings({ oldAssignmentCenter: true }).classicAssignmentCenter, true, 'The retired redirect preference does not disable the in-page view');
 });
 
 test('invalid storage data uses typed defaults and respects the new enabled flag', () => {
@@ -68,7 +69,7 @@ test('legacy settings retain Full by default and the lighter mode does not mutat
   assert.equal(effective.automaticLogin, true);
   assert.equal(effective.pageAppearance, false);
   assert.equal(effective.rosterTools, false);
-  assert.equal(effective.oldAssignmentCenter, false);
+  assert.equal(effective.classicAssignmentCenter, false);
   assert.equal(saved.assignmentPreviews, false);
   assert.equal(saved.automaticLogin, false);
   assert.equal(effectiveSettings({ ...saved, mode: 'full' }).assignmentPreviews, false);

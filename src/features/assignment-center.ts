@@ -1,4 +1,4 @@
-import { isAssignmentCenter, isLmsPage, legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
+import { isAssignmentCenter } from '../blackbaud/routes.ts';
 import { ASSIGNMENT_LOADING_MASK_SELECTOR, hasVisibleAssignmentError, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
 import { ASSIGNMENT_DETAILS_SELECTOR, assignmentBreadcrumbLinks, assignmentCenterUrl, isAssignmentDetail, isNativeAssignmentBackLink } from '../blackbaud/assignment-navigation.ts';
 import { markOwned, createButton, observeDom, watchAddedElements, watchElements } from '../shared/dom.ts';
@@ -10,11 +10,11 @@ const recoveryStorageKey = 'blackbaud-next-assignment-recovery';
 
 export const assignmentBreadcrumbFeature: Feature = {
   id: 'assignment-breadcrumb',
-  settingsKeys: ['oldAssignmentCenter'],
+  settingsKeys: [],
   enabled: (settings) => settings.assignmentReturnLink,
   matches: isAssignmentDetail,
-  mount: ({ url, settings, signal }) => {
-    const destination = settings.oldAssignmentCenter ? legacyAssignmentCenterUrl(url) : assignmentCenterUrl(url);
+  mount: ({ url, signal }) => {
+    const destination = assignmentCenterUrl(url);
     return watchAddedElements<HTMLElement>(ASSIGNMENT_DETAILS_SELECTOR, (root) => {
       const nativeHrefs = new Map<HTMLAnchorElement, string>();
       let disposed = false;
@@ -68,44 +68,10 @@ export function recoveryRemaining(storage: Pick<Storage, 'getItem'>, route: stri
   }
 }
 
-export const oldAssignmentCenterFeature: Feature = {
-  id: 'legacy-assignment-center',
-  settingsKeys: [],
-  enabled: (settings) => settings.oldAssignmentCenter,
-  matches: isLmsPage,
-  mount: ({ url, signal }) => {
-    const destination = legacyAssignmentCenterUrl(url);
-    if (isAssignmentCenter(url)) {
-      // This is an explicit compatibility preference. replace avoids a Back
-      // entry that would immediately redirect to the same destination again.
-      window.location.replace(destination);
-      return;
-    }
-    return watchElements<HTMLElement>('#assignment-center-btn', (button) => {
-      const originalHref = button.getAttribute('href');
-      button.setAttribute('href', destination);
-      const redirect = (event: MouseEvent) => {
-        if (signal.aborted || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        window.location.assign(destination);
-      };
-      button.addEventListener('click', redirect, true);
-      return () => {
-        button.removeEventListener('click', redirect, true);
-        if (button.getAttribute('href') === destination) {
-          if (originalHref === null) button.removeAttribute('href');
-          else button.setAttribute('href', originalHref);
-        }
-      };
-    }, signal);
-  },
-};
-
 export const assignmentRecoveryFeature: Feature = {
   id: 'assignment-loading-recovery',
   settingsKeys: [],
-  enabled: (settings) => settings.fixInvalidPages && !settings.oldAssignmentCenter,
+  enabled: (settings) => settings.fixInvalidPages,
   matches: isAssignmentCenter,
   mount: ({ url, signal }) => {
     let offered = false;
