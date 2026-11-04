@@ -140,9 +140,8 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
           if (!isCurrent() || controller.signal.aborted || revision !== acquisitionRevision || !lease.root.isConnected || lease.signal.aborted) { lease.release(); restoreNotice(); return; }
           acquisition = null;
           clearNotice();
-          const dispose = buildDirectoryView({ lease, target: target!, url, settings, signal, isCurrent, fetchSnapshot: dependencies.fetchDirectorySnapshot });
           const currentLease = lease;
-          const unexpectedRelease = () => {
+          const interrupted = () => {
             if (mounted?.lease !== currentLease) return;
             const revision = acquisitionRevision;
             clearMounted();
@@ -156,8 +155,9 @@ export function createEnhancedDirectoryFeature(overrides: Partial<DirectoryFeatu
               showNotice('The enhanced directory was interrupted. You can use the original directory or try again.', 'Try enhanced directory', () => { void prepare(true); }, 'users');
             });
           };
-          lease.signal.addEventListener('abort', unexpectedRelease, { once: true });
-          mounted = { lease, dispose, detach: () => currentLease.signal.removeEventListener('abort', unexpectedRelease) };
+          const dispose = buildDirectoryView({ lease, target: target!, url, settings, signal, isCurrent, onInterrupted: interrupted, fetchSnapshot: dependencies.fetchDirectorySnapshot });
+          lease.signal.addEventListener('abort', interrupted, { once: true });
+          mounted = { lease, dispose, detach: () => currentLease.signal.removeEventListener('abort', interrupted) };
           if (focusSearch) lease.root.querySelector<HTMLInputElement>('.bn-directory input[type="search"]')?.focus();
         } catch (error) {
           lease?.release();

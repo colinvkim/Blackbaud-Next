@@ -38,6 +38,10 @@ function nativeToolbar(): string {
   return '<div class="hide-for-print"><sky-toolbar><input aria-label="Search items"></sky-toolbar></div>';
 }
 
+function nativeDiscussion(): string {
+  return row(456, '10/1/2026', 'Completed', 'id="native-discussion"').replace('/lms-assignment/assignment/assignment-student-view/456', '/app/student?svcid=edu#discussiondetail/456/789/Assignments');
+}
+
 function mount() {
   const controller = new AbortController();
   const cleanup = assignmentShortcutsFeature.mount({ url: new URL(window.location.href), signal: controller.signal, settings: DEFAULT_SETTINGS });
@@ -150,6 +154,62 @@ test('shortcuts preserve native controls and restore filtered rows and groups on
   assert.equal(document.querySelector('.bn-assignment-shortcuts'), null);
   assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
   assert.ok(document.querySelector('sky-toolbar input[aria-label="Search items"]'));
+});
+
+for (const shortcut of ['Unfinished', 'Due today', 'Due tomorrow']) {
+  test(`${shortcut} keeps unrecognized native items visible while filtering recognized siblings`, t => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: new Date(2026, 9, 7) });
+    fixture(nativeToolbar() + group('mixed', row(123, '10/1/2026', 'Completed') + nativeDiscussion()) + group('done', row(789, '10/1/2026', 'Completed')));
+    const { controller } = mount();
+    const discussion = document.querySelector<HTMLElement>('#native-discussion')!;
+    const link = discussion.querySelector('a')!;
+    const href = link.getAttribute('href');
+    const nativeButton = discussion.querySelector('button')!;
+    let actions = 0;
+    nativeButton.addEventListener('click', () => { actions++; });
+    click(shortcut);
+    assert.equal(document.querySelector('#mixed')!.getAttribute(hiddenAttribute), null, 'A group containing an unrecognized native item stays visible');
+    assert.equal(document.querySelector('#mixed .assignment-repeater-item')!.getAttribute(hiddenAttribute), 'true');
+    assert.equal(document.querySelector('#done')!.getAttribute(hiddenAttribute), 'true', 'Fully understood groups still hide when no assignments match');
+    assert.equal(discussion.getAttribute(hiddenAttribute), null);
+    assert.equal(document.querySelector<HTMLElement>('.bn-tool-status')!.hidden, true, 'Visible native items do not produce a misleading no-matches message');
+    nativeButton.click();
+    assert.equal(actions, 1);
+    assert.equal(link.getAttribute('href'), href);
+    click('All loaded');
+    assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
+    click(shortcut);
+    controller.abort();
+    assert.equal(document.querySelectorAll(`[${hiddenAttribute}]`).length, 0);
+    assert.equal(discussion.querySelector('button'), nativeButton);
+  });
+}
+
+test('native-only items appearing, changing identity, moving or hiding update shortcut group visibility', async () => {
+  fixture(nativeToolbar() + group('first', row(123, '10/1/2026', 'Completed')) + group('second', row(789, '10/1/2026', 'Completed')));
+  mount();
+  click('Unfinished');
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), 'true');
+  document.querySelector('#first .sky-repeater-item-body')!.insertAdjacentHTML('beforeend', nativeDiscussion());
+  await flush();
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), null);
+  const discussion = document.querySelector<HTMLElement>('#native-discussion')!;
+  const link = discussion.querySelector('a')!;
+  const nativeHref = link.getAttribute('href')!;
+  link.setAttribute('href', '/lms-assignment/assignment/assignment-student-view/456');
+  await flush();
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), 'true', 'A now-recognized completed assignment is filtered normally');
+  link.setAttribute('href', nativeHref);
+  await flush();
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), null);
+  discussion.hidden = true;
+  await flush();
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), 'true', 'Natively hidden items do not keep an empty group visible');
+  discussion.hidden = false;
+  document.querySelector('#second .sky-repeater-item-body')!.append(discussion);
+  await flush();
+  assert.equal(document.querySelector('#first')!.getAttribute(hiddenAttribute), 'true');
+  assert.equal(document.querySelector('#second')!.getAttribute(hiddenAttribute), null);
 });
 
 test('late native controls, rows and toolbar replacements retain the active shortcut without duplicate UI', async () => {

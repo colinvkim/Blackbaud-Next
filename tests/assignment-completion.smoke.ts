@@ -244,5 +244,36 @@ test('compiled Chrome completion controls preserve native saves, failures, filte
     await page.waitForSelector(checkbox(123));
     assert.equal(await page.$eval(checkbox(123), (element) => (element as HTMLInputElement).checked), true);
     assert.equal(writes.length, count);
+
+    await page.evaluate(() => {
+      const group = document.createElement('sky-repeater-item');
+      group.id = 'fallback-group';
+      group.innerHTML = `<div class="sky-repeater-item-header">Mixed native group</div><div class="sky-repeater-item-body">
+        <sky-repeater-item class="assignment-repeater-item" id="fallback-known"><app-assignment-title-link><a href="/lms-assignment/assignment/assignment-student-view/999">Completed assignment</a></app-assignment-title-link><div class="assignment-center-middle-block"><div class="assignment-details sky-font-deemphasized">Due: 1/1/2000</div><app-assignment-status-display><button>Completed</button></app-assignment-status-display></div></sky-repeater-item>
+        <sky-repeater-item class="assignment-repeater-item" id="fallback-native"><app-assignment-title-link><a href="/app/student?svcid=edu#discussiondetail/456/789/Assignments">Native discussion</a></app-assignment-title-link><button id="fallback-native-action">Native action</button></sky-repeater-item>
+      </div>`;
+      group.querySelector('#fallback-native-action')!.addEventListener('click', () => {
+        document.body.dataset.fallbackActions = String(Number(document.body.dataset.fallbackActions || 0) + 1);
+      });
+      document.querySelector('main')!.append(group);
+    });
+    for (const label of ['Unfinished', 'Due today', 'Due tomorrow']) {
+      await page.evaluate(label => [...document.querySelectorAll<HTMLButtonElement>('.bn-assignment-shortcuts button')].find(button => button.textContent === label)!.click(), label);
+      await page.waitForFunction(() => document.querySelector('#fallback-group')?.checkVisibility() &&
+        !document.querySelector('#fallback-known')?.checkVisibility() && document.querySelector('#fallback-native-action')?.checkVisibility(), { polling:100 });
+      assert.equal(await page.$eval('#fallback-native a', anchor => anchor.getAttribute('href')), '/app/student?svcid=edu#discussiondetail/456/789/Assignments');
+      assert.equal(await page.$eval('.bn-tool-status', element => (element as HTMLElement).hidden), true);
+      await page.click('#fallback-native-action');
+    }
+    assert.equal(await page.$eval('body', element => (element as HTMLElement).dataset.fallbackActions), '3', 'Native actions remain reachable through each shortcut');
+    await page.$eval('#fallback-native', element => { (element as HTMLElement).hidden = true; });
+    await page.waitForFunction(() => !document.querySelector('#fallback-group')?.checkVisibility(), { polling:100 });
+    await page.$eval('#fallback-native', element => { (element as HTMLElement).hidden = false; });
+    await page.waitForFunction(() => document.querySelector('#fallback-native-action')?.checkVisibility(), { polling:100 });
+    assert.equal(writes.length, count, 'Filtering native-only items does not submit status changes');
+    await togglePreference(popup, page, 'mode-off');
+    await page.waitForFunction(() => !document.querySelector('.bn-assignment-shortcuts, [data-blackbaud-next-shortcut-hidden]'), { polling:100 });
+    assert.equal(await page.$eval('#fallback-known', element => element.checkVisibility()), true);
+    assert.equal(await page.$eval('#fallback-native-action', element => element.checkVisibility()), true);
   } finally { await browser?.close(); await rm(fixture, { recursive: true, force: true }); }
 });

@@ -22,6 +22,7 @@ interface DirectoryViewOptions {
   settings: Settings;
   signal: AbortSignal;
   isCurrent(): boolean;
+  onInterrupted(): void;
   fetchSnapshot: typeof fetchDirectorySnapshot;
 }
 
@@ -59,7 +60,7 @@ function initials(name: string): string {
 }
 
 export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
-  const { lease, target, url, settings, signal, isCurrent, fetchSnapshot } = options;
+  const { lease, target, url, settings, signal, isCurrent, onInterrupted, fetchSnapshot } = options;
   const header = lease.root.querySelector<HTMLElement>(':scope > #overview');
   if (!header) throw new Error('The native directory heading changed.');
   let alive = true;
@@ -466,9 +467,14 @@ export function buildDirectoryView(options: DirectoryViewOptions): Cleanup {
   renderResults();
   header.after(section);
   lease.root.setAttribute(DIRECTORY_NATIVE_ATTRIBUTE, nativeAttributeValue);
+  const integrity = new window.MutationObserver(() => {
+    if (alive && (header.parentElement !== lease.root || section.parentElement !== lease.root)) onInterrupted();
+  });
+  integrity.observe(lease.root, { childList: true });
   return () => {
     if (!alive) return;
     alive = false;
+    integrity.disconnect();
     rowsScope.dispose();
     cancelPendingRead();
     section.remove();

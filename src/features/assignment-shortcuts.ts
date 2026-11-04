@@ -50,15 +50,16 @@ export const assignmentShortcutsFeature: Feature = {
       if (signal.aborted) return;
       ownership.clear();
       if (!toolbars.size) return;
-      const rows = [...loaded.values()].filter((row): row is NativeAssignmentRow => row !== null && isNativeAssignmentVisible(row.element));
+      const rows = [...loaded].filter(([element]) => isNativeAssignmentVisible(element));
       const now = new Date();
       let count = 0;
       const groups = new Map<HTMLElement, boolean>();
-      for (const row of rows) {
-        const matches = matchesAssignmentShortcut(row, selected, now);
+      for (const [element, row] of rows) {
+        const matches = row === null || matchesAssignmentShortcut(row, selected, now);
         if (matches) count += 1;
-        else hide(row.element);
-        if (row.group) groups.set(row.group, (groups.get(row.group) ?? false) || matches);
+        else hide(element);
+        const group = row?.group ?? element.parentElement?.closest<HTMLElement>('sky-repeater-item');
+        if (group) groups.set(group, (groups.get(group) ?? false) || matches);
       }
       for (const [group, hasMatches] of groups) if (!hasMatches && selected !== 'all') hide(group);
       const message = count === 0 && rows.length > 0 ? 'No matches; native filters still apply.' : '';

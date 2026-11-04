@@ -82,7 +82,34 @@ const nativeFixture = `<!doctype html><html><head><meta charset="utf-8"><meta na
   </script>
   <script src="/hold-parser.js"></script></body></html>`;
 
-async function syntheticDirectory(browser: Browser, options: { holdMetadata?: boolean; holdPeople?: boolean; peopleCount?: number } = {}) {
+const nativeContainerFixture = `${nativeFixture.slice(0, nativeFixture.indexOf('<script>'))}<script>
+  const main = document.getElementById('site-main');
+  const markup = '<header id="overview"><h1>Native directory</h1></header><div id="directory-results"><button id="native-action">Native action</button></div>';
+  const root = document.createElement('section');
+  root.id = 'native-directory';
+  root.innerHTML = markup;
+  main.append(root);
+  const state = window.fixtureState = { started:true, renders:0, actions:0 };
+  function paintDirectoryResults() {
+    state.renders++;
+    root.querySelector('#directory-results').innerHTML = '<button id="native-action">Native action</button>';
+  }
+  const view = {
+    el:root, template:'directory/directory.template.html',
+    model:{ get(key) { return ({ DirectoryId:438, DirectoryName:'Students', DefaultResults:true })[key]; } },
+    results:{ length:2, toJSON:()=>[] }, facets:{ toJSON:()=>[] },
+    getResults() {}, getFacetValues() {}, renderResults:paintDirectoryResults,
+  };
+  window.p3 = { _currentMainView:view, _modules:{ 'shared/directory':{ Data:{ directoryId:438 } } } };
+  root.addEventListener('click', event => { if (event.target.id === 'native-action') state.actions++; });
+  document.getElementById('progress').addEventListener('click', () => {
+    location.hash = '#studentmyday/progress';
+    window.p3._currentMainView = false;
+    main.textContent = 'Original native Progress';
+  });
+</script><script src="/hold-parser.js"></script></body></html>`;
+
+async function syntheticDirectory(browser: Browser, options: { holdMetadata?: boolean; holdPeople?: boolean; peopleCount?: number; nativeContainer?: boolean } = {}) {
   const page = await browser.newPage();
   page.setDefaultTimeout(3_000);
   let receiveParser!: (request: HTTPRequest) => void;
@@ -112,7 +139,7 @@ async function syntheticDirectory(browser: Browser, options: { holdMetadata?: bo
         ]
         : {};
     const respond = () => request.respond(url.pathname === '/app/student'
-      ? { status: 200, contentType: 'text/html', body: nativeFixture }
+      ? { status: 200, contentType: 'text/html', body: options.nativeContainer ? nativeContainerFixture : nativeFixture }
       : { status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     if (url.pathname === '/api/directory/directoryresultsget' && options.holdPeople) receivePeople(respond);
     else void respond();
@@ -394,6 +421,40 @@ test('compiled Chrome catches the initial directory route before DOM readiness a
         await frame.page.click('#progress');
         await frame.page.waitForSelector('#native-progress');
         assert.equal(await frame.page.$('.bn-directory'), null);
+      } finally { await frame.page.close(); }
+    });
+
+    await t.test('same-root native rerenders recover once and then reveal working native results', async () => {
+      const frame = await syntheticDirectory(activeBrowser, { nativeContainer:true });
+      try {
+        await frame.parser.respond({ status:200, contentType:'text/javascript', body:'' });
+        assert.equal(await frame.navigation, null);
+        await frame.page.waitForSelector('.bn-directory-row', { timeout:10_000 });
+        assert.equal(frame.reads.length, 1, 'The native-container path needs only its people read');
+        const originalRoot = await frame.page.$('#native-directory');
+        assert.ok(originalRoot);
+        const rerender = () => frame.page.evaluate(() => {
+          const view = Reflect.get(window, 'p3')._currentMainView;
+          view.el.innerHTML = '<header id="overview"><h1>Refreshed native directory</h1></header><div id="directory-results"></div>';
+          view.renderResults();
+        });
+        await rerender();
+        await frame.page.waitForSelector('.bn-directory-row');
+        assert.equal(frame.reads.length, 2, 'Removing results from the same root triggers one fresh enhancement');
+        assert.equal(await originalRoot.evaluate(element => element.isConnected && Reflect.get(window, 'p3')._currentMainView.el === element), true);
+        await rerender();
+        await frame.page.waitForSelector('.bn-directory-notice');
+        assert.equal(frame.reads.length, 2, 'Repeated rerenders do not create a retry loop');
+        assert.equal(await frame.page.$eval('#directory-results', element => element.checkVisibility()), true, 'Native results are visible after the retry is used');
+        await frame.page.click('#native-action');
+        assert.equal(await frame.page.evaluate(() => Reflect.get(window, 'fixtureState').actions), 1, 'Native actions remain functional');
+        await frame.page.click('.bn-directory-notice button');
+        await frame.page.waitForSelector('.bn-directory-row');
+        assert.equal(frame.reads.length, 3, 'Manual retry still restores the enhanced directory');
+        await frame.page.click('#progress');
+        await frame.page.waitForFunction(() => document.querySelector('#site-main')?.textContent === 'Original native Progress');
+        assert.equal(await frame.page.$('.bn-directory'), null);
+        await originalRoot.dispose();
       } finally { await frame.page.close(); }
     });
 

@@ -1040,39 +1040,44 @@ test('global native directory navigation releases the enhanced view without repl
   assert.equal(document.querySelector('.bn-directory'), null);
 });
 
-test('an interruption retries once, aborts old search, and leaves a second interruption to manual recovery', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const root = fixture();
-  const currentLease = lease(root, partialSnapshot());
-  const recoveredLease = lease(root, snapshot(5));
-  let acquisitions = 0;
-  let searchSignal: AbortSignal | undefined;
-  const pending = deferred<DirectorySnapshot>();
-  mount({ acquireDirectory: async () => ++acquisitions === 1 ? currentLease.value : recoveredLease.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; } });
-  await flush();
-  input('pending name');
-  t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
-  currentLease.controller.abort();
-  // Model the page adapter's synchronous teardown after it emits released.
-  currentLease.value.release();
-  await flush();
-  assert.equal(searchSignal?.aborted, true);
-  assert.equal(currentLease.releases(), 1);
-  assert.equal(acquisitions, 2);
-  assert.equal(rows().length, 5);
-  assert.equal(document.querySelector('.bn-directory-notice'), null);
-  pending.resolve(snapshot(10));
-  await flush();
-  assert.equal(rows().length, 5, 'An old search cannot replace the recovered view');
-  recoveredLease.controller.abort();
-  recoveredLease.value.release();
-  await flush();
-  assert.equal(acquisitions, 2, 'A second interruption does not create a retry loop');
-  assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
-  assert.equal(document.querySelector('.bn-directory'), null);
-  assert.ok(button('Try enhanced directory'));
-  assert.equal(document.querySelector('.bn-directory-notice p')!.textContent, 'The enhanced directory was interrupted. You can use the original directory or try again.');
-});
+for (const reason of ['lease release', 'native rerender', 'section reparent', 'heading replacement']) {
+  test(`an interruption (${reason}) retries once, aborts old search, and leaves a second interruption to manual recovery`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const root = fixture();
+    const currentLease = lease(root, partialSnapshot());
+    const recoveredLease = lease(root, snapshot(5));
+    let acquisitions = 0;
+    let searchSignal: AbortSignal | undefined;
+    const pending = deferred<DirectorySnapshot>();
+    const interrupt = (current: ReturnType<typeof lease>) => {
+      if (reason === 'lease release') { current.controller.abort(); current.value.release(); }
+      if (reason === 'native rerender') root.innerHTML = '<div id="overview"><h1>Refreshed directory</h1></div><div id="directory-results">Native people</div>';
+      if (reason === 'section reparent') document.body.append(root.querySelector('.bn-directory')!);
+      if (reason === 'heading replacement') root.querySelector('#overview')!.replaceWith(root.querySelector('#overview')!.cloneNode(true));
+    };
+    mount({ acquireDirectory: async () => ++acquisitions === 1 ? currentLease.value : recoveredLease.value, fetchDirectorySnapshot: async (_target, signal) => { searchSignal = signal; return pending.promise; } });
+    await flush();
+    input('pending name');
+    t.mock.timers.tick(DIRECTORY_SEARCH_DELAY);
+    interrupt(currentLease);
+    await flush();
+    assert.equal(searchSignal?.aborted, true);
+    assert.equal(currentLease.releases(), 1);
+    assert.equal(acquisitions, 2);
+    assert.equal(rows().length, 5);
+    assert.equal(document.querySelector('.bn-directory-notice'), null);
+    pending.resolve(snapshot(10));
+    await flush();
+    assert.equal(rows().length, 5, 'An old search cannot replace the recovered view');
+    interrupt(recoveredLease);
+    await flush();
+    assert.equal(acquisitions, 2, 'A second interruption does not create a retry loop');
+    assert.equal(root.hasAttribute(DIRECTORY_NATIVE_ATTRIBUTE), false);
+    assert.equal(document.querySelector('.bn-directory'), null);
+    assert.ok(button('Try enhanced directory'));
+    assert.equal(document.querySelector('.bn-directory-notice p')!.textContent, 'The enhanced directory was interrupted. You can use the original directory or try again.');
+  });
+}
 
 test('a failed automatic retry keeps native fallback and permits an explicit retry', async () => {
   const root = fixture();
@@ -1097,14 +1102,18 @@ test('a failed automatic retry keeps native fallback and permits an explicit ret
   assert.equal(rows().length, 4);
 });
 
-for (const departure of ['disable', 'navigate']) {
-  test(`a queued automatic retry is cancelled on ${departure}`, async () => {
+for (const departure of ['disable', 'navigate']) for (const reason of ['lease release', 'native rerender']) {
+  test(`a queued automatic retry after ${reason} is cancelled on ${departure}`, async () => {
     const root = fixture();
     const initial = lease(root);
     let acquisitions = 0;
     const mounted = mount({ acquireDirectory: async () => { acquisitions += 1; return initial.value; } });
     await flush();
-    initial.controller.abort();
+    if (reason === 'lease release') initial.controller.abort();
+    else {
+      root.replaceChildren();
+      await Promise.resolve();
+    }
     if (departure === 'disable') mounted.controller.abort();
     else window.history.replaceState({}, '', '#studentmyday/progress');
     await flush();
