@@ -1,4 +1,5 @@
 import { isLmsPage, isStudentPortal } from './routes.ts';
+import { isActionable } from '../shared/dom.ts';
 
 export const ASSIGNMENT_VIEW_SELECTOR = 'sky-radio-group[name="viewMode"]';
 
@@ -21,6 +22,11 @@ export function assignmentViewControls(group: HTMLElement) {
 
 export function isClassicAssignmentCenter(url: URL): boolean {
   return isStudentPortal(url) && url.hash === '#studentmyday/assignment-center';
+}
+
+export function hasClassicAssignmentDialog(page: Document): boolean {
+  const modal = page.querySelector<HTMLElement>('#site-modal.modal');
+  return modal !== null && isActionable(modal);
 }
 
 export function classicAssignmentContent(page: Document): HTMLElement | null {

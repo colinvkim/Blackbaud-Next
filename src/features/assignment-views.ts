@@ -1,4 +1,4 @@
-import { ASSIGNMENT_VIEW_SELECTOR, assignmentViewControls, classicAssignmentContent, isClassicAssignmentCenter, isStudentAssignmentCenter } from '../blackbaud/assignment-views.ts';
+import { ASSIGNMENT_VIEW_SELECTOR, assignmentViewControls, classicAssignmentContent, hasClassicAssignmentDialog, isClassicAssignmentCenter, isStudentAssignmentCenter } from '../blackbaud/assignment-views.ts';
 import { isAssignmentDetail } from '../blackbaud/assignment-navigation.ts';
 import { ASSIGNMENT_LOADING_MASK_SELECTOR, isAssignmentLoadingVisible } from '../blackbaud/assignment-loading.ts';
 import { legacyAssignmentCenterUrl } from '../blackbaud/routes.ts';
@@ -91,6 +91,16 @@ export const assignmentViewsFeature: Feature = {
         let refreshError: HTMLElement | undefined;
         let previous = inputs.find(input => input.checked) ?? inputs[0]!;
         let frameScope: ReturnType<typeof createScope> | undefined;
+        let dialogOpen = () => false;
+        const updateViewAvailability = () => {
+          const blocked = active && dialogOpen();
+          for (const input of inputs) {
+            if (blocked) ownership.mark(input, 'disabled', '');
+            else ownership.restore(input, 'disabled');
+          }
+          if (blocked) ownership.mark(fieldset, 'title', 'Finish or close the Classic dialog before changing views.');
+          else ownership.restore(fieldset, 'title');
+        };
         const clearRefreshError = () => { refreshError?.remove(); refreshError = undefined; };
         const clearRefresh = () => {
           panel.replaceChildren();
@@ -180,6 +190,12 @@ export const assignmentViewsFeature: Feature = {
             } catch { fail(); return; }
             if (!page) { fail(); return; }
             const current = page;
+            dialogOpen = () => hasClassicAssignmentDialog(current);
+            const stopDialogs = watchAddedElements<HTMLElement>('#site-modal', modal => {
+              const stop = observeElementContext(modal, updateViewAvailability);
+              updateViewAvailability();
+              return () => { stop(); updateViewAvailability(); };
+            }, frameVisit.signal, current, ['id']);
             const sizeObserver = new ResizeObserver(queueResize);
             sizeObserver.observe(current.body);
             resize = () => {
@@ -252,7 +268,7 @@ export const assignmentViewsFeature: Feature = {
               window.location.assign(target.href);
             };
             current.addEventListener('click', navigate, true);
-            stopDocument = () => { resize = () => {}; sizeObserver.disconnect(); observer.disconnect(); stopContext?.(); appearanceObserver.disconnect(); current.removeEventListener('click', navigate, true); style?.remove(); };
+            stopDocument = () => { dialogOpen = () => false; stopDialogs(); updateViewAvailability(); resize = () => {}; sizeObserver.disconnect(); observer.disconnect(); stopContext?.(); appearanceObserver.disconnect(); current.removeEventListener('click', navigate, true); style?.remove(); };
             update();
           };
           frameVisit.listen(frame, 'load', inspect);
@@ -265,6 +281,17 @@ export const assignmentViewsFeature: Feature = {
         visit.listen(radio, 'change', () => {
           if (radio.checked) { clearRefreshError(); void remember('classic'); open(); }
         });
+        visit.listen(group, 'click', event => {
+          const target = event.target as Element | null;
+          if (!active || !dialogOpen() || !target || !inputs.some(input => input === target || input.closest('label')?.contains(target))) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }, true);
+        visit.listen(group, 'keydown', event => {
+          if (!active || !dialogOpen() || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(event.key)) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }, true);
         for (const input of inputs) visit.listen(input, 'click', () => {
           if (active) refreshPending = true;
           previous = input;
@@ -307,7 +334,7 @@ export const assignmentViewsFeature: Feature = {
         };
         restorers.add(restore);
         visit.add(() => restorers.delete(restore));
-        visit.add(observeDom(() => { restore(); if (active || (refreshPending && !panel.hidden)) concealModern(); }, visit.signal, root));
+        visit.add(observeDom(() => { restore(); updateViewAvailability(); if (active || (refreshPending && !panel.hidden)) concealModern(); }, visit.signal, root));
         visit.add(() => { close(); clearRefreshError(); label.remove(); panel.remove(); ownership.clear(); });
         return visit.dispose;
       };

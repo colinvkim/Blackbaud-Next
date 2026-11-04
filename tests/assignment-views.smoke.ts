@@ -62,7 +62,14 @@ const classicHtml = `<!doctype html><html><head><meta name="viewport" content="w
   };
   document.addEventListener('click', async e => {
     if (e.target.id === 'save-status') {
-      await fetch('/fixture/status', { method:'POST' });
+      const response = await fetch('/fixture/status', { method:'POST' });
+      if (!response.ok) {
+        const error = document.createElement('p');
+        error.id = 'native-save-error';
+        error.textContent = 'Could not save status';
+        document.querySelector('#site-modal .modal-body').append(error);
+        return;
+      }
       document.querySelector('#native-classic-status').textContent = 'Completed';
       closeDialog();
     }
@@ -99,6 +106,7 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     await page.setViewport({ width:1280, height:900 });
     let holdClassic = false;
     let pending: HTTPRequest | undefined;
+    let holdStatus = false;
     let status = 'To do';
     let statusWrites = 0;
     let modernDocuments = 0;
@@ -106,8 +114,9 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     page.on('request', request => {
       const path = new URL(request.url()).pathname;
       if (path === '/fixture/status' && request.method() === 'POST') {
-        status = 'Completed';
         statusWrites++;
+        if (holdStatus) return;
+        status = 'Completed';
         void request.respond({ status:200, contentType:'application/json', body:'{}' });
         return;
       }
@@ -218,7 +227,13 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     await frame.click('#native-list');
     await frame.waitForSelector('#assignment-center-assignment-items', { visible:true });
     await pageScrolls();
-    await frame.click('#filter-status');
+    await page.evaluate(() => {
+      document.querySelector<HTMLIFrameElement>('.bn-classic-frame')!.contentDocument!.querySelector<HTMLElement>('#filter-status')!.click();
+      document.querySelector<HTMLInputElement>('#calendar')!.click();
+    });
+    assert.ok(await page.$('.bn-classic-frame'), 'A synchronous view click cannot bypass the native dialog guard');
+    assert.equal(await page.$eval('#native-view', element => element.textContent), 'List', 'Blocked clicks do not change the native view model');
+    assert.equal(await page.$eval('.bn-classic-view-input', input => (input as HTMLInputElement).checked), true);
     await frame.type('#native-draft', 'Native unsaved draft');
     await preferences({ rosterTools:true });
     assert.equal(await frame.$eval('#native-draft', input => (input as HTMLInputElement).value), 'Native unsaved draft', 'Unrelated preferences preserve the native frame and forms');
@@ -228,9 +243,33 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
       assert.equal(await frame.$eval('#native-draft', input => (input as HTMLInputElement).value), 'Native unsaved draft', 'Appearance changes preserve native forms');
     }
     await frame.click('#cancel');
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLInputElement>('#calendar, #list')].every(input => !input.disabled), { polling:100 });
     await frame.click('.assignment-status-update');
+    holdStatus = true;
+    const failedSave = page.waitForRequest(request => new URL(request.url()).pathname === '/fixture/status' && request.method() === 'POST');
     await frame.click('#save-status');
+    const pendingStatus = await failedSave;
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLInputElement>('#calendar, #list')].every(input => input.disabled), { polling:100 });
+    await page.$eval('#list', input => (input as HTMLInputElement).click());
+    await page.focus('.bn-classic-view-input');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.$eval('.bn-classic-view-input', input => (input as HTMLInputElement).checked), true, 'Keyboard navigation cannot leave the active native dialog');
+    assert.ok(await page.$('.bn-classic-frame'), 'Switching views cannot destroy the frame during a native save');
+    assert.equal(statusWrites, 1);
+    await pendingStatus.respond({ status:503, contentType:'application/json', body:'{}' });
+    await frame.waitForSelector('#native-save-error');
+    assert.equal(await page.$eval('#list', input => (input as HTMLInputElement).disabled), true, 'A native save error stays visible until the dialog is closed');
+    await frame.click('#cancel');
+    await page.waitForFunction(() => !(document.querySelector('#list') as HTMLInputElement).disabled, { polling:100 });
+    await frame.click('.assignment-status-update');
+    const retriedSave = page.waitForRequest(request => new URL(request.url()).pathname === '/fixture/status' && request.method() === 'POST');
+    await frame.click('#save-status');
+    const retryStatus = await retriedSave;
+    status = 'Completed';
+    await retryStatus.respond({ status:200, contentType:'application/json', body:'{}' });
+    holdStatus = false;
     await frame.waitForFunction(() => document.querySelector('#native-classic-status')?.textContent === 'Completed', { polling:100 });
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLInputElement>('#calendar, #list')].every(input => !input.disabled), { polling:100 });
     await frame.click('#last-action');
     assert.equal(await frame.$eval('body', element => (element as HTMLElement).dataset.lastAction), 'clicked', 'The bottom of the native frame remains reachable');
     await frame.click('#native-refresh');
@@ -246,16 +285,27 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     assert.equal(await page.$('iframe.bn-classic-frame'), null);
     assert.equal(await page.$eval('#native-view', element => element.textContent), 'Calendar');
     assert.equal(await page.$eval('#native-status', element => element.textContent), 'Completed', 'The native page reads fresh data after the Classic save');
-    assert.equal(statusWrites, 1, 'Refreshing does not repeat the native save');
+    assert.equal(statusWrites, 2, 'Only the failed native attempt and explicit retry write status');
     const nativeDocument = modernDocuments;
     await page.click('#list');
     await page.click('#calendar');
     assert.equal(modernDocuments, nativeDocument, 'Ordinary List/Calendar switching keeps the same document');
     frame = await open();
+    await page.$eval('#calendar', input => { (input as HTMLInputElement).disabled = true; });
+    await frame.click('#filter-status');
+    await page.waitForFunction(() => (document.querySelector('#list') as HTMLInputElement).disabled, { polling:100 });
+    await frame.click('#cancel');
+    await page.waitForFunction(() => !(document.querySelector('#list') as HTMLInputElement).disabled, { polling:100 });
+    assert.equal(await page.$eval('#calendar', input => (input as HTMLInputElement).disabled), true, 'Closing a dialog preserves a natively disabled view');
+    await page.$eval('#calendar', input => { (input as HTMLInputElement).disabled = false; });
+    await frame.click('#filter-status');
+    await page.waitForFunction(() => (document.querySelector('#list') as HTMLInputElement).disabled, { polling:100 });
     await preferences({ mode:'essentials' });
     await page.waitForFunction(() => !document.querySelector('.bn-classic-view-label'), { polling:100 });
     assert.equal(await page.$eval('#calendar', input => (input as HTMLInputElement).checked), true, 'Disabling restores the prior native selection');
     assert.equal(await page.$eval('fieldset', element => element.getAttribute('aria-owns')), 'calendar list');
+    assert.equal(await page.$eval('fieldset', element => element.getAttribute('title')), null);
+    assert.equal(await page.$$eval('#calendar, #list', inputs => inputs.some(input => (input as HTMLInputElement).disabled)), false, 'Disabling removes the dialog guard from native controls');
     assert.equal(await page.$('[data-bn-classic-hidden]'), null);
     await preferences({ mode:'full', pageAppearance:true });
     await mounted();
@@ -385,6 +435,6 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     assert.equal(modernDocuments, beforeFailure, 'A failed preference save cannot reload back into Classic');
     await returnToModern('list');
     assert.equal(await page.$('.bn-classic-refresh-error'), null);
-    assert.equal(statusWrites, 1);
+    assert.equal(statusWrites, 2);
   } finally { await browser?.close(); await rm(fixture, { recursive:true, force:true }); }
 });
