@@ -35,7 +35,7 @@ function setup(featureOptions: Partial<Feature> = {}, withNavigation = false) {
     counts: () => ({ readCount, mounts, removals }),
     currentSignal: () => signals.at(-1),
     readUsing: (callback: () => Promise<Settings>) => { read = callback; },
-    changed: () => { assert.ok(listener); listener({}, 'sync'); },
+    changed: (changes: Record<string, unknown> = { enabled: {} }) => { assert.ok(listener); listener(changes, 'sync'); },
     navigate(hash: string) {
       dom.window.history.pushState({}, '', hash);
       dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
@@ -86,6 +86,22 @@ test('failed settings reads cannot reactivate stale features; real navigation ca
     await flush();
     assert.equal(runtime.counts().mounts, 2);
     assert.equal(runtime.counts().readCount, 4);
+  } finally { runtime.dispose(); }
+});
+
+test('saving the assignment view does not reread feature settings or interrupt active work', async () => {
+  const runtime = setup();
+  try {
+    await runtime.start();
+    const initialSignal = runtime.currentSignal();
+    runtime.changed({ assignmentCenterView: { oldValue: 'classic', newValue: 'list' } });
+    await flush();
+    assert.deepEqual(runtime.counts(), { readCount: 1, mounts: 1, removals: 0 });
+    assert.equal(runtime.currentSignal(), initialSignal);
+    runtime.readUsing(async () => ({ ...DEFAULT_SETTINGS, enabled: false }));
+    runtime.changed({ assignmentCenterView: { newValue: 'calendar' }, enabled: { newValue: false } });
+    await flush();
+    assert.deepEqual(runtime.counts(), { readCount: 2, mounts: 1, removals: 1 });
   } finally { runtime.dispose(); }
 });
 

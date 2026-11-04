@@ -19,6 +19,7 @@ export const ASSIGNMENT_VIEWS_STYLES = `
 .bn-classic-loading, .bn-classic-error { padding: 24px; color: var(--bn-muted, #657080); background: #fff; border: 1px solid var(--bn-border, #dde3e8); border-radius: 8px; }
 .bn-classic-error p { margin: 0 0 12px; }
 .bn-classic-error a { color: var(--bn-accent, #0066a1); }
+.bn-classic-refresh-error { margin: 8px 16px; color: var(--bn-muted, #657080); font: 14px/1.5 var(--bn-font, Arial, sans-serif); }
 .bn-classic-loading span { display: block; background: #edf0f3; border-radius: 4px; height: 16px; margin-bottom: 18px; width: 70%; }
 .bn-classic-loading span:first-child { width: 40%; height: 30px; margin-bottom: 26px; }
 .bn-classic-loading span:last-child { margin-bottom: 0; width: 55%; }
@@ -28,8 +29,14 @@ export const ASSIGNMENT_VIEWS_STYLES = `
 // This stylesheet is attached only to the validated, same-origin native frame.
 // Native dialogs and conditional actions are retained, including mobile menus.
 export const CLASSIC_FRAME_LAYOUT = `${THEME_TOKENS}
-html { background: #fff; }
+html { background: #fff; overflow-y: hidden; }
+html, body { height: auto !important; min-height: 0 !important; }
 body { background: #fff !important; margin: 0; color: #222a35; font-family: "Blackbaud Sans", "Helvetica Neue", Arial, sans-serif; }
+#site-modal.modal { top: var(--bn-classic-viewport-top, 0px) !important; bottom: auto !important; height: var(--bn-classic-viewport-height, 100vh) !important; }
+#site-modal.modal .modal-dialog { margin-block: 20px; }
+#site-modal.modal .modal-content { display: flex; flex-direction: column; max-height: calc(var(--bn-classic-viewport-height, 100vh) - 40px); }
+#site-modal.modal .modal-body { min-height: 0; overflow-y: auto; }
+#site-modal.modal :is(.modal-header, .modal-footer) { flex-shrink: 0; }
 #site-header-parent-container, #site-top-spacer, .site-main-header-wrap,
 #site-footer, #site-sidebar-fixed, #site-mobile-menu { display: none !important; }
 #app, .site-main-wrap { padding: 0 !important; margin: 0 !important; min-height: 0 !important; }

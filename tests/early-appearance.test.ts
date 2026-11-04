@@ -47,7 +47,7 @@ function fixture(rootless = true) {
     changed(patch: Partial<Settings>) {
       settings = { ...settings, ...patch };
       read = async () => ({ ...settings });
-      for (const callback of subscriptions) callback({}, 'sync');
+      for (const callback of subscriptions) callback(Object.fromEntries(Object.entries(patch).map(([key, newValue]) => [key, { newValue }])), 'sync');
     },
     start() {
       const runtime = startAppearance();

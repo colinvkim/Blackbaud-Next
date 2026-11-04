@@ -46,7 +46,7 @@ test('LMS startup arms directory loading before DOM readiness and honors disable
   }
   const changed = (enabled: boolean) => {
     settings = { ...settings, enabled };
-    for (const listener of subscriptions) listener({}, 'sync');
+    for (const listener of subscriptions) listener({ enabled: { newValue: enabled } }, 'sync');
   };
   const icon = () => page.querySelector('[data-blackbaud-next-favicon]');
   try {

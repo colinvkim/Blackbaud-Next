@@ -28,7 +28,10 @@ export function setupSettingsUi(kind: 'popup' | 'options', options: { failRead?:
   let failRead = options.failRead ?? false;
   let failWrite = false;
   let holdWrites = false;
-  const notify = () => { for (const listener of listeners) listener({}, 'sync'); };
+  const notify = (patch: Record<string, unknown> = values) => {
+    const changes = Object.fromEntries(Object.entries(patch).map(([key, newValue]) => [key, { newValue }]));
+    for (const listener of listeners) listener(changes, 'sync');
+  };
   const storage = {
     async get() {
       if (failRead) throw new Error('Storage unavailable');
@@ -44,7 +47,7 @@ export function setupSettingsUi(kind: 'popup' | 'options', options: { failRead?:
       if (holdWrites) await new Promise<void>((resolve) => heldWrites.push(resolve));
       if (failWrite) throw new Error('Write unavailable');
       Object.assign(values, patch);
-      notify();
+      notify(patch);
     },
     async remove() {},
   };

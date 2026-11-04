@@ -8,9 +8,9 @@ import type { ExtensionApi } from '../src/shared/extension.ts';
 function fixture(sendMessage?: ExtensionApi['runtime']['sendMessage']) {
   const dom = new JSDOM(`<app-student-assignment-center><sky-toolbar><sky-radio-group name="viewMode"><fieldset role="radiogroup"><div class="sky-switch-icon-group">
     <input type="radio" name="viewMode" value="1"><input type="radio" name="viewMode" value="0" checked>
-  </div></fieldset></sky-radio-group></sky-toolbar><main>Native assignments</main></app-student-assignment-center>`, { url:'https://example.myschoolapp.com/lms-assignment/assignment-center/student' });
+  </div></fieldset></sky-radio-group></sky-toolbar><main>Native assignments</main></app-student-assignment-center>`, { url:'https://example.myschoolapp.com/lms-assignment/assignment-center/student', pretendToBeVisual:true });
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
-  for (const [key, value] of Object.entries({ window:dom.window, document:dom.window.document, HTMLElement:dom.window.HTMLElement, MutationObserver:dom.window.MutationObserver, ...(sendMessage ? { chrome:{ storage:{}, runtime:{ sendMessage } } } : {}) })) {
+  for (const [key, value] of Object.entries({ window:dom.window, document:dom.window.document, HTMLElement:dom.window.HTMLElement, MutationObserver:dom.window.MutationObserver, ResizeObserver:class { observe() {} disconnect() {} }, ...(sendMessage ? { chrome:{ storage:{}, runtime:{ sendMessage } } } : {}) })) {
     descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable:true, value });
   }

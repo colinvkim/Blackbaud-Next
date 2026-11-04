@@ -1,4 +1,4 @@
-import { extensionApi } from './extension.ts';
+import { extensionApi, type StorageChange } from './extension.ts';
 import { requestCoordinator } from './coordinator.ts';
 import type { Cleanup } from './types.ts';
 
@@ -116,7 +116,10 @@ export async function updateSettings(update: Partial<Omit<Settings, 'schemaVersi
 
 export function subscribeSettings(callback: () => void): Cleanup {
   const event = extensionApi().storage.onChanged;
-  const listener = (_changes: unknown, area: string) => { if (area === 'sync') callback(); };
+  const keys = new Set<string>(['enabled', 'mode', 'accountPreference', 'fullDefaultsVersion', ...FEATURE_DEFINITIONS.map(({ key }) => key)]);
+  const listener = (changes: Record<string, StorageChange>, area: string) => {
+    if (area === 'sync' && Object.keys(changes).some(key => keys.has(key))) callback();
+  };
   event.addListener(listener);
   return () => event.removeListener(listener);
 }

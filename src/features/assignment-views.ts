@@ -10,6 +10,15 @@ import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
 import { ASSIGNMENT_VIEWS_STYLES, CLASSIC_FRAME_LAYOUT, CLASSIC_FRAME_STYLES } from './assignment-views-styles.ts';
 
+function loadingPlaceholder(label: string): HTMLElement {
+  const loading = document.createElement('div');
+  loading.className = 'bn-classic-loading';
+  loading.setAttribute('role', 'status');
+  loading.setAttribute('aria-label', label);
+  for (let i = 0; i < 5; i++) loading.append(document.createElement('span'));
+  return loading;
+}
+
 export const assignmentViewsFeature: Feature = {
   id: 'assignment-views',
   settingsKeys: [],
@@ -18,19 +27,25 @@ export const assignmentViewsFeature: Feature = {
   mount: ({ url, signal }) => {
     const scope = createScope(signal);
     let preference: AssignmentCenterView | null = null;
-    let selected = false;
+    let selectionVersion = 0;
     const restorers = new Set<() => void>();
     const restoreViews = () => { for (const restore of restorers) restore(); };
-    const remember = (view: AssignmentCenterView) => {
-      if (scope.signal.aborted || window.location.href !== url.href) return;
-      selected = true;
+    const remember = async (view: AssignmentCenterView): Promise<'saved' | 'failed' | 'obsolete'> => {
+      if (scope.signal.aborted || window.location.href !== url.href) return 'obsolete';
+      const version = ++selectionVersion;
       preference = view;
-      void rememberAssignmentCenterView(view).catch(error => {
-        if (!scope.signal.aborted) console.warn('Blackbaud Next could not remember the assignment view.', error);
-      });
+      const current = () => !scope.signal.aborted && selectionVersion === version && window.location.href === url.href;
+      try {
+        await rememberAssignmentCenterView(view);
+        return current() ? 'saved' : 'obsolete';
+      } catch (error) {
+        if (!current()) return 'obsolete';
+        console.warn('Blackbaud Next could not remember the assignment view.', error);
+        return 'failed';
+      }
     };
     void getAssignmentCenterView().then(view => {
-      if (scope.signal.aborted || selected || window.location.href !== url.href) return;
+      if (scope.signal.aborted || selectionVersion !== 0 || window.location.href !== url.href) return;
       preference = view;
       restoreViews();
     }).catch(error => {
@@ -72,8 +87,17 @@ export const assignmentViewsFeature: Feature = {
         let active = false;
         let restoring = false;
         let restored = false;
+        let refreshPending = false;
+        let refreshError: HTMLElement | undefined;
         let previous = inputs.find(input => input.checked) ?? inputs[0]!;
         let frameScope: ReturnType<typeof createScope> | undefined;
+        const clearRefreshError = () => { refreshError?.remove(); refreshError = undefined; };
+        const clearRefresh = () => {
+          panel.replaceChildren();
+          panel.hidden = true;
+          ownership.restore(root, 'aria-busy');
+          ownership.retain((_element, attribute) => attribute !== 'data-bn-classic-hidden');
+        };
 
         const concealModern = () => {
           const hidden = new Set<HTMLElement>();
@@ -94,11 +118,9 @@ export const assignmentViewsFeature: Feature = {
           active = false;
           frameScope?.dispose();
           frameScope = undefined;
-          panel.replaceChildren();
-          panel.hidden = true;
+          clearRefresh();
           radio.checked = false;
           if (!inputs.some(input => input.checked)) previous.checked = true;
-          ownership.retain((_element, attribute) => attribute !== 'data-bn-classic-hidden');
         };
         const open = () => {
           if (visit.signal.aborted || !assignmentViewControls(group)) return;
@@ -109,15 +131,12 @@ export const assignmentViewsFeature: Feature = {
           }
           previous = inputs.find(input => input.checked) ?? previous;
           active = true;
+          ownership.restore(root, 'aria-busy');
           for (const input of inputs) input.checked = false;
           radio.checked = true;
           panel.hidden = false;
           concealModern();
-          const loading = document.createElement('div');
-          loading.className = 'bn-classic-loading';
-          loading.setAttribute('role', 'status');
-          loading.setAttribute('aria-label', 'Loading classic assignment center');
-          for (let i = 0; i < 5; i++) loading.append(document.createElement('span'));
+          const loading = loadingPlaceholder('Loading classic assignment center');
           const frame = document.createElement('iframe');
           frame.className = 'bn-classic-frame';
           frame.title = 'Classic assignment center';
@@ -128,7 +147,12 @@ export const assignmentViewsFeature: Feature = {
           const destination = legacyAssignmentCenterUrl(url);
           let stopDocument: (() => void) | undefined;
           let timeout: ReturnType<typeof setTimeout> | undefined;
-          const resize = () => { frame.style.height = `${Math.max(360, window.innerHeight - Math.max(0, frame.getBoundingClientRect().top) - 24)}px`; };
+          let layoutFrame: number | undefined;
+          let resize = () => {};
+          const queueResize = () => {
+            if (frameVisit.signal.aborted || layoutFrame !== undefined) return;
+            layoutFrame = window.requestAnimationFrame(() => { layoutFrame = undefined; resize(); });
+          };
           const fail = () => {
             if (frameVisit.signal.aborted) return;
             frameVisit.dispose();
@@ -156,13 +180,31 @@ export const assignmentViewsFeature: Feature = {
             } catch { fail(); return; }
             if (!page) { fail(); return; }
             const current = page;
+            const sizeObserver = new ResizeObserver(queueResize);
+            sizeObserver.observe(current.body);
+            resize = () => {
+              if (frame.hidden || frameVisit.signal.aborted) return;
+              // scrollHeight cannot shrink below the iframe's previous viewport.
+              const height = Math.max(360, Math.ceil(current.body.getBoundingClientRect().height) + 2);
+              const bounds = frame.getBoundingClientRect();
+              let inset = 0;
+              for (const header of document.querySelectorAll('#site-header-parent-container, #site-nav-container, #site-nav-lower')) {
+                if (getComputedStyle(header).position === 'fixed') inset = Math.max(inset, header.getBoundingClientRect().bottom);
+              }
+              const top = `${Math.max(0, inset - bounds.top)}px`;
+              const visible = `${Math.max(160, Math.min(window.innerHeight, bounds.top + height) - Math.max(inset, bounds.top))}px`;
+              if (frame.style.height !== `${height}px`) frame.style.height = `${height}px`;
+              for (const [name, value] of [['--bn-classic-viewport-top', top], ['--bn-classic-viewport-height', visible]] as const) {
+                if (current.documentElement.style.getPropertyValue(name) !== value) current.documentElement.style.setProperty(name, value);
+              }
+            };
             let styled = false;
             let style: HTMLStyleElement | undefined;
             let observed: Element | undefined;
             let stopContext: (() => void) | undefined;
             const updateAppearance = () => {
               if (style) style.textContent = document.documentElement.hasAttribute('data-blackbaud-next-appearance') ? CLASSIC_FRAME_STYLES : CLASSIC_FRAME_LAYOUT;
-              if (styled) resize();
+              if (styled) queueResize();
             };
             const update = () => {
               if (frameVisit.signal.aborted) return;
@@ -194,7 +236,7 @@ export const assignmentViewsFeature: Feature = {
               current.head.append(style);
               loading.remove();
               frame.hidden = false;
-              resize();
+              queueResize();
             };
             const observer = new MutationObserver(update);
             const appearanceObserver = new MutationObserver(updateAppearance);
@@ -210,20 +252,46 @@ export const assignmentViewsFeature: Feature = {
               window.location.assign(target.href);
             };
             current.addEventListener('click', navigate, true);
-            stopDocument = () => { observer.disconnect(); stopContext?.(); appearanceObserver.disconnect(); current.removeEventListener('click', navigate, true); style?.remove(); };
+            stopDocument = () => { resize = () => {}; sizeObserver.disconnect(); observer.disconnect(); stopContext?.(); appearanceObserver.disconnect(); current.removeEventListener('click', navigate, true); style?.remove(); };
             update();
           };
           frameVisit.listen(frame, 'load', inspect);
-          frameVisit.listen(window, 'resize', resize);
-          frameVisit.add(() => { clearTimeout(timeout); stopDocument?.(); frame.remove(); });
+          frameVisit.listen(window, 'resize', queueResize);
+          frameVisit.listen(window, 'scroll', queueResize, { passive: true, capture: true });
+          frameVisit.add(() => { clearTimeout(timeout); if (layoutFrame !== undefined) window.cancelAnimationFrame(layoutFrame); stopDocument?.(); frame.remove(); });
           timeout = setTimeout(fail, 20_000);
           frame.src = destination;
         };
-        visit.listen(radio, 'change', () => { if (radio.checked) { remember('classic'); open(); } });
+        visit.listen(radio, 'change', () => {
+          if (radio.checked) { clearRefreshError(); void remember('classic'); open(); }
+        });
         for (const input of inputs) visit.listen(input, 'click', () => {
+          if (active) refreshPending = true;
           previous = input;
           close();
-          if (!restoring) remember(input.value === '1' ? 'calendar' : 'list');
+          if (restoring) return;
+          clearRefreshError();
+          if (refreshPending) {
+            panel.replaceChildren(loadingPlaceholder('Refreshing assignments'));
+            panel.hidden = false;
+            ownership.mark(root, 'aria-busy', 'true');
+            concealModern();
+          }
+          const view = input.value === '1' ? 'calendar' : 'list';
+          void remember(view).then(result => {
+            if (visit.signal.aborted || active || !refreshPending || result === 'obsolete') return;
+            if (result === 'saved') {
+              refreshPending = false;
+              window.location.reload();
+            } else {
+              clearRefresh();
+              refreshError = markOwned(document.createElement('p'));
+              refreshError.className = 'bn-classic-refresh-error';
+              refreshError.setAttribute('role', 'alert');
+              refreshError.textContent = 'Couldn’t refresh assignments. Select a view again to retry.';
+              controls.toolbar.insertAdjacentElement('afterend', refreshError);
+            }
+          });
         });
         const restore = () => {
           if (visit.signal.aborted || restored || !preference || !inputs.some(input => input.checked) ||
@@ -239,8 +307,8 @@ export const assignmentViewsFeature: Feature = {
         };
         restorers.add(restore);
         visit.add(() => restorers.delete(restore));
-        visit.add(observeDom(() => { restore(); if (active) concealModern(); }, visit.signal, root));
-        visit.add(() => { close(); label.remove(); panel.remove(); ownership.clear(); });
+        visit.add(observeDom(() => { restore(); if (active || (refreshPending && !panel.hidden)) concealModern(); }, visit.signal, root));
+        visit.add(() => { close(); clearRefreshError(); label.remove(); panel.remove(); ownership.clear(); });
         return visit.dispose;
       };
       const updateControls = () => {
