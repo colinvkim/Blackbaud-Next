@@ -13,7 +13,7 @@ import { ASSIGNMENT_VIEWS_STYLES, CLASSIC_FRAME_LAYOUT, CLASSIC_FRAME_STYLES } f
 export const assignmentViewsFeature: Feature = {
   id: 'assignment-views',
   settingsKeys: [],
-  enabled: settings => settings.classicAssignmentCenter,
+  enabled: settings => settings.mode === 'full',
   matches: isStudentAssignmentCenter,
   mount: ({ url, signal }) => {
     const scope = createScope(signal);

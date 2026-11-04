@@ -268,7 +268,7 @@ test('new native history-back href spelling replaces previous ownership for cond
   assert.equal(link.getAttribute('href'), latestHref);
 });
 
-test('unrelated view availability preserves the breadcrumb and the master switch restores native state', async () => {
+test('unrelated appearance preferences preserve the breadcrumb and the master switch restores native state', async () => {
   fixture();
   const controller = new FeatureController([assignmentBreadcrumbFeature]);
   cleanups.push(() => controller.dispose());
@@ -277,7 +277,7 @@ test('unrelated view availability preserves the breadcrumb and the master switch
   const link = breadcrumb();
   controller.update(url, settings);
   assert.equal(link.href, centerUrl);
-  controller.update(url, { ...settings, classicAssignmentCenter: false });
+  controller.update(url, { ...settings, pageAppearance: false });
   assert.equal(link.href, centerUrl);
   controller.update(url, settings);
   assert.equal(link.href, centerUrl);

@@ -32,7 +32,7 @@ test('LMS startup arms directory loading before DOM readiness and honors disable
     MutationObserver: dom.window.MutationObserver,
     chrome: {
       storage: {
-        sync: { get: async () => ({ ...settings }) },
+        sync: { get: async () => ({ ...settings, fullDefaultsVersion: 1 }) },
         onChanged: {
           addListener: (listener: (changes: unknown, area: string) => void) => { subscriptions.add(listener); },
           removeListener: (listener: (changes: unknown, area: string) => void) => { subscriptions.delete(listener); },

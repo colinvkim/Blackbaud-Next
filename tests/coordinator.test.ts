@@ -199,14 +199,14 @@ test('assignment view messages accept only valid choices from the top-level stud
   assert.equal(await state.handle({ ...message, request: { action: 'get' } }, source), null);
 });
 
-test('the retired legacy toggle supplies Classic until a new view has been chosen', async () => {
+test('the retired legacy toggle does not choose Classic in the new view selector', async () => {
   const state = fixture();
   const source = `https://${schoolHostname}/lms-assignment/assignment-center/student`;
   const read = { channel, kind: 'assignment-view', request: { action: 'get' } };
   state.syncValues.oldAssignmentCenter = false;
   assert.equal(await state.handle(read, source), null);
   state.syncValues.oldAssignmentCenter = true;
-  assert.equal(await state.handle(read, source), 'classic');
+  assert.equal(await state.handle(read, source), null);
   assert.deepEqual(state.syncValues, { oldAssignmentCenter: true }, 'Reading old preferences does not write a migration over a concurrent choice');
   await state.handle({ ...read, request: { action: 'set', view: 'list' } }, source);
   assert.equal(await state.handle(read, source), 'list');
@@ -220,6 +220,10 @@ test('the coordinator rejects foreign senders, arbitrary pages and provider mism
   await assert.rejects(state.handle(settings, googleUrl), /sender/);
   await assert.rejects(state.handle(settings, state.api.runtime.getURL('other.html')), /sender/);
   await assert.rejects(state.handle(settings, `${state.api.runtime.getURL('options.html')}?untrusted`), /sender/);
+  const migration = { channel, kind: 'migrate-settings' };
+  await assert.rejects(state.handle(migration, 'https://unrelated.example/'), /sender/);
+  await assert.rejects(state.dispatch(migration, { ...state.sender(studentUrl), frameId: 1 }), /sender/);
+  await assert.rejects(state.handle(migration, `${state.api.runtime.getURL('options.html')}?untrusted`), /sender/);
   await assert.rejects(state.handle({ channel, kind: 'settings', update: { mode: 'unknown' } }, state.api.runtime.getURL('options.html')), /mode/);
   await assert.rejects(state.handle({ channel, kind: 'auth', request: { action: 'list' } }, 'https://accounts.google.com/'), /sender/);
   await assert.rejects(state.auth({ action: 'claim', id: state.flow.id, step: 'blackbaud', token: 'wrong-provider' }), /provider/);

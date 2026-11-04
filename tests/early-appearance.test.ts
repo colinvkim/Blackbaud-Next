@@ -28,7 +28,7 @@ function fixture(rootless = true) {
     MutationObserver: dom.window.MutationObserver,
     chrome: {
       storage: {
-        sync: { get: () => { reads++; return read(); } },
+        sync: { get: () => { reads++; return read().then(settings => ({ ...settings, fullDefaultsVersion: 1 })); } },
         onChanged: {
           addListener: (callback: (changes: unknown, area: string) => void) => { subscriptions.add(callback); },
           removeListener: (callback: (changes: unknown, area: string) => void) => { subscriptions.delete(callback); },

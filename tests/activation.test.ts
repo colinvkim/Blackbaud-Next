@@ -87,7 +87,7 @@ test('the real runtime reads current preferences only at activation and again af
     window: frame.page.defaultView,
     chrome: {
       storage: {
-        sync: { get: async () => { reads++; return { ...DEFAULT_SETTINGS, enabled }; } },
+        sync: { get: async () => { reads++; return { ...DEFAULT_SETTINGS, fullDefaultsVersion: 1, enabled }; } },
         onChanged: {
           addListener: () => { subscriptions++; },
           removeListener: () => { subscriptions--; },

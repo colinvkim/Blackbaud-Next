@@ -23,7 +23,7 @@ function setup(featureOptions: Partial<Feature> = {}, withNavigation = false) {
   console.warn = () => {};
   scope.chrome = {
     storage: {
-      sync: { get: async () => { readCount++; return read(); } },
+      sync: { get: async () => { readCount++; return read().then(settings => ({ ...settings, fullDefaultsVersion: 1 })); } },
       onChanged: {
         addListener: (callback: (changes: unknown, area: string) => void) => { listener = callback; },
         removeListener: () => { listener = undefined; },

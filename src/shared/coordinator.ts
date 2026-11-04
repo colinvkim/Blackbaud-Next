@@ -11,6 +11,7 @@ export type AuthRequest =
   | { action: 'claim' | 'confirm' | 'release'; id: string; step: AuthStep; token: string };
 
 export type CoordinatorMessage =
+  | { channel: 'blackbaud-next-coordinator-v1'; kind: 'migrate-settings' }
   | { channel: 'blackbaud-next-coordinator-v1'; kind: 'settings'; update: Partial<Omit<Settings, 'schemaVersion'>> }
   | { channel: 'blackbaud-next-coordinator-v1'; kind: 'assignment-view'; request: { action: 'get' } | { action: 'set'; view: AssignmentCenterView } }
   | { channel: 'blackbaud-next-coordinator-v1'; kind: 'auth'; request: AuthRequest };

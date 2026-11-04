@@ -75,7 +75,7 @@ test('Classic integrates with native views and preserves frame actions, fallback
     const preferences = (patch: Record<string, boolean | string>) => options.evaluate(async update => {
       await (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome.storage.sync.set(update);
     }, patch);
-    await preferences({ enabled:true, ...Object.fromEntries(FEATURE_DEFINITIONS.map(({ key }) => [key, key === 'classicAssignmentCenter'])) });
+    await preferences({ enabled:true, mode:'full', ...Object.fromEntries(FEATURE_DEFINITIONS.map(({ key }) => [key, false])) });
     const page = await browser.newPage();
     page.setDefaultTimeout(6_000);
     await page.setViewport({ width:1280, height:900 });
@@ -142,12 +142,12 @@ test('Classic integrates with native views and preserves frame actions, fallback
     assert.equal(await page.$eval('#native-view', element => element.textContent), 'Calendar');
     assert.equal(await page.$eval('#native-search', input => (input as HTMLInputElement).value), 'Preserved search');
     frame = await open();
-    await preferences({ classicAssignmentCenter:false });
+    await preferences({ mode:'essentials' });
     await page.waitForFunction(() => !document.querySelector('.bn-classic-view-label'), { polling:100 });
     assert.equal(await page.$eval('#calendar', input => (input as HTMLInputElement).checked), true, 'Disabling restores the prior native selection');
     assert.equal(await page.$eval('fieldset', element => element.getAttribute('aria-owns')), 'calendar list');
     assert.equal(await page.$('[data-bn-classic-hidden]'), null);
-    await preferences({ classicAssignmentCenter:true, pageAppearance:true });
+    await preferences({ mode:'full', pageAppearance:true });
     await mounted();
     for (const width of [390, 320]) {
       await page.setViewport({ width, height:844 });

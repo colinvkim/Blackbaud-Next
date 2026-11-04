@@ -2,11 +2,12 @@ import { isSchoolHostname, schoolFromSigninUrl } from '../blackbaud/auth.ts';
 import { isBlackbaudSignin, isGoogleOAuth, isSchoolPage, isStudentPortal } from '../blackbaud/routes.ts';
 import type { AuthRequest } from '../shared/coordinator.ts';
 import type { ExtensionApi, MessageListener, MessageSender } from '../shared/extension.ts';
-import { FEATURE_DEFINITIONS, normalizeSettings, settingsPatch } from '../shared/settings.ts';
+import { settingsPatch } from '../shared/settings.ts';
 import type { Settings } from '../shared/settings.ts';
 import { isAssignmentCenterView } from '../shared/assignment-view-preference.ts';
 import { isStudentAssignmentCenter } from '../blackbaud/assignment-views.ts';
 import { AuthStore } from './auth-store.ts';
+import { migrateSettings } from './settings-migration.ts';
 
 function authRequest(raw: unknown): AuthRequest {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !('action' in raw)) throw new Error('Invalid auth request.');
@@ -33,6 +34,16 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
     if (sender.id !== api.runtime.id || !sender.url) throw new Error('Unrecognized extension sender.');
     if (!raw || typeof raw !== 'object' || !('channel' in raw) || raw.channel !== 'blackbaud-next-coordinator-v1' || !('kind' in raw)) throw new Error('Invalid coordinator message.');
     const url = new URL(sender.url);
+    if (raw.kind === 'migrate-settings') {
+      const extensionPage = [api.runtime.getURL('popup.html'), api.runtime.getURL('options.html')].includes(url.href);
+      const tabId = sender.tab?.id;
+      const contentPage = (isSchoolPage(url) || isBlackbaudSignin(url) || url.origin === 'https://accounts.google.com') &&
+        sender.frameId === 0 && typeof tabId === 'number' && Number.isSafeInteger(tabId) && tabId >= 0;
+      if (!extensionPage && !contentPage) throw new Error('Invalid settings migration sender.');
+      const migration = settingsWrites.then(() => migrateSettings(api.storage.sync));
+      settingsWrites = migration.catch(() => {});
+      return migration;
+    }
     if (raw.kind === 'assignment-view') {
       const tabId = sender.tab?.id;
       if (!isStudentAssignmentCenter(url) || sender.frameId !== 0 || typeof tabId !== 'number' || !Number.isSafeInteger(tabId) || tabId < 0 ||
@@ -46,9 +57,8 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
           await api.storage.sync.set({ assignmentCenterView: view });
           return undefined;
         }
-        const { assignmentCenterView, oldAssignmentCenter } = await api.storage.sync.get(['assignmentCenterView', 'oldAssignmentCenter']);
-        if (isAssignmentCenterView(assignmentCenterView)) return assignmentCenterView;
-        return oldAssignmentCenter === true ? 'classic' : null;
+        const { assignmentCenterView } = await api.storage.sync.get('assignmentCenterView');
+        return isAssignmentCenterView(assignmentCenterView) ? assignmentCenterView : null;
       });
       settingsWrites = operation.then(() => {}, () => {});
       return operation;
@@ -58,12 +68,7 @@ export function createCoordinator(api: ExtensionApi): (message: unknown, sender:
       if ('accountPreference' in raw.update && typeof raw.update.accountPreference !== 'string') throw new Error('Invalid account preference.');
       const patch = settingsPatch(raw.update as Partial<Omit<Settings, 'schemaVersion'>>);
       const saved = settingsWrites.then(async () => {
-        const companions = FEATURE_DEFINITIONS.filter((feature) => 'legacyKey' in feature && feature.legacyKey in patch && !(feature.key in patch));
-        if (companions.length) {
-          // Pin inherited preferences before editing their former combined switch.
-          const current = normalizeSettings(await api.storage.sync.get(null));
-          for (const { key } of companions) patch[key] = current[key];
-        }
+        await migrateSettings(api.storage.sync);
         await api.storage.sync.set(patch);
       });
       settingsWrites = saved.catch(() => {});

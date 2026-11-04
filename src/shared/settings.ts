@@ -7,27 +7,32 @@ export const FEATURE_DEFINITIONS = [
   { key: 'helpfulTabTitles', label: 'Descriptive tab titles', description: 'Identify the course, assignment, or page in each browser tab.', defaultValue: true },
   { key: 'fixFavicon', label: 'Blackbaud tab icon', description: 'Replace the school portal’s tab icon with the Blackbaud icon.', defaultValue: true },
   { key: 'automaticLogin', label: 'Automatic Google sign-in', description: 'Continue through Blackbaud and select your school Google account. Passwords and authentication challenges stay manual.', defaultValue: true },
-  { key: 'optimizeLoginPage', legacyKey: 'loginFix', label: 'School sign-in page', description: 'Replace the initial school login form with a Google sign-in button.', defaultValue: true },
-  { key: 'loadingOverlay', legacyKey: 'loadBetweenPages', label: 'Sign-in status messages', description: 'Show progress and a Continue manually action during automatic Google sign-in.', defaultValue: true },
+  { key: 'optimizeLoginPage', label: 'School sign-in page', description: 'Replace the initial school login form with a Google sign-in button.', defaultValue: true },
+  { key: 'loadingOverlay', label: 'Sign-in status messages', description: 'Show progress and a Continue manually action during automatic Google sign-in.', defaultValue: true },
   { key: 'assignmentShortcuts', label: 'Assignment shortcuts', description: 'Filter loaded assignments to unfinished work or assignments due today and tomorrow.', defaultValue: true },
   { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', defaultValue: true },
   { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do from the modern Assignment Center.', defaultValue: true },
-  { key: 'assignmentStatusLabels', legacyKey: 'assignmentCompletion', label: 'Assignment status labels', description: 'Show clearer Graded, Missing, and In progress labels in the modern Assignment Center.', defaultValue: true },
+  { key: 'assignmentStatusLabels', label: 'Assignment status labels', description: 'Show clearer Graded, Missing, and In progress labels in the modern Assignment Center.', defaultValue: true },
   { key: 'assignmentReturnLink', label: 'Assignment return link', description: 'Make the Assignments link on an assignment page open Assignment Center.', defaultValue: true },
   { key: 'prepareAssignmentCenter', label: 'Preload Assignment Center', description: 'Prepare the modern Assignment Center from Schedule or when you hover over or focus its link.', defaultValue: true },
-  { key: 'fixInvalidPages', legacyKey: 'fixBrokenAssignmentCenter', label: 'Stalled assignment recovery', description: 'Offer a reload action when the modern Assignment Center stays loading.', defaultValue: true },
-  { key: 'classSearch', legacyKey: 'classSwitching', label: 'Classes search', description: 'Filter the Classes menu by class name.', defaultValue: true },
+  { key: 'fixInvalidPages', label: 'Stalled assignment recovery', description: 'Offer a reload action when the modern Assignment Center stays loading.', defaultValue: true },
+  { key: 'classSearch', label: 'Classes search', description: 'Filter the Classes menu by class name.', defaultValue: true },
   { key: 'classSwitching', label: 'Remember class tab', description: 'Keep Assignments or Roster open when switching classes.', defaultValue: true },
-  { key: 'rosterTools', legacyKey: 'copyRosterTools', label: 'Roster copy buttons', description: 'Copy roster names or email addresses in one click.', defaultValue: true },
+  { key: 'rosterTools', label: 'Roster copy buttons', description: 'Copy roster names or email addresses in one click.', defaultValue: true },
   { key: 'enhancedDirectory', label: 'Directory redesign', description: 'Browse supported directories with search, sorting, contact details, and Columns or Rows views.', defaultValue: true },
   { key: 'downloadFullAvatar', label: 'Full-size profile photos', description: 'Add an option to open the original photo from a directory profile.', defaultValue: true },
   { key: 'resourceSearch', label: 'Resource Board search', description: 'Find resource cards by name or description.', defaultValue: true },
-  { key: 'classicAssignmentCenter', label: 'Classic Assignment Center view', description: 'Add the native classic Assignment Center beside Calendar and List, and remember your last chosen view.', defaultValue: true },
 ] as const;
 
 export type FeatureKey = typeof FEATURE_DEFINITIONS[number]['key'];
 export type EnhancementMode = 'essentials' | 'full';
 export type Settings = { schemaVersion: 2; enabled: boolean; mode: EnhancementMode; accountPreference: string } & Record<FeatureKey, boolean>;
+
+export const FULL_DEFAULTS_VERSION = 1;
+
+export function hasFullDefaultsMigration(raw: Record<string, unknown>): boolean {
+  return typeof raw.fullDefaultsVersion === 'number' && Number.isSafeInteger(raw.fullDefaultsVersion) && raw.fullDefaultsVersion >= FULL_DEFAULTS_VERSION;
+}
 
 const essentialFeatures = new Set<FeatureKey>(['automaticLogin', 'optimizeLoginPage', 'loadingOverlay', 'assignmentPreviews']);
 
@@ -62,13 +67,12 @@ export function normalizeAccountPreference(value: unknown): string {
 export function normalizeSettings(raw: Record<string, unknown> = {}): Settings {
   const settings = {
     ...DEFAULT_SETTINGS,
-    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : raw.uiMode !== 'original',
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SETTINGS.enabled,
     mode: raw.mode === 'essentials' ? 'essentials' as const : 'full' as const,
     accountPreference: normalizeAccountPreference(raw.accountPreference),
   };
   for (const feature of FEATURE_DEFINITIONS) {
-    const legacyKey = 'legacyKey' in feature ? feature.legacyKey : feature.key;
-    const value = raw[feature.key] ?? raw[legacyKey];
+    const value = raw[feature.key];
     settings[feature.key] = typeof value === 'boolean' ? value : feature.defaultValue;
   }
   return settings;
@@ -76,9 +80,13 @@ export function normalizeSettings(raw: Record<string, unknown> = {}): Settings {
 
 export async function getSettings(): Promise<Settings> {
   const storage = extensionApi().storage.sync;
-  // Normalize legacy preferences on read. A full migration write could race
-  // with a newer choice saved by another tab or the popup.
-  return normalizeSettings(await storage.get(null));
+  let raw = await storage.get(null);
+  if (!hasFullDefaultsMigration(raw)) {
+    await requestCoordinator({ channel: 'blackbaud-next-coordinator-v1', kind: 'migrate-settings' });
+    // Read again after the worker's ordered migration, retaining newer choices.
+    raw = await storage.get(null);
+  }
+  return normalizeSettings(raw);
 }
 
 export function settingsPatch(update: Partial<Omit<Settings, 'schemaVersion'>>): Record<string, unknown> {

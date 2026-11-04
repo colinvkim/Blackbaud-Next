@@ -16,7 +16,7 @@ export const flush = () => new Promise<void>((resolve) => setImmediate(resolve))
 export function setupSettingsUi(kind: 'popup' | 'options', options: { failRead?: boolean; holdInitialRead?: boolean; values?: Record<string, unknown> } = {}) {
   const dom = new JSDOM(pages[kind], { url: `chrome-extension://popup-fixture/${kind}.html` });
   const document = dom.window.document;
-  const values: Record<string, unknown> = { ...DEFAULT_SETTINGS, ...options.values };
+  const values: Record<string, unknown> = { fullDefaultsVersion: 1, ...DEFAULT_SETTINGS, ...options.values };
   const writes: Record<string, unknown>[] = [];
   const listeners = new Set<(changes: Record<string, unknown>, area: string) => void>();
   const heldWrites: (() => void)[] = [];

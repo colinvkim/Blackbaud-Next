@@ -27,12 +27,36 @@ test('three modes apply live, retain customized Full, and reset across popup and
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const base = `chrome-extension://${id}`;
+    const worker = await (await browser.waitForTarget(target => target.type() === 'service_worker' && target.url().startsWith(base))).worker();
+    assert.ok(worker);
+    await worker.evaluate(async () => {
+      await (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome.storage.sync.set({
+        automaticLogin:false, loadBetweenPages:false, fixFavicon:false, oldAssignmentCenter:true,
+        loginFix:false, wideUI:true, copyRosterTools:false, downloadFullAvatar:false, fixBrokenAssignmentCenter:false,
+      });
+    });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(6_000);
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (request.url().startsWith('chrome-extension:')) { void request.continue(); return; }
+      if (request.resourceType() === 'image') { void request.respond({ status:200, contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="160" height="32"><rect width="160" height="32" fill="#ddd"/></svg>' }); return; }
+      void request.respond({ status:200, contentType:'text/html', body:fixtureHtml });
+    });
+    await page.setViewport({ width:1280, height:900 });
+    await page.goto(`${origin}/lms-assignment/assignment-center/student?svcid=edu`, { waitUntil:'domcontentloaded' });
+    await page.waitForSelector('.bn-preview-button');
     let popup = await browser.newPage();
     popup.setDefaultTimeout(6_000);
     await popup.goto(`${base}/popup.html`);
     await ready(popup, '#mode-full');
     assert.equal(await popup.$eval('#mode-full', input => (input as HTMLInputElement).checked), true);
     assert.equal(await popup.$$eval('input', inputs => inputs.length), 3, 'The popup contains only the three mode inputs');
+    assert.equal(await popup.$eval('#customized', label => (label as HTMLElement).hidden), true, 'The April release upgrades to the complete Full preset');
+    const upgraded = await popup.evaluate(async () => (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome.storage.sync.get(null));
+    assert.equal(upgraded.fullDefaultsVersion, 1);
+    assert.equal(upgraded.automaticLogin, true);
+    assert.equal(upgraded.assignmentCenterView, undefined, 'The old Assignment Center toggle does not select Classic');
     const opened = browser.waitForTarget(target => target.type() === 'page' && target.url() === `${base}/options.html`, { timeout:6_000 });
     await popup.click('a[href="options.html"]');
     const advanced = await (await opened).page();
@@ -48,7 +72,8 @@ test('three modes apply live, retain customized Full, and reset across popup and
     await advanced.focus('#advanced-settings > summary');
     await advanced.keyboard.press('Space');
     await advanced.waitForSelector('#rosterTools', { visible:true });
-    for (const selector of ['#pageAppearance', '#automaticLogin', '#assignmentPreviews', '#assignmentReturnLink', '#classicAssignmentCenter']) assert.ok(await advanced.$(selector));
+    for (const selector of ['#pageAppearance', '#automaticLogin', '#assignmentPreviews', '#assignmentReturnLink']) assert.ok(await advanced.$(selector));
+    assert.equal(await advanced.$$eval('#classicAssignmentCenter, #oldAssignmentCenter', inputs => inputs.length), 0, 'Assignment views are chosen on Assignment Center');
     await advanced.click('#rosterTools');
     await advanced.click('#assignmentPreviews');
     await advanced.type('#account-preference', 'student@school.test');
@@ -57,18 +82,9 @@ test('three modes apply live, retain customized Full, and reset across popup and
     assert.equal(await advanced.$eval('#save-feedback', footer => (footer as HTMLElement).hidden), true, 'Idle settings have no footer helper or success message');
     await popup.waitForSelector('#customized:not([hidden])');
 
-    const page = await browser.newPage();
-    page.setDefaultTimeout(6_000);
-    await page.setRequestInterception(true);
-    page.on('request', request => {
-      if (request.url().startsWith('chrome-extension:')) { void request.continue(); return; }
-      if (request.resourceType() === 'image') { void request.respond({ status:200, contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="160" height="32"><rect width="160" height="32" fill="#ddd"/></svg>' }); return; }
-      void request.respond({ status:200, contentType:'text/html', body:fixtureHtml });
-    });
-    await page.setViewport({ width:1280, height:900 });
-    await page.goto(`${origin}/lms-assignment/assignment-center/student?svcid=edu`, { waitUntil:'domcontentloaded' });
     await page.waitForSelector('html[data-blackbaud-next-appearance]');
     await page.waitForSelector('[data-blackbaud-next-favicon]');
+    await page.waitForFunction(() => !document.querySelector('.bn-preview-button'), { polling:100 });
     assert.equal(await page.$('.bn-preview-button'), null, 'Full honors the saved preview preference');
     const native = await page.$('#native-assignment');
 
@@ -97,7 +113,6 @@ test('three modes apply live, retain customized Full, and reset across popup and
     await advanced.waitForFunction(() => (document.getElementById('assignmentPreviews') as HTMLInputElement).checked && (document.getElementById('rosterTools') as HTMLInputElement).checked, { polling:100 });
     await page.waitForSelector('.bn-preview-button');
     assert.equal(await advanced.$eval('#account-preference', input => (input as HTMLInputElement).value), 'student@school.test');
-    assert.equal(await advanced.$eval('#classicAssignmentCenter', input => (input as HTMLInputElement).checked), true);
 
     for (const theme of ['light', 'dark']) {
       await popup.emulateMediaFeatures([{ name:'prefers-color-scheme', value:theme }]);

@@ -25,13 +25,13 @@ test('mode choices retain the Full setup and account preference', async () => {
 });
 
 test('resetting Full restores recommended features without changing the active mode or account', async () => {
-  const popup = setupSettingsUi('popup', { values: { enabled: false, mode: 'essentials', rosterTools: false, classicAssignmentCenter: false, accountPreference: 'school.test' } });
+  const popup = setupSettingsUi('popup', { values: { enabled: false, mode: 'essentials', rosterTools: false, resourceSearch: false, accountPreference: 'school.test' } });
   try {
     await flush();
     popup.document.getElementById('reset-full')!.click();
     await flush();
     assert.equal(popup.values.rosterTools, true);
-    assert.equal(popup.values.classicAssignmentCenter, true);
+    assert.equal(popup.values.resourceSearch, true);
     assert.equal(popup.values.enabled, false);
     assert.equal(popup.values.mode, 'essentials');
     assert.equal(popup.values.accountPreference, 'school.test');
