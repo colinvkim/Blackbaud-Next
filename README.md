@@ -5,7 +5,7 @@
 
 A clearer, more useful Blackbaud student portal.
 
-Blackbaud Next is a Chrome extension that improves Blackbaud LMS. It adds cleaner layouts, assignment tools, easier navigation, and other useful features. The extension is designed primarily teachers, but it also provides utility to teachers and administrators.
+Blackbaud Next is a Chrome extension that improves Blackbaud LMS. It adds cleaner layouts, assignment tools, easier navigation, and other useful features. The extension is designed primarily for students, but it also provides utility to teachers and administrators.
 
 ## Highlights
 
