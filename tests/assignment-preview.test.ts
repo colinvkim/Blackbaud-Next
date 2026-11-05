@@ -199,7 +199,17 @@ test('preview responses validate the requested assignment and retain only displa
 
 test('preview student identity uses current UserInfo and refuses another persona or ambiguous identity', () => {
   assert.equal(currentStudentUserId({ UserInfo: { UserId: 42, DefaultPersonaId: 2 }, MasterUserInfo: { UserId: 99 } }), 42);
-  for (const payload of [null, { MasterUserInfo: { UserId: 42, DefaultPersonaId: 2 } }, { UserInfo: { UserId: 42, DefaultPersonaId: 1 } }, { UserInfo: { UserId: '42', DefaultPersonaId: 2 } }, { UserInfo: { UserId: -1, DefaultPersonaId: 2 } }]) {
+  const student = { Id: 2, Active: true, Selected: true };
+  const other = { Id: 1, Active: true, Selected: true };
+  const user = { UserInfo: { UserId: 42 } };
+  for (const payload of [
+    null, { MasterUserInfo: { UserId: 42, DefaultPersonaId: 2 }, Personas: [student] },
+    { UserInfo: { UserId: 42, DefaultPersonaId: 1 }, Personas: [student] },
+    { UserInfo: { UserId: '42', DefaultPersonaId: 2 } }, { UserInfo: { UserId: -1, DefaultPersonaId: 2 } },
+    { ...user, Personas: [{ ...student, Selected: false }, other] },
+    { ...user, Personas: [{ ...student, Active: false }] },
+    { ...user, Personas: [student, other] },
+  ]) {
     assert.throws(() => currentStudentUserId(payload), /current student/);
   }
 });
@@ -219,13 +229,14 @@ test('preview downloads use native DownloadUrl with safe names and do not guess 
   ]);
 });
 
-test('preview fetch keeps requests same-origin, forwards cancellation, and refuses mismatched identity', async (t) => {
+test('preview fetch uses the current selected student, forwards cancellation, and rejects foreign targets', async (t) => {
   fixture('');
   const controller = new AbortController();
+  const context = { UserInfo: { UserId: 42 }, Personas: [{ Id: 2, Active: true, Selected: true }] };
   const calls: Array<{ path: string; options?: RequestInit }> = [];
   t.mock.method(globalThis, 'fetch', async (path: RequestInfo | URL, options?: RequestInit) => {
     calls.push({ path: String(path), options });
-    return new Response(JSON.stringify(String(path) === '/api/webapp/context' ? { UserInfo: { UserId: 42, DefaultPersonaId: 2 } } : assignment()));
+    return new Response(JSON.stringify(String(path) === '/api/webapp/context' ? context : assignment()));
   });
   await fetchAssignmentPreview(target(), controller.signal);
   assert.deepEqual(calls.map((call) => call.path), ['/api/webapp/context', '/api/assignment2/UserAssignmentDetailsGetAllStudentData?assignmentIndexId=123&studentUserId=42&personaId=2']);

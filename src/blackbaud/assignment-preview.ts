@@ -68,9 +68,17 @@ function text(value: unknown, length = 1000): string {
 }
 
 export function currentStudentUserId(payload: unknown): number {
-  const user = record(record(payload)?.UserInfo);
+  const context = record(payload);
+  const user = record(context?.UserInfo);
   const id = user?.UserId;
-  if (!user || user.DefaultPersonaId !== 2 || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
+  let isStudent = user?.DefaultPersonaId === 2;
+  // Some contexts report the current persona in the top-level list.
+  if (user?.DefaultPersonaId === undefined && Array.isArray(context?.Personas)) {
+    const selected = context.Personas.map(record).filter((persona) => persona?.Selected === true);
+    const [persona] = selected;
+    isStudent = selected.length === 1 && persona?.Id === 2 && persona.Active === true;
+  }
+  if (!isStudent || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
     throw new Error('Assignment previews require the current student account.');
   }
   return id;

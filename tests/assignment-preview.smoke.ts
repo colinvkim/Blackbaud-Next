@@ -83,7 +83,9 @@ test('Chrome preview actions stay secondary, support keyboard activation inside 
       if (url.pathname === '/lms-assignment/assignment-center/student') {
         void request.respond({ status: 200, contentType: 'text/html', body: fixtureHtml });
       } else if (url.pathname === '/api/webapp/context') {
-        void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ UserInfo: { UserId: 42, DefaultPersonaId: 2 } }) });
+        void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          UserInfo: { UserId: 42 }, Personas: [{ Id: 2, Active: true, Selected: true }],
+        }) });
       } else if (url.pathname === '/api/assignment2/UserAssignmentDetailsGetAllStudentData') {
         const respond = (status = 200) => request.respond({ status, contentType: 'application/json', body: JSON.stringify({
           AssignmentIndexId: Number(url.searchParams.get('assignmentIndexId')), ShortDescription: 'Short assignment',
