@@ -38,7 +38,7 @@ test('LMS startup arms directory loading before DOM readiness and honors disable
           removeListener: (listener: (changes: unknown, area: string) => void) => { subscriptions.delete(listener); },
         },
       },
-      runtime: { getURL: (path: string) => `chrome-extension://fixture/${path}` },
+      runtime: { id: 'fixture', getURL: (path: string) => `chrome-extension://fixture/${path}` },
     },
   })) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));

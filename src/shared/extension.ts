@@ -41,9 +41,17 @@ export interface ExtensionApi {
   };
 }
 
-export function extensionApi(): ExtensionApi {
+function currentExtensionApi(): ExtensionApi | undefined {
   const scope = globalThis as typeof globalThis & { chrome?: ExtensionApi; browser?: ExtensionApi };
-  const api = scope.chrome ?? scope.browser;
+  return scope.chrome ?? scope.browser;
+}
+
+export function hasExtensionContext(): boolean {
+  return Boolean(currentExtensionApi()?.runtime?.id);
+}
+
+export function extensionApi(): ExtensionApi {
+  const api = currentExtensionApi();
   if (!api?.storage) throw new Error('Extension storage is unavailable.');
   return api;
 }

@@ -142,6 +142,15 @@ test('compiled resource UI, stylesheet persistence and shared URL lifecycle work
     assert.equal((await timers(page)).filter((delay) => delay === 2_000).length, 1);
     await toggle('mode-full');
     await page.waitForSelector('.bn-resource-search');
+    // Reloading an unpacked extension invalidates the old tab's content scripts.
+    assert.equal(await browser.installExtension(extension), id);
+    await page.evaluate(() => history.pushState({}, '', '/lms-assignment/assignment-center/student'));
+    await page.waitForFunction(() => !document.querySelector('.bn-resource-search') &&
+      !document.documentElement.hasAttribute('data-blackbaud-next-appearance'));
+    assert.equal(await page.$('#blackbaud-next-assignment-views'), null);
+    assert.deepEqual(await timers(page), []);
+    await page.goto(source, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.bn-resource-search');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.bn-resource-search');
     assert.equal((await timers(page)).filter((delay) => delay === 2_000).length, 1);

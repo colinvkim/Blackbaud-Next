@@ -1,4 +1,5 @@
 import { FeatureController } from './controller.ts';
+import { hasExtensionContext } from '../shared/extension.ts';
 import { getSettings, subscribeSettings } from '../shared/settings.ts';
 import { watchLocation } from '../shared/location.ts';
 import type { Settings } from '../shared/settings.ts';
@@ -10,6 +11,7 @@ export interface StartOptions {
 }
 
 export async function startExtension(features: Feature[], options: StartOptions = {}): Promise<Cleanup> {
+  if (!hasExtensionContext()) return () => {};
   const controller = new FeatureController(features);
   const startup = new AbortController();
   let ready = !options.ready;
@@ -20,6 +22,8 @@ export async function startExtension(features: Feature[], options: StartOptions 
   let href = window.location.href;
   const refresh = () => {
     if (disposed) return;
+    // An extension reload can leave the old document and its cached settings alive.
+    if (!hasExtensionContext()) { cleanup(); return; }
     const currentHref = window.location.href;
     const navigated = href !== currentHref;
     href = currentHref;
@@ -40,6 +44,7 @@ export async function startExtension(features: Feature[], options: StartOptions 
       refresh();
     } catch (error) {
       if (disposed || revision !== reading) return;
+      if (!hasExtensionContext()) { cleanup(); return; }
       // Remove active enhancements if their settings can no longer be read.
       settings = null;
       controller.dispose();
@@ -49,18 +54,17 @@ export async function startExtension(features: Feature[], options: StartOptions 
     }
   };
   const unsubscribe = subscribeSettings(() => { void loadSettings(); });
-  const stopLocation = watchLocation(refresh, startup.signal);
   const cleanup = () => {
     if (disposed) return;
     disposed = true;
     startup.abort();
-    unsubscribe();
-    stopLocation();
     window.removeEventListener('pagehide', cleanup);
     controller.dispose();
+    if (hasExtensionContext()) unsubscribe();
   };
   // The entrypoint starts a fresh runtime when pageshow restores the BFCache.
   window.addEventListener('pagehide', cleanup, { once: true });
+  watchLocation(refresh, startup.signal);
   const loading = loadSettings();
   const prepare = options.ready;
   const preparing = prepare ? Promise.resolve().then(() => prepare(startup.signal)).then(() => {

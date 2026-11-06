@@ -86,6 +86,7 @@ test('the real runtime reads current preferences only at activation and again af
   for (const [key, value] of Object.entries({
     window: frame.page.defaultView,
     chrome: {
+      runtime: { id: 'fixture' },
       storage: {
         sync: { get: async () => { reads++; return { ...DEFAULT_SETTINGS, fullDefaultsVersion: 1, enabled }; } },
         onChanged: {

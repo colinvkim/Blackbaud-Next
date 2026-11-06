@@ -22,6 +22,7 @@ function setup(featureOptions: Partial<Feature> = {}, withNavigation = false) {
   Object.assign(globalThis, { window: dom.window });
   console.warn = () => {};
   scope.chrome = {
+    runtime: { id: 'fixture' },
     storage: {
       sync: { get: async () => { readCount++; return read().then(settings => ({ ...settings, fullDefaultsVersion: 1 })); } },
       onChanged: {

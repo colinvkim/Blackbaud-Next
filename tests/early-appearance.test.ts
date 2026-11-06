@@ -27,6 +27,7 @@ function fixture(rootless = true) {
     document: page,
     MutationObserver: dom.window.MutationObserver,
     chrome: {
+      runtime: { id: 'fixture' },
       storage: {
         sync: { get: () => { reads++; return read().then(settings => ({ ...settings, fullDefaultsVersion: 1 })); } },
         onChanged: {
