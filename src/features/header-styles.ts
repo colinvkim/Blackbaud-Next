@@ -43,6 +43,7 @@ ${shell} {
 }
 ${containers} { box-sizing: border-box; width: calc(100% - var(--bn-shell-gutter) * 2); max-width: var(--bn-shell-max-width); margin-inline: auto; padding-inline: var(--bn-shell-inset); }
 ${shell} #site-header-container { background: linear-gradient(110deg, #152b43, #1b344f) !important; }
+${shell}:has([data-bn-header-part="masthead-column"]) #site-header-container { min-height: var(--bn-masthead-height); }
 ${masthead} { font-family: var(--bn-font); }
 ${shell} #site-nav-container { background: var(--bn-surface) !important; border-bottom: 1px solid var(--bn-header-line); }
 ${shell} :is(#site-header, #site-nav-container, #site-nav-lower, #site-nav-bottom) [data-bn-native-icon="replaced"] { display: none !important; }
@@ -51,7 +52,7 @@ ${masthead} [data-bn-header-part="masthead-column"] { display: flex; align-items
 ${masthead} [data-bn-header-part="brand"] { order: 0; flex: 0 1 auto; float: none; width: auto; min-width: 0; max-width: 300px; height: auto; margin: 0 !important; padding: 0; }
 ${masthead} [data-bn-header-part="brand"] > a { display: flex; align-items: center; min-height: 44px; }
 /* Fit each school's original image within shared bounds, preserving its aspect ratio. */
-${masthead} [data-bn-header-part="brand"] img { display: block; width: auto !important; height: auto !important; max-width: min(300px, 100%) !important; max-height: 34px !important; object-fit: contain; }
+${masthead} [data-bn-header-part="brand"] img { display: block; margin-block: 0 !important; width: auto !important; height: auto !important; max-width: min(300px, 100%) !important; max-height: 34px !important; object-fit: contain; }
 ${masthead} [data-bn-header-part="masthead-column"] > #site-user-container { order: 1; }
 ${masthead} [data-bn-header-part="masthead-column"] > #site-user-container:has([data-bn-header-part="tools"]) { order: 2; min-width: 0; margin-left: auto; }
 ${masthead} [data-bn-header-part="tools"] { order: 2; flex: 0 1 auto; min-width: 0; height: auto; float: none; margin: 0 0 0 auto !important; }
@@ -172,7 +173,6 @@ ${menus} > .bn-class-search .bn-tool-status { grid-column: 1 / -1; grid-row: 1; 
 @media (min-width: 992px) {
   ${shell}:has([data-bn-header-part="masthead-column"]) #site-header { height: var(--bn-masthead-height); }
   ${shell}:has([data-bn-header-part="masthead-column"]) #site-header-parent-container { height: var(--bn-masthead-height); }
-  ${shell}:has([data-bn-header-part="masthead-column"]) #site-header-container { min-height: var(--bn-masthead-height); }
   ${shell}:has([data-bn-header-part="masthead-column"]) #site-header-bottom { margin: 0; height: 0; }
   ${shell}:has([data-bn-header-part="masthead-column"]) #site-nav-container { top: var(--bn-masthead-height); }
   ${shell}:has([data-bn-header-part="primary-navigation"]) #site-nav-container { height: var(--bn-primary-height); }

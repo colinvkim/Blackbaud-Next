@@ -186,8 +186,9 @@ function nativeFixture(modern: boolean, news = false): string {
     .sky-repeater-item-collapsible { padding: 10px; }
     .sky-repeater-item-collapsible h3 { display: inline; }
     @media (min-width: 992px) { #coursesContainer > .row > .col-md-3 { float: left; width: 25%; } #coursesContainer > .row > .col-md-2 { float: left; width: 16.666667%; } }
+    @media (max-width: 1199px) { #site-logo img { margin-top: 7px; } }
     @media (max-width: 700px) { #site-nav-container { display: none; } .ch.col-md-4 { width: 100%; } }
-    @media (max-width: 991px) { #site-mobile-btn { display: block; } #site-user-nav, #site-nav-container, #site-nav-lower { display: none; } #site-top-spacer { height: 73px; } }
+    @media (max-width: 991px) { #site-logo img { margin-top: 15px; } #site-mobile-btn { display: block; } #site-user-nav, #site-nav-container, #site-nav-lower { display: none; } #site-top-spacer { height: 73px; } }
   </style></head><body>${modern ? '<app-root>' : ''}
     ${utilityHeader(modern)}
     <aside id="fixture-native-drawer" hidden><a href="/app/student?svcid=edu#studentmyday/schedule">Native mobile Schedule</a><button type="button">Close navigation</button></aside>
@@ -691,7 +692,7 @@ async function schoolLogoVariants(page: Page, native: NativeSchoolLogo, enhanced
         image.setAttribute('src', nextSource);
         await image.decode();
       }, source);
-      for (const width of enhanced ? [992, 1024, 1150, 1280, 320, 391] : [1280]) {
+      for (const width of enhanced ? [1280, 1183, 1150, 1024, 992, 991, 723, 391, 320] : [1280]) {
         await page.setViewport({ width, height: 900 });
         const state = await native.image.evaluate((image) => {
           const bounds = (element: Element) => {
@@ -703,6 +704,7 @@ async function schoolLogoVariants(page: Page, native: NativeSchoolLogo, enhanced
             source: image.getAttribute('src'), destination: link.getAttribute('href'),
             sameImage: document.querySelector('#site-logo img') === image,
             logo: bounds(image), header: bounds(document.querySelector('#site-header')!),
+            masthead: bounds(document.querySelector('#site-header-container')!),
             natural: { width: image.naturalWidth, height: image.naturalHeight },
             utilities: [...document.querySelectorAll('[data-native-utility]')].map(bounds).filter(({ width }) => width > 0),
             viewport: innerWidth, documentWidth: document.documentElement.scrollWidth,
@@ -720,6 +722,9 @@ async function schoolLogoVariants(page: Page, native: NativeSchoolLogo, enhanced
           const ratioError = Math.abs(state.logo.width * state.natural.height - state.logo.height * state.natural.width) / (state.logo.width * state.natural.height);
           assert.ok(ratioError < .005, `Wide, square, and tall school artwork retains its aspect ratio: ${evidence}`);
           assert.ok(state.logo.left >= state.header.left - 1 && state.logo.right <= state.header.right + 1 && state.logo.top >= state.header.top - 1 && state.logo.bottom <= state.header.bottom + 1, `School logos fit the compact masthead: ${evidence}`);
+          const spaceAbove = state.logo.top - state.masthead.top;
+          const spaceBelow = state.masthead.bottom - state.logo.bottom;
+          assert.ok(Math.abs(spaceAbove - spaceBelow) <= 2, `The school logo is centered in the visible top bar: ${evidence}`);
           for (const utility of state.utilities) assert.ok(state.logo.right <= utility.left + 1, `School artwork does not overlap native utility controls: ${evidence}`);
           assert.ok(state.documentWidth <= state.viewport + 1, `School logos do not make the page overflow: ${evidence}`);
         } else if (baseline) {
