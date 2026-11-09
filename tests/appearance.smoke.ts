@@ -1807,7 +1807,8 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       const chrome = (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome;
       await chrome.storage.sync.set(update);
     }, preferences);
-    await setPreferences({ enabled: true, ...Object.fromEntries(FEATURE_DEFINITIONS.map(({ key }) => [key, key === 'pageAppearance'])) });
+    await setPreferences({ enabled: true, ...Object.fromEntries(FEATURE_DEFINITIONS
+      .filter(({ key }) => key !== 'navigationAppearance').map(({ key }) => [key, key === 'pageAppearance'])) });
     await earlyAppearance(browser, setPreferences);
     await legacy.goto(legacyUrl, { waitUntil: 'domcontentloaded' });
     await modern.goto(modernUrl, { waitUntil: 'domcontentloaded' });
@@ -1818,7 +1819,7 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       for (const page of [legacy, modern]) await page.waitForFunction(() => document.querySelectorAll('[data-bn-navigation-icon]').length === 14, { polling: 50 });
     };
     const unmounted = async () => {
-      for (const page of [legacy, modern]) await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-appearance], [data-bn-portal-shell], [data-bn-page], [data-bn-progress-summary], [data-bn-progress-courses], [data-bn-course-row], [data-bn-navigation-icon], [data-bn-native-icon], [data-bn-header-part], [data-bn-header-current], [data-bn-header-count-empty]'), { polling: 50 });
+      for (const page of [legacy, modern]) await page.waitForFunction(() => !document.querySelector('[data-blackbaud-next-appearance], [data-bn-portal-shell], [data-bn-navigation-appearance], [data-bn-page], [data-bn-progress-summary], [data-bn-progress-courses], [data-bn-course-row], [data-bn-navigation-icon], [data-bn-native-icon], [data-bn-header-part], [data-bn-header-current], [data-bn-header-count-empty]'), { polling: 50 });
     };
     const setAppearance = async (enabled: boolean) => {
       await setPreferences({ pageAppearance: enabled });
@@ -1833,10 +1834,21 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
       image: (await page.$('#site-logo img')) as ElementHandle<HTMLImageElement>,
       link: (await page.$('#site-logo > a')) as ElementHandle<HTMLAnchorElement>,
     });
+    const headerStyles = (page: Page) => page.evaluate(() => [
+      '#site-header-container', '#site-nav-container', '#site-nav-lower', '#site-top-spacer',
+    ].map(selector => {
+      const style = getComputedStyle(document.querySelector(selector)!);
+      return { background: style.background, height: style.height, top: style.top };
+    }));
+    const nativeHeaders = new Map<Page, Awaited<ReturnType<typeof headerStyles>>>();
     const nativeLogoSizes = new Map<Page, SchoolLogoSizes>();
     await setPreferences({ pageAppearance: false });
     await unmounted();
-    for (const page of [legacy, modern]) nativeLogoSizes.set(page, await schoolLogoVariants(page, logoNodes.get(page)!, false));
+    for (const page of [legacy, modern]) {
+      await page.setViewport({ width: 1280, height: 900 });
+      nativeHeaders.set(page, await headerStyles(page));
+      nativeLogoSizes.set(page, await schoolLogoVariants(page, logoNodes.get(page)!, false));
+    }
     await setPreferences({ pageAppearance: true });
     await mounted();
     const labels = new Map<Page, Awaited<ReturnType<typeof navigationLabels>>>();
@@ -1877,6 +1889,29 @@ test('compiled appearance preserves native navigation/icons, responsive cards, a
     const classInputs = await Promise.all([legacy, modern].map(page => page.$('.bn-class-search input')));
     await setPreferences({ classSwitching: false });
     for (const input of classInputs) assert.ok(await input!.evaluate(element => element.isConnected && (element as HTMLInputElement).value === 'geometry'), 'Changing remembered class tabs preserves the current search');
+    const contentStyles = (page: Page) => page.$eval('#site-main[data-bn-page], body[data-bn-page] sky-toolbar', element => {
+      const style = getComputedStyle(element);
+      return { width: style.width, padding: style.padding, background: style.background };
+    });
+    const contentBefore = new Map<Page, Awaited<ReturnType<typeof contentStyles>>>();
+    for (const page of [legacy, modern]) {
+      await page.setViewport({ width: 1280, height: 900 });
+      contentBefore.set(page, await contentStyles(page));
+    }
+    await popup.bringToFront();
+    await popup.focus('#advanced-settings > summary');
+    await popup.keyboard.press('Space');
+    await popup.click('#navigationAppearance');
+    for (const page of [legacy, modern]) {
+      await page.waitForFunction(() => !document.querySelector('[data-bn-header-part], [data-bn-navigation-icon]'), { polling: 50 });
+      assert.deepEqual(await headerStyles(page), nativeHeaders.get(page), 'Disabling only navigation appearance restores the native bars and spacer');
+      assert.deepEqual(await contentStyles(page), contentBefore.get(page), 'The page keeps its appearance with navigation appearance off');
+      await navigationIcons(page, false);
+      await headerUtilities(page, false);
+    }
+    for (const input of classInputs) assert.ok(await input!.evaluate(element => element.isConnected && (element as HTMLInputElement).value === 'geometry'), 'Class search stays active when only navigation appearance changes');
+    await popup.click('#navigationAppearance');
+    await mounted();
     await setAppearance(false);
     for (const page of [legacy, modern]) assert.equal(await page.$eval('.bn-class-search input', (input) => getComputedStyle(input, '::placeholder').fontStyle), 'normal', 'Class search retains its own placeholder style with appearance off');
     await setAppearance(true);

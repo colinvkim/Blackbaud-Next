@@ -3,7 +3,8 @@ import { requestCoordinator } from './coordinator.ts';
 import type { Cleanup } from './types.ts';
 
 export const FEATURE_DEFINITIONS = [
-  { key: 'pageAppearance', label: 'Page appearance', description: 'Restyle navigation and supported pages, including courses, assignments, and rosters.', defaultValue: true },
+  { key: 'pageAppearance', label: 'Page appearance', description: 'Restyle supported pages, including courses, assignments, and rosters.', defaultValue: true },
+  { key: 'navigationAppearance', label: 'Navigation appearance', description: 'Restyle the portal header, navigation bars, tabs, and menus. Requires Page appearance.', defaultValue: true },
   { key: 'helpfulTabTitles', label: 'Descriptive tab titles', description: 'Identify the course, assignment, or page in each browser tab.', defaultValue: true },
   { key: 'fixFavicon', label: 'Blackbaud tab icon', description: 'Replace the school portal’s tab icon with the Blackbaud icon.', defaultValue: true },
   { key: 'automaticLogin', label: 'Automatic Google sign-in', description: 'Continue through Blackbaud and select your school Google account. Passwords and authentication challenges stay manual.', defaultValue: true },

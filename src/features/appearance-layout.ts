@@ -1,6 +1,6 @@
-import { appearanceObservationSelector, nativeAppearancePage, nativeAppearancePageKind, nativeModernAppearanceRoute, nativeProgressAppearance } from '../blackbaud/appearance.ts';
+import { appearanceObservationSelector, nativeAppearancePage, nativeAppearancePageKind, nativeAppearanceShellKind, nativeModernAppearanceRoute, nativeProgressAppearance } from '../blackbaud/appearance.ts';
 import { isLmsPage } from '../blackbaud/routes.ts';
-import { nativeAppearanceNavigation } from '../blackbaud/appearance-icons.ts';
+import { nativeNavigationIconTargets } from '../blackbaud/appearance-icons.ts';
 import { createAttributeOwnership } from '../shared/attribute-ownership.ts';
 import { observeDom, watchAddedElements } from '../shared/dom.ts';
 import { createScope } from '../shared/scope.ts';
@@ -12,16 +12,17 @@ import { createHeaderAppearance } from './header-appearance.ts';
 export const APPEARANCE_PAGE_ATTRIBUTE = 'data-bn-page';
 export const APPEARANCE_COURSE_ROW_ATTRIBUTE = 'data-bn-course-row';
 export const APPEARANCE_SHELL_ATTRIBUTE = 'data-bn-portal-shell';
+const NAVIGATION_APPEARANCE_ATTRIBUTE = 'data-bn-navigation-appearance';
 export const APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE = 'data-bn-progress-summary';
 export const APPEARANCE_PROGRESS_COURSES_ATTRIBUTE = 'data-bn-progress-courses';
 
 export const appearanceLayoutFeature: Feature = {
   id: 'appearance-layout',
-  settingsKeys: [],
+  settingsKeys: ['navigationAppearance'],
   enabled: (settings) => settings.pageAppearance,
   matches: (url) => nativeAppearancePageKind(url) !== null || nativeModernAppearanceRoute(url) !== null ||
     (isLmsPage(url) && !url.username && !url.password && /^\/app\/student\/?$/i.test(url.pathname)),
-  mount: ({ url, signal: parentSignal }) => {
+  mount: ({ url, settings: { navigationAppearance }, signal: parentSignal }) => {
     if (parentSignal.aborted) return;
     const scope = createScope(parentSignal);
     const { signal } = scope;
@@ -93,8 +94,8 @@ export const appearanceLayoutFeature: Feature = {
         observer.observe(element, { subtree: true, attributes: true, attributeFilter: ['aria-label'] });
         labels.set(element, observer);
       }
-      const navigation = [...discovered].filter((element) => element.isConnected &&
-        ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom', 'site-top-spacer'].includes(element.id));
+      const navigation = navigationAppearance ? [...discovered].filter((element) => element.isConnected &&
+        ['site-header', 'site-nav-container', 'site-nav-lower', 'site-nav-bottom', 'site-top-spacer'].includes(element.id)) : [];
       const navigationRoots = new Set(navigation.filter((element) =>
         !navigation.some((other) => other !== element && other.contains(element))));
       for (const [element, observer] of shellSemantics) {
@@ -144,7 +145,8 @@ export const appearanceLayoutFeature: Feature = {
         switch (attribute) {
           case APPEARANCE_PAGE_ATTRIBUTE: return context?.element === element;
           case APPEARANCE_COURSE_ROW_ATTRIBUTE: return currentRows.has(element);
-          case APPEARANCE_SHELL_ATTRIBUTE: return true;
+          case APPEARANCE_SHELL_ATTRIBUTE:
+          case NAVIGATION_APPEARANCE_ATTRIBUTE: return true;
           case APPEARANCE_PROGRESS_SUMMARY_ATTRIBUTE: return summary === element;
           case APPEARANCE_PROGRESS_COURSES_ATTRIBUTE: return courses === element;
           default: return false;
@@ -156,12 +158,16 @@ export const appearanceLayoutFeature: Feature = {
       if (courses) markers.mark(courses, APPEARANCE_PROGRESS_COURSES_ATTRIBUTE, 'cards');
     };
     const updateShell = (current: boolean) => {
-      const navigation = current ? nativeAppearanceNavigation(document, url) : { shell: null, icons: [] };
-      const shell = navigation.shell ? document.documentElement : null;
-      markers.retain((element, attribute) => attribute !== APPEARANCE_SHELL_ATTRIBUTE || element === shell);
-      if (shell) markers.mark(shell, APPEARANCE_SHELL_ATTRIBUTE, navigation.shell!);
-      navigationIcons.update(navigation.icons);
-      const headerTargets = nativeHeaderAppearanceTargets(document, url, navigation);
+      const kind = current ? nativeAppearanceShellKind(url) : null;
+      const shell = kind ? document.documentElement : null;
+      markers.retain((element, attribute) =>
+        (attribute !== APPEARANCE_SHELL_ATTRIBUTE && attribute !== NAVIGATION_APPEARANCE_ATTRIBUTE) || element === shell);
+      if (shell && kind) markers.mark(shell, APPEARANCE_SHELL_ATTRIBUTE, kind);
+      if (!navigationAppearance) return;
+      if (shell) markers.mark(shell, NAVIGATION_APPEARANCE_ATTRIBUTE, 'true');
+      const icons = nativeNavigationIconTargets(document, url, kind);
+      navigationIcons.update(icons);
+      const headerTargets = nativeHeaderAppearanceTargets(document, url, { shell: kind, icons });
       // The fixed stack changes as one unit: its verified spacer must reserve
       // room for every resized row. Otherwise retain the earlier native layout.
       headerAppearance.update(headerTargets.some(({ part }) => part === 'spacer') ? headerTargets : []);

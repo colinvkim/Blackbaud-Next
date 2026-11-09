@@ -1,4 +1,5 @@
-const shell = 'html[data-blackbaud-next-appearance][data-bn-portal-shell]';
+const portal = 'html[data-blackbaud-next-appearance][data-bn-portal-shell]';
+const shell = `${portal}:where([data-bn-navigation-appearance])`;
 const masthead = `${shell} #site-header`;
 const primary = `${shell} #site-nav-container .topnav`;
 const tabs = `${shell} :is(#site-nav-lower, #site-nav-bottom)`;
@@ -12,6 +13,11 @@ const messageTools = `${utility}:is([data-bn-header-part="tool-notes"], [data-bn
 // Cosmetic markers are supplied only for verified native controls. The native
 // links, dropdown containers, selection handlers, and mobile drawer stay in place.
 export const HEADER_STYLES = `
+${portal} {
+  --bn-shell-max-width: 1280px;
+  --bn-shell-gutter: 32px;
+  --bn-shell-inset: 16px;
+}
 ${shell} {
   --bn-header-ink: #293c51;
   --bn-header-muted: #64768a;
@@ -19,9 +25,6 @@ ${shell} {
   --bn-header-line: #e0e7ee;
   --bn-header-hover: #f1f3f5;
   --bn-header-selected: #edf4fa;
-  --bn-shell-max-width: 1280px;
-  --bn-shell-gutter: 32px;
-  --bn-shell-inset: 16px;
   --bn-masthead-height: 48px;
   --bn-utility-control-height: 40px;
   --bn-primary-control-height: 44px;
@@ -197,7 +200,7 @@ ${menus} > .bn-class-search .bn-tool-status { grid-column: 1 / -1; grid-row: 1; 
   ${shell}:has([data-bn-header-part="masthead-column"]) #site-top-spacer[data-bn-header-part="spacer"] { height: calc(var(--bn-masthead-height) + var(--bn-header-content-gap)); }
 }
 @media (max-width: 700px) {
-  ${shell} { --bn-shell-gutter: 0px; }
+  ${portal} { --bn-shell-gutter: 0px; }
 }
 @media (forced-colors: active) {
   ${masthead} [data-bn-header-part="tools-list"] > li > a[data-bn-header-part]:focus-visible { outline-color: Highlight; }
