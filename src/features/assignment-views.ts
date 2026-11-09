@@ -8,7 +8,7 @@ import { isElementVisible, markOwned, observeDom, observeElementContext, watchAd
 import { createIcon } from '../shared/icons.ts';
 import { createScope } from '../shared/scope.ts';
 import type { Feature } from '../shared/types.ts';
-import { ASSIGNMENT_VIEWS_STYLES, CLASSIC_FRAME_LAYOUT, CLASSIC_FRAME_STYLES } from './assignment-views-styles.ts';
+import { ASSIGNMENT_VIEWS_STYLES, CLASSIC_FRAME_LAYOUT, CLASSIC_FRAME_STYLES, WIDE_CLASSIC_FRAME_STYLES, WIDE_CLASSIC_LAYOUT_ATTRIBUTE } from './assignment-views-styles.ts';
 
 function loadingPlaceholder(label: string): HTMLElement {
   const loading = document.createElement('div');
@@ -18,6 +18,19 @@ function loadingPlaceholder(label: string): HTMLElement {
   for (let i = 0; i < 5; i++) loading.append(document.createElement('span'));
   return loading;
 }
+
+// Own the preference separately so restyling an open frame preserves its native forms.
+export const classicWideLayoutFeature: Feature = {
+  id: 'classic-wide-layout',
+  settingsKeys: [],
+  enabled: settings => settings.classicWideLayout,
+  matches: isStudentAssignmentCenter,
+  mount: () => {
+    const ownership = createAttributeOwnership();
+    ownership.mark(document.documentElement, WIDE_CLASSIC_LAYOUT_ATTRIBUTE, '');
+    return ownership.clear;
+  },
+};
 
 export const assignmentViewsFeature: Feature = {
   id: 'assignment-views',
@@ -219,7 +232,11 @@ export const assignmentViewsFeature: Feature = {
             let observed: Element | undefined;
             let stopContext: (() => void) | undefined;
             const updateAppearance = () => {
-              if (style) style.textContent = document.documentElement.hasAttribute('data-blackbaud-next-appearance') ? CLASSIC_FRAME_STYLES : CLASSIC_FRAME_LAYOUT;
+              if (style) {
+                const root = document.documentElement;
+                const appearance = root.hasAttribute(WIDE_CLASSIC_LAYOUT_ATTRIBUTE) ? WIDE_CLASSIC_FRAME_STYLES : CLASSIC_FRAME_STYLES;
+                style.textContent = root.hasAttribute('data-blackbaud-next-appearance') ? appearance : CLASSIC_FRAME_LAYOUT;
+              }
               if (styled) queueResize();
             };
             const update = () => {
@@ -256,7 +273,7 @@ export const assignmentViewsFeature: Feature = {
             };
             const observer = new MutationObserver(update);
             const appearanceObserver = new MutationObserver(updateAppearance);
-            appearanceObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-blackbaud-next-appearance'] });
+            appearanceObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-blackbaud-next-appearance', WIDE_CLASSIC_LAYOUT_ATTRIBUTE] });
             const navigate = (event: MouseEvent) => {
               if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               const anchor = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');

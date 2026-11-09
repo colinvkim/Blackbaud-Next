@@ -40,16 +40,19 @@ const modernHtml = `<!doctype html><html><head><meta name="viewport" content="wi
   document.addEventListener('change', e => { if (e.target.name === 'viewMode' && e.target.value !== 'classic') document.querySelector('#native-view').textContent = e.target.value === '0' ? 'List' : 'Calendar'; });
 </script></body></html>`;
 const classicHtml = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-  * { box-sizing:border-box; } body { margin:0; } #site-header-parent-container { height:100px; } .container { width:1100px; }
+  * { box-sizing:border-box; } body { margin:0; font-size:15px; line-height:1.42857; } #site-header-parent-container { height:100px; } .container { width:1100px; }
   .bb-tile-content { padding:20px; } #site-modal.modal { position:fixed; inset:0; } .modal-dialog { margin:30px; } .modal-content { background:#fff; border:1px solid #777; } .modal-body, .modal-footer { padding:20px; }
   .row { margin-inline:-15px; } .col-md-12 { padding-inline:15px; }
-  [hidden] { display:none; } td { padding:20px; } table { width:100%; } @media(max-width:600px) { td { display:block; } }
+  [hidden] { display:none; } td { padding:8px; vertical-align:top; } table { width:100%; } @media(max-width:600px) { td { display:block; } }
+  .btn { font:inherit; }
+  .table-striped > tbody > tr { background:#fff; }
+  .table-striped > tbody > tr:nth-of-type(odd) { background:#f9f9f9; }
 </style></head><body><div id="app"><div id="site-header-parent-container">Duplicate native navigation</div><div id="site-top-spacer"></div>
   <div id="site-modal"></div>
   <template id="native-dialog-template"><div class="modal-dialog"><div class="modal-content"><div class="modal-body"><label>Native draft <input id="native-draft"></label></div><div class="modal-footer"><button id="save-status">Save status</button><button id="cancel">Cancel</button></div></div></div></template>
   <div class="site-main-wrap"><div id="site-main" class="container"><div id="assignment-center"><section class="bb-tile"><div class="bb-tile-title">Duplicate title</div><div class="bb-tile-content">
     <div class="row"><div id="assignment-center-header-view" class="col-md-12"><div class="assignment-calendar-header"><button id="filter-status">Filter status</button><button id="native-refresh">Refresh native rows</button><button id="native-grid">Grid</button></div></div></div>
-    <div class="row"><div id="assignment-center-content-view" class="col-md-12"><div id="assignment-center-list-view"><table class="table"><tbody id="assignment-center-assignment-items"><tr><td><a id="assignment-link" class="assignment-detail-link" href="${detail}">Reading assignment</a><a id="discussion-link" class="assignment-detail-link" href="#discussiondetail/456/789/Assignments">Native discussion</a></td><td id="native-classic-status">__STATUS__</td><td><button class="assignment-status-update">Change status</button></td></tr></tbody></table></div></div></div>
+    <div class="row"><div id="assignment-center-content-view" class="col-md-12"><div id="assignment-center-list-view"><table class="table table-striped"><tbody id="assignment-center-assignment-items"><tr><td><a id="assignment-link" class="assignment-detail-link" href="${detail}">Reading assignment</a><a id="discussion-link" class="assignment-detail-link" href="#discussiondetail/456/789/Assignments">Native discussion</a></td><td id="native-classic-status">__STATUS__</td><td><button class="btn assignment-status-update">Change status</button></td></tr><tr><td>Practice problems</td><td>To do</td><td></td></tr></tbody></table></div></div></div>
     <div style="height:900px"></div><button id="last-action">Last native action</button><button class="assignment-status-update" id="last-status">Change status at bottom</button>
   </div></section></div></div></div>
 </div><script>
@@ -75,7 +78,7 @@ const classicHtml = `<!doctype html><html><head><meta name="viewport" content="w
     }
     if (e.target.id === 'native-grid') document.querySelector('#assignment-center').innerHTML = '<div id="calendar-main-view"><div id="calendar-header-container"><div class="assignment-calendar-header"><button id="native-list">List</button></div></div><div id="calendar-container" class="fc">Native calendar</div></div>';
     if (e.target.id === 'native-list') document.querySelector('#assignment-center').innerHTML = nativeList;
-    if (e.target.id === 'filter-status' || e.target.className === 'assignment-status-update') {
+    if (e.target.id === 'filter-status' || e.target.classList.contains('assignment-status-update')) {
       const dialog = document.querySelector('#site-modal');
       dialog.className = 'modal';
       dialog.setAttribute('role', 'dialog');
@@ -95,12 +98,13 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     browser = await launchDevelopmentBrowser(parseDevelopmentOptions(['--headless'], fixture), await ensureDevelopmentBrowser(developmentPaths(root).cache));
     const id = await browser.installExtension(developmentPaths(fixture).extension);
     const options = await browser.newPage();
+    options.setDefaultTimeout(6_000);
     await options.goto(`chrome-extension://${id}/options.html`);
     await options.waitForSelector('#mode-full:not(:disabled)');
     const preferences = (patch: Record<string, boolean | string>) => options.evaluate(async update => {
       await (globalThis as typeof globalThis & { chrome: ExtensionApi }).chrome.storage.sync.set(update);
     }, patch);
-    await preferences({ enabled:true, mode:'full', ...Object.fromEntries(FEATURE_DEFINITIONS.map(({ key }) => [key, false])) });
+    await preferences({ enabled:true, mode:'full', ...Object.fromEntries(FEATURE_DEFINITIONS.filter(({ defaultValue }) => defaultValue).map(({ key }) => [key, false])) });
     const page = await browser.newPage();
     page.setDefaultTimeout(6_000);
     await page.setViewport({ width:1280, height:900 });
@@ -181,6 +185,13 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
     await mounted();
     assert.equal(await page.$eval('#list', input => (input as HTMLInputElement).checked), true);
     let frame = await open();
+    const frameWidth = () => page.$eval('.bn-classic-frame', element => element.getBoundingClientRect().width);
+    const compactWidth = await frameWidth();
+    assert.ok(compactWidth < 1200, 'Classic has narrower content than the desktop viewport');
+    assert.ok(await page.$eval('.bn-classic-frame', element => {
+      const { left, right } = element.getBoundingClientRect();
+      return Math.abs(left - (innerWidth - right)) <= 1;
+    }), 'Classic is centered within the Assignment Center');
     assert.ok(await frame.$eval('#site-main', element => element.getBoundingClientRect().top < 24), 'The empty native dialog placeholder leaves no gap above Classic');
     const pageScrolls = () => page.waitForFunction(() => {
       const frame = document.querySelector<HTMLIFrameElement>('.bn-classic-frame')!;
@@ -241,6 +252,34 @@ test('Classic refreshes native data on return and preserves actions, fallback, a
       await preferences({ pageAppearance });
       await page.waitForFunction(expected => document.documentElement.hasAttribute('data-blackbaud-next-appearance') === expected, { polling:100 }, pageAppearance);
       assert.equal(await frame.$eval('#native-draft', input => (input as HTMLInputElement).value), 'Native unsaved draft', 'Appearance changes preserve native forms');
+      if (pageAppearance) {
+        const waitForRowStyles = (wide: boolean) => frame.waitForFunction(wide => {
+          const rows = [...document.querySelectorAll('#assignment-center-assignment-items > tr')];
+          const cell = rows[0]?.querySelector('td');
+          const button = rows[0]?.querySelector('button');
+          if (!cell || !button || rows.length !== 2) return false;
+          const style = getComputedStyle(cell);
+          return getComputedStyle(rows[0]!).backgroundColor === (wide ? 'rgb(255, 255, 255)' : 'rgb(249, 249, 249)') &&
+            getComputedStyle(rows[1]!).backgroundColor === 'rgb(255, 255, 255)' &&
+            style.fontSize === (wide ? '14px' : '15px') &&
+            style.lineHeight === (wide ? '20.3px' : '21.4286px') &&
+            style.verticalAlign === (wide ? 'middle' : 'top') &&
+            style.padding === (wide ? '14px 12px' : '8px') &&
+            getComputedStyle(button).fontSize === (wide ? '13px' : '15px');
+        }, { polling:100 }, wide);
+        await waitForRowStyles(false);
+        await options.bringToFront();
+        await options.focus('#advanced-settings > summary');
+        await options.keyboard.press('Space');
+        await options.click('#classicWideLayout');
+        await waitForRowStyles(true);
+        assert.ok(await frameWidth() > compactWidth + 60, 'Advanced restores the full-width Classic layout');
+        assert.equal(await frame.$eval('#native-draft', input => (input as HTMLInputElement).value), 'Native unsaved draft', 'Changing the layout preserves the open native form');
+        await options.click('#classicWideLayout');
+        await page.bringToFront();
+        await waitForRowStyles(false);
+        assert.equal(await frameWidth(), compactWidth);
+      }
     }
     await frame.click('#cancel');
     await page.waitForFunction(() => [...document.querySelectorAll<HTMLInputElement>('#calendar, #list')].every(input => !input.disabled), { polling:100 });

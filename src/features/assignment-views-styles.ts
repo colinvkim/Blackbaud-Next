@@ -1,5 +1,7 @@
 import { THEME_TOKENS } from '../shared/theme.ts';
 
+export const WIDE_CLASSIC_LAYOUT_ATTRIBUTE = 'data-bn-wide-classic-layout';
+
 export const ASSIGNMENT_VIEWS_STYLES = `
 .bn-classic-view-label { display: inline-flex; vertical-align: top; margin: 0 0 0 -1px; cursor: pointer; position: relative; }
 .bn-classic-view-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -23,6 +25,11 @@ export const ASSIGNMENT_VIEWS_STYLES = `
 .bn-classic-loading span { display: block; background: #edf0f3; border-radius: 4px; height: 16px; margin-bottom: 18px; width: 70%; }
 .bn-classic-loading span:first-child { width: 40%; height: 30px; margin-bottom: 26px; }
 .bn-classic-loading span:last-child { margin-bottom: 0; width: 55%; }
+@media (min-width: 992px) {
+  :root:not([${WIDE_CLASSIC_LAYOUT_ATTRIBUTE}]) .bn-classic-panel:has(.bn-classic-frame, .bn-classic-error) {
+    width: 92%; max-width: 1170px; margin-inline: auto;
+  }
+}
 @media (max-width: 600px) { .bn-classic-panel { padding: 12px 8px; } }
 `;
 
@@ -46,10 +53,19 @@ body { background: #fff !important; margin: 0; color: #222a35; font-family: "Bla
 #assignment-center .bb-tile-content, #assignment-center .bb-tile-content-section { padding: 0; border: 0; }
 `;
 
-export const CLASSIC_FRAME_STYLES = `${CLASSIC_FRAME_LAYOUT}
+function classicFrameStyles(wide: boolean): string {
+  const rows = '#assignment-center-assignment-items';
+  const table = '#assignment-center .table';
+  const tableTypography = wide
+    ? table
+    : `${table}:not(:where(:has(> ${rows}))), ${table}:where(:has(> ${rows})) > thead`;
+  const cells = `${table} > ${wide ? 'tbody' : `tbody:not(:where(${rows}))`} > tr > td`;
+  const buttonTypography = wide ? '#assignment-center .btn' : `#assignment-center .btn:not(:where(${rows} *))`;
+  return `${CLASSIC_FRAME_LAYOUT}
 :is(#assignment-center-header-view, #calendar-header-container) .bb-action-bar { background: transparent; padding: 8px 0; border: 0; }
 :is(#assignment-center-header-view, #calendar-header-container) h2 { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
-#assignment-center .btn { border-radius: 5px; box-shadow: none; font-size: 13px; line-height: 20px; }
+#assignment-center .btn { border-radius: 5px; box-shadow: none; }
+${buttonTypography} { font-size: 13px; line-height: 20px; }
 #assignment-center .btn-default:not(.btn-danger) { background: var(--bn-surface); border-color: var(--bn-border-strong); color: var(--bn-text); }
 #assignment-center .btn-default:not(.btn-danger):hover { background: var(--bn-page); }
 #assignment-center .btn-default:not(.btn-danger).active { background: var(--bn-accent-soft); border-color: var(--bn-accent); color: var(--bn-accent); }
@@ -57,13 +73,19 @@ export const CLASSIC_FRAME_STYLES = `${CLASSIC_FRAME_LAYOUT}
 #assignment-center .btn-group > .btn:first-of-type { border-radius: 5px 0 0 5px; }
 #assignment-center .btn-group > .btn:last-of-type { border-radius: 0 5px 5px 0; }
 #assignment-center .btn-group > .btn:only-of-type { border-radius: 5px; }
-#assignment-center .table { font-size: 14px; line-height: 1.45; margin-bottom: 16px; }
+${table} { margin-bottom: 16px; }
+${tableTypography} { font-size: 14px; line-height: 1.45; }
 #assignment-center .table > thead > tr > th { background: #f5f6f8; color: #657080; border-bottom: 1px solid #dde3e8; font-size: 12px; font-weight: 600; padding: 10px 12px; }
-#assignment-center .table > tbody > tr > td { padding: 14px 12px; vertical-align: middle; border-color: #e7ebef; }
-#assignment-center .table-striped > tbody > tr:nth-of-type(odd) { background: #fff; }
+#assignment-center .table > tbody > tr > td { border-color: #e7ebef; }
+${cells} { padding: 14px 12px; vertical-align: middle; }
+${wide ? '#assignment-center .table-striped > tbody > tr:nth-of-type(odd) { background: #fff; }' : ''}
 #assignment-center .table > tbody > tr:hover { background: #f8fafb; }
 #assignment-center .table a { color: #0066a1; }
 #assignment-center .table a:hover { text-decoration: underline; }
 #assignment-center a:focus-visible, #assignment-center button:focus-visible, #assignment-center input:focus-visible { outline: 2px solid #0066a1; outline-offset: 2px; }
-@media (max-width: 767px) { #assignment-center .table > tbody > tr > td { padding: 8px 10px; } }
+@media (max-width: 767px) { ${cells} { padding: 8px 10px; } }
 `;
+}
+
+export const CLASSIC_FRAME_STYLES = classicFrameStyles(false);
+export const WIDE_CLASSIC_FRAME_STYLES = classicFrameStyles(true);

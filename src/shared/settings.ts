@@ -13,6 +13,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'assignmentPreviews', label: 'Assignment previews', description: 'Read instructions and open attachments beside the assignment list.', defaultValue: true },
   { key: 'assignmentCompletion', label: 'Completion checkboxes', description: 'Mark assignments completed or to do from the modern Assignment Center.', defaultValue: true },
   { key: 'assignmentStatusLabels', label: 'Assignment status labels', description: 'Show clearer Graded, Missing, and In progress labels in the modern Assignment Center.', defaultValue: true },
+  { key: 'classicWideLayout', label: 'Roomy Classic layout', description: 'Widen Classic Assignment Center. With Page appearance on, use roomier rows with a plain white background.', defaultValue: false },
   { key: 'assignmentReturnLink', label: 'Assignment return link', description: 'Make the Assignments link on an assignment page open Assignment Center.', defaultValue: true },
   { key: 'prepareAssignmentCenter', label: 'Preload Assignment Center', description: 'Prepare the modern Assignment Center from Schedule or when you hover over or focus its link.', defaultValue: true },
   { key: 'fixInvalidPages', label: 'Stalled assignment recovery', description: 'Offer a reload action when the modern Assignment Center stays loading.', defaultValue: true },
